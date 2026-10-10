@@ -136,7 +136,7 @@
       if (act === 'cancel') { editing = null; draw(); }
       if (act === 'del') {
         const c = cases().find((x) => x.id === b.dataset.id);
-        if (c && confirm(`Delete “${c.title}”?`)) { QA.store.update((s) => { s.testCases = s.testCases.filter((x) => x.id !== c.id); }); if (editing === c.id) editing = null; draw(); toast('Test case deleted'); }
+        if (c) QA.util.ask({ title: 'Delete test case?', message: `“${c.title}” will be removed.`, confirmLabel: 'Delete', danger: true }, () => { QA.store.update((s) => { s.testCases = s.testCases.filter((x) => x.id !== c.id); }); if (editing === c.id) editing = null; draw(); toast('Test case deleted'); });
       }
       if (act === 'check') {
         const result = QA.eval.evaluateTestCases(cases(), ex);

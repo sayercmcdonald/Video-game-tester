@@ -126,7 +126,7 @@
         <li>${st.testCases.length} test cases</li>
         <li>${Object.keys(st.interview).length} interview questions answered</li>
         <li>${Object.keys(st.drafts).length} saved drafts</li></ul>
-        <div class="row"><button class="btn" data-act="export">Download a backup (JSON)</button></div></section>
+        <p class="small muted" style="margin:0">Progress stays on this device and browser. Clearing site data or using a private window starts fresh.</p></section>
       <section class="panel" style="border-color:rgba(240,122,106,.35)"><h2>Reset progress</h2>
         <p class="text-2">Permanently deletes all missions, reports, test cases, interview answers, drafts and checklist ticks from this browser. This can’t be undone.</p>
         <button class="btn danger" data-act="reset">Reset all progress…</button></section>
@@ -135,17 +135,11 @@
       const b = e.target.closest('[data-act]');
       if (!b) return;
       if (b.dataset.act === 'reset') {
-        if (!confirm('Reset ALL progress? This permanently deletes everything saved in this browser.')) return;
-        QA.store.reset();
-        QA.util.toast('Progress reset');
-        location.hash = '#/';
-      }
-      if (b.dataset.act === 'export') {
-        const blob = new Blob([QA.store.exportJSON()], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob); a.download = 'game-qa-lab-progress.json';
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        QA.util.ask({ title: 'Reset all progress?', message: 'This permanently deletes everything saved in this browser: missions, reports, test cases, interview answers, drafts and checklist ticks.', confirmLabel: 'Reset everything', danger: true }, () => {
+          QA.store.reset();
+          QA.util.toast('Progress reset');
+          location.hash = '#/';
+        });
       }
     };
   };

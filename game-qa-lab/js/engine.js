@@ -435,9 +435,9 @@
     root.onclick = (e) => {
       const act = e.target.closest('[data-act]');
       if (!act) return;
-      if (act.dataset.act === 'start' || (act.dataset.act === 'restart' && confirm('Discard your in-progress answers and test log and start over?'))) {
-        newDraft(m); location.hash = basePath(m) + '/run';
-      }
+      const go = () => { newDraft(m); location.hash = basePath(m) + '/run'; };
+      if (act.dataset.act === 'start') go();
+      if (act.dataset.act === 'restart') QA.util.ask({ title: 'Start over?', message: 'This discards your in-progress answers and test log.', confirmLabel: 'Start over', danger: true }, go);
     };
   }
 
@@ -489,7 +489,7 @@
         runBench(step, d, act === 'run5' ? 5 : 1); saveDraft(m, d); draw(`[data-act="${act}"]`); return;
       }
       if (act === 'clearlog') {
-        if (confirm('Clear every attempt in this test log? Your frequency answer depends on it.')) { d.logs[step.id] = []; saveDraft(m, d); draw(); }
+        QA.util.ask({ title: 'Clear test log?', message: 'Every attempt in this log will be deleted. Your frequency answer depends on it.', confirmLabel: 'Clear log', danger: true }, () => { d.logs[step.id] = []; saveDraft(m, d); draw(); });
         return;
       }
       capture();

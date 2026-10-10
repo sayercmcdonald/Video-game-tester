@@ -75,5 +75,39 @@ window.QA = window.QA || {};
     return '<ul>' + items.map((i) => `<li class="${esc(i.kind || 'info')}">${i.html ? i.html : esc(i.text)}</li>`).join('') + '</ul>';
   }
 
-  QA.util = { esc, $, $$, pct, toast, uid, words, lines, matchGroups, scoreTone, scoreRing, fmtDate, fbItems };
+  /* In-page confirmation dialog. (Native confirm() is unavailable when the app
+     is embedded in some hosts, so every destructive action goes through this.) */
+  function ask(opts, onYes) {
+    const prevFocus = document.activeElement;
+    const wrap = document.createElement('div');
+    wrap.className = 'modal-scrim';
+    wrap.innerHTML = `<div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-body">
+      <h2 id="ask-title">${esc(opts.title || 'Are you sure?')}</h2>
+      <p id="ask-body" class="text-2">${esc(opts.message || '')}</p>
+      <div class="row end"><button class="btn ghost" data-ask="no">${esc(opts.cancelLabel || 'Cancel')}</button>
+      <button class="btn ${opts.danger ? 'danger' : 'primary'}" data-ask="yes">${esc(opts.confirmLabel || 'Confirm')}</button></div></div>`;
+    function close(yes) {
+      document.removeEventListener('keydown', onKey, true);
+      wrap.remove();
+      if (prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus();
+      if (yes) onYes();
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(false); }
+      if (e.key === 'Tab') {
+        const b = $$('button', wrap); const i = b.indexOf(document.activeElement);
+        e.preventDefault(); b[(i + (e.shiftKey ? -1 : 1) + b.length) % b.length].focus();
+      }
+    }
+    wrap.addEventListener('click', (e) => {
+      if (e.target === wrap) return close(false);
+      const b = e.target.closest('[data-ask]');
+      if (b) close(b.dataset.ask === 'yes');
+    });
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(wrap);
+    $('[data-ask="no"]', wrap).focus();
+  }
+
+  QA.util = { ask, esc, $, $$, pct, toast, uid, words, lines, matchGroups, scoreTone, scoreRing, fmtDate, fbItems };
 })(window.QA);

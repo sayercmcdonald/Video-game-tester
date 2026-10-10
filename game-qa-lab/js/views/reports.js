@@ -110,15 +110,19 @@
       if (!b) return;
       if (b.dataset.act === 'model') {
         const rec = QA.store.get().reports[id];
-        if (!showModel && !rec && !confirm('You haven’t submitted a report for this defect yet. Seeing the example first makes the exercise less useful. Show it anyway?')) return;
-        saveDraft();
-        showModel = !showModel; draw();
-        if (showModel) { const m = $('#model', root); if (m) m.scrollIntoView({ block: 'start' }); }
+        const toggle = () => {
+          saveDraft();
+          showModel = !showModel; draw();
+          if (showModel) { const m = $('#model', root); if (m) m.scrollIntoView({ block: 'start' }); }
+        };
+        if (!showModel && !rec) QA.util.ask({ title: 'Show the example first?', message: 'You haven’t submitted a report for this defect yet. Seeing the example first makes the exercise less useful.', confirmLabel: 'Show example' }, toggle);
+        else toggle();
       }
       if (b.dataset.act === 'clear') {
-        if (!confirm('Clear every field in this report?')) return;
-        QA.store.update((s) => { s.drafts[dkey] = {}; });
-        showFeedback = false; draw(); toast('Form cleared');
+        QA.util.ask({ title: 'Clear this report?', message: 'Every field in the form will be emptied.', confirmLabel: 'Clear form', danger: true }, () => {
+          QA.store.update((s) => { s.drafts[dkey] = {}; });
+          showFeedback = false; draw(); toast('Form cleared');
+        });
       }
     };
     draw();

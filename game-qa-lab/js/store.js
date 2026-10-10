@@ -54,7 +54,6 @@
       try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
       save();
     },
-    exportJSON: () => JSON.stringify(state, null, 2),
   };
 
   load();

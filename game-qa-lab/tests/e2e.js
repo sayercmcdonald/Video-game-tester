@@ -27,6 +27,7 @@ const TEXT = {
 async function completeMission(p, id, good) {
   await p.goto(BASE + '#/' + (id.startsWith('r') ? 'regression/' : 'mission/') + id);
   await p.click('[data-act="start"], [data-act="restart"]');
+  if (await p.$('[data-ask="yes"]')) await p.click('[data-ask="yes"]');
   await p.waitForSelector('#step-title');
   const m = await p.evaluate((mid) => {
     const x = QA.engine.byId(mid);
@@ -85,7 +86,7 @@ async function completeMission(p, id, good) {
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  p.on('dialog', (d) => d.accept());
+  p.on('dialog', (d) => { errors.push('Native dialog used: ' + d.message()); d.dismiss(); });
 
   // ---------- Fresh state ----------
   await p.goto(BASE + '#/');
@@ -170,6 +171,10 @@ async function completeMission(p, id, good) {
   await p.click('button[type="submit"]');
   check('Test case edited', await p.evaluate(() => QA.store.get().testCases[0].title === 'Pick up item when stack is at 98' && QA.store.get().testCases[0].status === 'pass'));
   await p.click('[data-act="del"] >> nth=2');
+  await p.click('[data-ask="no"]');
+  check('Cancel in confirmation keeps test case', (await p.evaluate(() => QA.store.get().testCases.length)) === 3);
+  await p.click('[data-act="del"] >> nth=2');
+  await p.click('[data-ask="yes"]');
   check('Test case deleted', (await p.evaluate(() => QA.store.get().testCases.length)) === 2);
   await p.click('[data-act="check"]'); await p.waitForSelector('#tc-eval');
   const ws = await p.evaluate(() => QA.store.get().workshop.boundary.last.pct);
@@ -246,12 +251,15 @@ async function completeMission(p, id, good) {
   await mob.click('#menuToggle');
   const open = await mob.evaluate(() => document.getElementById('sidebar').classList.contains('open'));
   await mob.click('.sidebar a[data-nav="glossary"]');
+  await mob.waitForFunction(() => location.hash === '#/glossary' && document.querySelector('#main h1'));
   check('Mobile menu opens and navigates', open && (await mob.textContent('#main h1')) === 'QA Glossary');
   await mob.close();
 
   // ---------- Reset ----------
   await p.goto(BASE + '#/settings');
   await p.click('[data-act="reset"]');
+  check('Reset asks for in-page confirmation', await p.isVisible('.modal'));
+  await p.click('[data-ask="yes"]');
   await p.waitForTimeout(200);
   const resetDash = await p.textContent('#main');
   check('Reset clears progress', resetDash.includes('none completed yet') && (await p.evaluate(() => Object.keys(QA.store.get().missions).length === 0 && QA.store.get().testCases.length === 0)));
