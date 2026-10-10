@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Game QA Lab</title>
+  <meta name="description" content="An interactive training simulator for entry-level video game QA testers.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2311140f'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' stroke='%23b5e85a' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="app">
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <a class="brand" href="#/">
+        <span class="brand-mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 32 32"><path d="M8 16.5l5 5L24 10.5" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span>Game QA Lab</span>
+      </a>
+    </header>
+
+    <nav class="sidebar" id="sidebar" aria-label="Main">
+      <a class="brand brand-side" href="#/">
+        <span class="brand-mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 32 32"><path d="M8 16.5l5 5L24 10.5" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span>Game QA Lab</span>
+      </a>
+      <div class="nav-group">
+        <div class="nav-label">Overview</div>
+        <a href="#/" data-nav="dashboard">Dashboard</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Practice</div>
+        <a href="#/missions" data-nav="missions">Mission Center</a>
+        <a href="#/reports" data-nav="reports">Bug Report Lab</a>
+        <a href="#/testcases" data-nav="testcases">Test Case Workshop</a>
+        <a href="#/regression" data-nav="regression">Regression Lab</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Learn</div>
+        <a href="#/tracker" data-nav="tracker">Bug Tracker Basics</a>
+        <a href="#/glossary" data-nav="glossary">QA Glossary</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Interview</div>
+        <a href="#/interview" data-nav="interview">Mock Interview</a>
+        <a href="#/review" data-nav="review">Readiness Review</a>
+      </div>
+      <div class="nav-foot">
+        <a href="#/settings" data-nav="settings">Progress &amp; settings</a>
+        <p class="disclaimer">Independent training tool. Not affiliated with or endorsed by Nintendo or any game company. All games and defects are fictional.</p>
+      </div>
+    </nav>
+    <div class="scrim" id="scrim" hidden></div>
+
+    <main id="main" class="main" tabindex="-1">
+      <noscript><div class="panel"><p>Game QA Lab needs JavaScript enabled to run.</p></div></noscript>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/util.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/data/missions.js"></script>
+  <script src="js/data/regression.js"></script>
+  <script src="js/data/defects.js"></script>
+  <script src="js/data/workshop.js"></script>
+  <script src="js/data/interview.js"></script>
+  <script src="js/data/glossary.js"></script>
+  <script src="js/evaluators.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/views/dashboard.js"></script>
+  <script src="js/views/missions.js"></script>
+  <script src="js/views/reports.js"></script>
+  <script src="js/views/testcases.js"></script>
+  <script src="js/views/tracker.js"></script>
+  <script src="js/views/interview.js"></script>
+  <script src="js/views/review.js"></script>
+  <script src="js/views/settings.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
