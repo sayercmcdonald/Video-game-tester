@@ -1,0 +1,11 @@
+{
+  "name": "game-qa-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive training simulator for entry-level video game QA testers.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/e2e.js"
+  },
+  "license": "UNLICENSED"
+}

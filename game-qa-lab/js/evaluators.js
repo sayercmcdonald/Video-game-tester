@@ -87,7 +87,7 @@
       else if (ls.length === 2) { e += 3; items.push({ kind: 'tip', text: 'Only 2 steps. Break the actions down so each line is one action.' }); }
       else items.push({ kind: 'no', text: 'Write the steps on separate lines, one action each.' });
       const longOnes = ls.filter((l) => l.length > 180);
-      if (ls.length && !longOnes.length) { e += 4; items.push({ kind: 'ok', text: 'Each step is short enough to follow.' }); }
+      if (ls.length >= 2 && !longOnes.length) { e += 4; items.push({ kind: 'ok', text: 'Each step is short enough to follow.' }); }
       else if (longOnes.length) { e += 1; items.push({ kind: 'tip', text: 'Some steps are long. Split compound steps (“do X and then Y and also Z”).' }); }
       const c = coverage(f.steps, kw.steps);
       e += Math.round(c.ratio * 10);

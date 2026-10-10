@@ -289,3 +289,4 @@ details[open] summary { margin-bottom: 8px; }
 .term:last-child { border-bottom: 0; }
 .term dt { font-weight: 620; }
 .term dd { margin: 4px 0 0; color: var(--text-2); }
+@media (min-width: 900px) { .sticky-panel { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; } }

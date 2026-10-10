@@ -44,7 +44,7 @@
         <div class="crumbs"><a href="#/reports">Bug Report Lab</a> / ${esc(d.name)}</div>
         <div class="page-head"><div class="eyebrow">${esc(d.game)} (fictional) · ${esc(d.area)}</div><h1>${esc(d.name)}</h1></div>
         <div class="grid grid-2" style="align-items:start">
-          <section class="panel">
+          <section class="panel sticky-panel">
             <h2>Tester’s raw notes</h2>
             <p class="small muted">Written quickly during a session. Not everything here belongs in a report.</p>
             <div class="spec pre mono" style="font-size:.84rem">${esc(d.notes)}</div>
