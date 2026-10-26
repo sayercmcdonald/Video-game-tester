@@ -1,0 +1,743 @@
+// Mission Trips platform data model.
+//
+// Conventions
+// - Every church-owned record carries `orgId`. Child records reference their
+//   parent with a composite foreign key (parentId + orgId) so the database
+//   itself refuses to link a record to another church's data.
+// - Money is stored as integer cents. Never floats.
+// - Pledges (promises) and Donations (money actually received) are separate
+//   tables. Totals shown as "raised" come only from the ledger.
+// - LedgerEntry is append-only: corrections are new entries, never edits.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Identity ─────────────────────────────
+
+enum PlatformRole {
+  USER
+  PLATFORM_ADMIN
+}
+
+model User {
+  id              String       @id @default(cuid())
+  email           String       @unique // stored lowercase
+  name            String
+  passwordHash    String
+  platformRole    PlatformRole @default(USER)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  sessions      Session[]
+  memberships   Membership[]
+  tripMembers   TripMember[]
+  profiles      PersonProfile[]
+  notifications Notification[]
+  preferences   NotificationPreference?
+  donations     Donation[]               @relation("DonorUser")
+  tokens        UserToken[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique // SHA-256 of the cookie token; raw token never stored
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum UserTokenKind {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model UserToken {
+  id         String        @id @default(cuid())
+  userId     String
+  kind       UserTokenKind
+  tokenHash  String        @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+}
+
+// ─────────────────────────── Organizations ───────────────────────────
+
+enum OrgStatus {
+  PENDING_REVIEW // can be set up, but public giving is disabled until a platform admin approves
+  ACTIVE
+  SUSPENDED
+}
+
+enum OrgRole {
+  ADMIN // church administrator
+  MEMBER // everyone else; trip-level roles live on TripMember
+}
+
+model Organization {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  status       OrgStatus @default(PENDING_REVIEW)
+  contactEmail String
+  timezone     String    @default("America/Chicago")
+  currency     String    @default("usd")
+
+  // Receipt wording is supplied by the church. The platform never asserts
+  // tax-deductibility on its own.
+  legalName        String?
+  taxId            String?
+  receiptStatement String? // e.g. "No goods or services were provided in exchange for this contribution."
+
+  // Stripe Connect: donations are charged directly on the church's own Stripe
+  // account, so the platform never holds church funds.
+  stripeAccountId      String? @unique
+  stripeChargesEnabled Boolean @default(false)
+
+  nextReceiptNumber Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  memberships   Membership[]
+  invitations   Invitation[]
+  trips         Trip[]
+  campaigns     Campaign[]
+  donations     Donation[]
+  pledges       Pledge[]
+  ledgerEntries LedgerEntry[]
+  expenses      Expense[]
+  documents     Document[]
+  auditLogs     AuditLog[]
+  profiles      PersonProfile[]
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  role      OrgRole  @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+}
+
+enum TripRole {
+  LEADER
+  PARTICIPANT
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  orgId       String
+  email       String
+  orgRole     OrgRole   @default(MEMBER)
+  tripId      String?
+  tripRole    TripRole?
+  tokenHash   String    @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  trip Trip?        @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@index([orgId, email])
+}
+
+// Personal details a church holds about a person. Sensitive medical details
+// are encrypted at the application layer (see src/server/crypto.ts).
+model PersonProfile {
+  id                    String   @id @default(cuid())
+  orgId                 String
+  userId                String
+  phone                 String?
+  dateOfBirth           DateTime? @db.Date
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyContactRelation String?
+  sensitiveEncrypted    String? // AES-256-GCM JSON: { medicalNotes, allergies, medications }
+  updatedAt             DateTime @updatedAt
+  createdAt             DateTime @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+}
+
+// ─────────────────────────────── Trips ───────────────────────────────
+
+enum TripStatus {
+  DRAFT // visible only to admins and leaders
+  OPEN // recruiting and fundraising
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Trip {
+  id                  String     @id @default(cuid())
+  orgId               String
+  name                String
+  slug                String
+  destination         String
+  summary             String     @default("")
+  startDate           DateTime   @db.Date
+  endDate             DateTime   @db.Date
+  status              TripStatus @default(DRAFT)
+  budgetCents         Int        @default(0)
+  fundraisingGoalCents Int       @default(0)
+  defaultParticipantGoalCents Int @default(0)
+  participantLimit    Int?
+  applicationsOpen    Boolean    @default(false)
+  leadersSeeFinances  Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  org             Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members         TripMember[]
+  invitations     Invitation[]
+  campaigns       Campaign[]
+  itinerary       ItineraryItem[]
+  requirements    Requirement[]
+  posts           Post[]
+  expenses        Expense[]
+  budgetLines     BudgetLine[]
+  donations       Donation[]
+  pledges         Pledge[]
+  ledgerEntries   LedgerEntry[]
+  documents       Document[]
+  financialReports FinancialReport[]
+
+  @@unique([id, orgId])
+  @@unique([orgId, slug])
+  @@index([orgId, status])
+}
+
+enum TripMemberStatus {
+  APPLIED
+  APPROVED
+  WAITLISTED
+  DECLINED
+  WITHDRAWN
+}
+
+model TripMember {
+  id              String           @id @default(cuid())
+  orgId           String
+  tripId          String
+  userId          String
+  role            TripRole         @default(PARTICIPANT)
+  status          TripMemberStatus @default(APPLIED)
+  applicationNote String?
+  decidedAt       DateTime?
+  decidedById     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  trip        Trip                    @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns   Campaign[]
+  submissions RequirementSubmission[]
+
+  @@unique([id, orgId])
+  @@unique([tripId, userId])
+  @@index([userId])
+}
+
+enum ItineraryKind {
+  TRAVEL
+  LODGING
+  ACTIVITY
+  MEETING
+  OTHER
+}
+
+model ItineraryItem {
+  id        String        @id @default(cuid())
+  orgId     String
+  tripId    String
+  kind      ItineraryKind @default(ACTIVITY)
+  title     String
+  startsAt  DateTime
+  endsAt    DateTime?
+  location  String?
+  notes     String?
+  createdAt DateTime      @default(now())
+
+  trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@index([tripId, startsAt])
+}
+
+// ───────────────────────────── Fundraising ─────────────────────────────
+
+enum CampaignKind {
+  PARTICIPANT // one person's support page
+  TRIP // the general trip fund
+  PROJECT // a specific project, e.g. "Well construction"
+}
+
+// Whether gifts are restricted to the trip's purpose by the church's policy.
+enum FundRestriction {
+  RESTRICTED
+  UNRESTRICTED
+}
+
+model Campaign {
+  id           String          @id @default(cuid())
+  orgId        String
+  tripId       String
+  tripMemberId String?
+  kind         CampaignKind
+  slug         String
+  title        String
+  story        String          @default("")
+  goalCents    Int             @default(0)
+  restriction  FundRestriction @default(RESTRICTED)
+  // Plain-language description of how the church applies these gifts. Shown to donors.
+  designationNote String?
+  isPublic     Boolean         @default(true)
+  isClosed     Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  org        Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  trip       Trip          @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+  tripMember TripMember?   @relation(fields: [tripMemberId, orgId], references: [id, orgId], onDelete: Restrict)
+  donations  Donation[]
+  pledges    Pledge[]
+  ledger     LedgerEntry[]
+
+  @@unique([id, orgId])
+  @@unique([orgId, slug])
+  @@index([tripId])
+}
+
+enum DonationStatus {
+  PENDING // checkout started, money not received
+  SUCCEEDED
+  FAILED
+  CANCELED // checkout abandoned/expired
+  REFUNDED // fully refunded
+  PARTIALLY_REFUNDED
+  DISPUTED
+}
+
+enum DonationMethod {
+  CARD_ONLINE // through Stripe Checkout (card, wallet, bank debit)
+  CHECK // recorded manually by a church admin
+  CASH
+  OTHER_OFFLINE
+}
+
+model Donation {
+  id              String         @id @default(cuid())
+  orgId           String
+  tripId          String
+  campaignId      String
+  donorUserId     String?
+  donorName       String
+  donorEmail      String?
+  isAnonymous     Boolean        @default(false) // hide name on public pages
+  message         String?
+  amountCents     Int
+  currency        String         @default("usd")
+  method          DonationMethod @default(CARD_ONLINE)
+  status          DonationStatus @default(PENDING)
+  feeCents        Int            @default(0)
+  refundedCents   Int            @default(0)
+  failureReason   String?
+  receiptNumber   Int?
+  receiptTokenHash String?       @unique // lets a donor open their receipt from the email link
+  receivedAt      DateTime?
+  recordedById    String? // admin who recorded an offline gift
+  offlineReference String? // check number etc.
+
+  stripeAccountId         String?
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String? @unique
+  stripeChargeId          String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org      Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  trip     Trip          @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
+  campaign Campaign      @relation(fields: [campaignId, orgId], references: [id, orgId], onDelete: Restrict)
+  donor    User?         @relation("DonorUser", fields: [donorUserId], references: [id], onDelete: SetNull)
+  ledger   LedgerEntry[]
+  pledgeFulfilled Pledge[]
+
+  @@unique([orgId, receiptNumber])
+  @@index([orgId, status])
+  @@index([campaignId, status])
+  @@index([donorEmail])
+}
+
+enum PledgeStatus {
+  OPEN
+  FULFILLED
+  CANCELLED
+}
+
+model Pledge {
+  id            String       @id @default(cuid())
+  orgId         String
+  tripId        String
+  campaignId    String
+  donorName     String
+  donorEmail    String?
+  amountCents   Int
+  expectedBy    DateTime?    @db.Date
+  status        PledgeStatus @default(OPEN)
+  note          String?
+  donationId    String?
+  createdById   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  trip     Trip         @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+  campaign Campaign     @relation(fields: [campaignId, orgId], references: [id, orgId], onDelete: Cascade)
+  donation Donation?    @relation(fields: [donationId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, status])
+}
+
+// ─────────────────────────────── Ledger ───────────────────────────────
+
+enum LedgerType {
+  DONATION // + gross amount received
+  PROCESSING_FEE // − payment processor fee
+  REFUND // − amount returned to donor
+  DISPUTE // − amount withdrawn by a chargeback
+  DISPUTE_REVERSAL // + amount returned when a dispute is won
+  EXPENSE // − money paid out for the trip
+  EXPENSE_REVERSAL // + a voided paid expense
+  ADJUSTMENT // ± manual correction by an admin, always with a memo
+}
+
+model LedgerEntry {
+  id          String          @id @default(cuid())
+  orgId       String
+  tripId      String
+  campaignId  String?
+  donationId  String?
+  expenseId   String?
+  type        LedgerType
+  amountCents Int // signed: positive adds funds, negative removes them
+  restriction FundRestriction
+  occurredAt  DateTime
+  memo        String?
+  // Idempotency key for entries caused by external events, e.g. "stripe:refund:re_123".
+  sourceRef   String?         @unique
+  createdById String?
+  createdAt   DateTime        @default(now())
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  trip     Trip         @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
+  campaign Campaign?    @relation(fields: [campaignId, orgId], references: [id, orgId], onDelete: Restrict)
+  donation Donation?    @relation(fields: [donationId], references: [id], onDelete: Restrict)
+  expense  Expense?     @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+
+  @@index([orgId, tripId])
+  @@index([donationId])
+}
+
+// Every Stripe webhook event we receive, so duplicates are ignored and
+// failures can be inspected and replayed.
+model StripeEvent {
+  id          String    @id // Stripe's evt_ id
+  type        String
+  accountId   String?
+  livemode    Boolean
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?
+  payload     Json
+}
+
+// ───────────────────────────── Expenses ─────────────────────────────
+
+enum ExpenseCategory {
+  TRAVEL
+  LODGING
+  FOOD
+  GROUND_TRANSPORT
+  MINISTRY_SUPPLIES
+  PROJECT_MATERIALS
+  INSURANCE
+  FEES
+  OTHER
+}
+
+enum ExpenseStatus {
+  COMMITTED // agreed/booked but not yet paid
+  PAID
+  VOID
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  orgId       String
+  tripId      String
+  category    ExpenseCategory
+  description String
+  vendor      String?
+  amountCents Int
+  status      ExpenseStatus   @default(COMMITTED)
+  incurredOn  DateTime        @db.Date
+  paidOn      DateTime?       @db.Date
+  notes       String?
+  receiptId   String?         @unique
+  createdById String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  org     Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  trip    Trip          @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
+  receipt Document?     @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  ledger  LedgerEntry[]
+
+  @@index([tripId, status])
+}
+
+model BudgetLine {
+  id           String          @id @default(cuid())
+  orgId        String
+  tripId       String
+  category     ExpenseCategory
+  plannedCents Int
+
+  trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@unique([tripId, category])
+}
+
+// A snapshot of a trip's finances that an admin has reviewed and chosen to
+// publish to donors. Donors see these approved figures, never live internals.
+model FinancialReport {
+  id          String   @id @default(cuid())
+  orgId       String
+  tripId      String
+  title       String
+  narrative   String   @default("")
+  snapshot    Json
+  isFinal     Boolean  @default(false) // post-trip report
+  publishedAt DateTime @default(now())
+  publishedById String
+
+  trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@index([tripId, publishedAt])
+}
+
+// ───────────────────────── Documents & requirements ─────────────────────────
+
+enum DocumentKind {
+  SUBMISSION // participant-submitted file for a requirement
+  TRIP_RESOURCE // shared with the trip team (packing list, guide)
+  EXPENSE_RECEIPT
+  REQUIREMENT_TEMPLATE // blank form participants download
+}
+
+model Document {
+  id           String       @id @default(cuid())
+  orgId        String
+  tripId       String?
+  ownerUserId  String? // the participant the file is about, for SUBMISSION
+  kind         DocumentKind
+  storageKey   String       @unique // random, never a public URL
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  uploadedById String
+  createdAt    DateTime     @default(now())
+
+  org         Organization            @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  trip        Trip?                   @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
+  expense     Expense?
+  submission  RequirementSubmission?
+  requirementTemplate Requirement?    @relation("RequirementTemplate")
+
+  @@index([tripId, kind])
+}
+
+enum RequirementKind {
+  UPLOAD // participant uploads a file (passport copy, medical form)
+  WAIVER // participant reads text and signs by typing their full name
+  FORM // participant answers configurable questions
+  TASK // participant marks a task done (e.g. "attend orientation")
+}
+
+model Requirement {
+  id          String          @id @default(cuid())
+  orgId       String
+  tripId      String
+  kind        RequirementKind
+  title       String
+  instructions String         @default("")
+  waiverText  String?
+  formFields  Json? // [{ key, label, type: "text"|"textarea"|"yesno"|"date", required }]
+  needsReview Boolean         @default(true) // leader must approve; false = completing it is enough
+  isRequired  Boolean         @default(true)
+  dueDate     DateTime?       @db.Date
+  sortOrder   Int             @default(0)
+  templateDocumentId String?  @unique
+  createdAt   DateTime        @default(now())
+
+  trip        Trip                    @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+  template    Document?               @relation("RequirementTemplate", fields: [templateDocumentId], references: [id], onDelete: SetNull)
+  submissions RequirementSubmission[]
+
+  @@unique([id, orgId])
+  @@index([tripId])
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+model RequirementSubmission {
+  id            String           @id @default(cuid())
+  orgId         String
+  requirementId String
+  tripMemberId  String
+  status        SubmissionStatus @default(SUBMITTED)
+  documentId    String?          @unique
+  signedName    String?
+  formAnswers   Json?
+  submittedAt   DateTime         @default(now())
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewNote    String?
+
+  requirement Requirement @relation(fields: [requirementId, orgId], references: [id, orgId], onDelete: Cascade)
+  tripMember  TripMember  @relation(fields: [tripMemberId, orgId], references: [id, orgId], onDelete: Cascade)
+  document    Document?   @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@unique([requirementId, tripMemberId])
+}
+
+// ─────────────────────────── Communication ───────────────────────────
+
+enum PostAudience {
+  TEAM // trip leaders and approved participants only
+  PUBLIC // donors and the public trip page
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING_APPROVAL // public posts by leaders wait for a church admin
+  PUBLISHED
+}
+
+model Post {
+  id          String       @id @default(cuid())
+  orgId       String
+  tripId      String
+  authorId    String
+  audience    PostAudience @default(TEAM)
+  status      PostStatus   @default(PUBLISHED)
+  title       String
+  body        String
+  publishedAt DateTime?
+  approvedById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@index([tripId, audience, status])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  orgId     String?
+  title     String
+  body      String
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  dedupeKey String?   @unique // prevents repeat reminders, e.g. "deadline:req:member:7d:user"
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  userId               String  @id
+  emailDonations       Boolean @default(true)
+  emailAnnouncements   Boolean @default(true)
+  emailDeadlines       Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model EmailOutbox {
+  id        String      @id @default(cuid())
+  to        String
+  subject   String
+  text      String
+  status    EmailStatus @default(QUEUED)
+  attempts  Int         @default(0)
+  lastError String?
+  sentAt    DateTime?
+  createdAt DateTime    @default(now())
+  // Prevents sending the same reminder twice, e.g. "deadline:req_1:member_2:3d".
+  dedupeKey String?     @unique
+
+  @@index([status, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  orgId       String?
+  actorUserId String?
+  action      String // e.g. "donation.refund_requested"
+  entityType  String
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  org Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@index([entityType, entityId])
+}
