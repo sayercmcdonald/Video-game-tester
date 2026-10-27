@@ -86,3 +86,22 @@ This sends deadline reminders, reconciles pending Stripe payments, retries email
 - [ ] Backups enabled and a restore tested.
 - [ ] The church's receipt statement and waiver text reviewed by the church.
 - [ ] Demo data **not** seeded in production (the seed script refuses to run there).
+
+## 10. Public demo on Render
+
+`render.yaml` at the repository root is a Render Blueprint for a **demo** copy with demo data. It's for clicking through the product on a phone, not for real churches:
+
+- Online giving is off (no Stripe keys) and emails are only logged, never sent.
+- Free Render instances sleep after about 15 minutes idle; the first visit after that takes up to a minute.
+- Free Render Postgres databases expire after 30 days (Render emails a warning first). Upgrade the database plan to keep it.
+- Free instances have no persistent disk, so uploaded files disappear on each redeploy or restart.
+- The demo logins (`admin@demo.test` etc., password in README) are public knowledge: anyone with the link can sign in and change demo data.
+
+Steps:
+
+1. Sign in at [render.com](https://render.com) with GitHub and allow access to this repository.
+2. **New → Blueprint**, pick this repository. Render reads `render.yaml` and proposes a database `sent-demo-db` and a web service `sent-demo` (branch `claude/mission-trip-platform`, folder `mission-trips`).
+3. Click **Apply**. The first build takes a few minutes. On start, the service applies migrations and loads the demo data once (`SEED_DEMO=true`; the seed skips itself if the demo church already exists).
+4. Open the service's `https://sent-demo-….onrender.com` address. The app uses it automatically for links (`RENDER_EXTERNAL_URL`).
+
+To turn the demo into a real staging environment, follow sections 2–9: set `SEED_DEMO=false`, add a persistent disk or S3 storage, Stripe test keys and Resend.

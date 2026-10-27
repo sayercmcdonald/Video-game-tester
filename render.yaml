@@ -1,0 +1,40 @@
+# Render Blueprint: a public DEMO of Sent (mission-trips/) with demo data.
+# Not for real churches or real money: online giving stays off (no Stripe
+# keys), emails are logged instead of sent, and uploaded files are lost on
+# each redeploy (free instances have no persistent disk).
+# See mission-trips/docs/DEPLOYMENT.md, "Public demo on Render".
+databases:
+  - name: sent-demo-db
+    plan: free
+    databaseName: sent
+    user: sent
+
+services:
+  - type: web
+    name: sent-demo
+    runtime: node
+    plan: free
+    branch: claude/mission-trip-platform
+    rootDir: mission-trips
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:demo
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: APP_ENV
+        value: staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sent-demo-db
+          property: connectionString
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true # random 256-bit, base64
+      - key: CRON_SECRET
+        generateValue: true
+      - key: EMAIL_TRANSPORT
+        value: log
+      - key: STORAGE_DIR
+        value: ./storage/uploads
+      - key: SEED_DEMO
+        value: "true"

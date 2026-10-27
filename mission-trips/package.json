@@ -35,6 +35,7 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
+    "start:demo": "prisma migrate deploy && if [ \"$SEED_DEMO\" = true ]; then prisma db seed; fi && next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
