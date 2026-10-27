@@ -6,6 +6,7 @@ import { assertPerm, type TripContext } from "../context";
 import { invalid, notFound } from "../errors";
 import { validateUpload } from "../storage";
 import { storeDocument } from "./documents";
+import { notifyUsers } from "../notify";
 import { balanceByRestriction, ledgerTotals, raisedByCampaign, type LedgerTotals } from "./ledger";
 import { zDate, zMoney, zName, zOptionalDate, zOptionalText } from "@/lib/validation";
 import { formatMoney } from "@/lib/money";
@@ -28,11 +29,18 @@ export const expenseSchema = z
   })
   .refine((d) => d.status !== "PAID" || d.paidOn, { message: "Enter the date it was paid.", path: ["paidOn"] });
 
-/** Paid expenses go into the ledger; committed ones count toward the budget but not spending. */
+/**
+ * Recording an expense.
+ * - Church administrators' expenses take effect immediately (paid ones go into the ledger).
+ * - Trip leaders' expenses are submitted for approval and count toward nothing
+ *   until an administrator approves them. This keeps a second person on every
+ *   outgoing dollar, which is a basic financial control.
+ */
 export async function createExpense(t: TripContext, input: z.input<typeof expenseSchema>, receipt?: File | null) {
   assertPerm(t.perms.recordExpenses, "You don't have permission to record expenses for this trip.");
   const d = expenseSchema.parse(input);
   const upload = receipt && receipt.size > 0 ? await validateUpload(receipt) : null;
+  const approver = t.perms.administerFinances;
   const expense = await db.$transaction(async (tx) => {
     const doc = upload
       ? await storeDocument(tx, upload, { orgId: t.org.id, tripId: t.trip.id, ownerUserId: null, kind: "EXPENSE_RECEIPT", uploadedById: t.user.id })
@@ -45,19 +53,78 @@ export async function createExpense(t: TripContext, input: z.input<typeof expens
         description: d.description,
         vendor: d.vendor ?? null,
         amountCents: d.amount,
-        status: d.status,
+        status: approver ? d.status : "PENDING_APPROVAL",
+        requestedStatus: approver ? null : d.status,
         incurredOn: d.incurredOn,
         paidOn: d.status === "PAID" ? d.paidOn! : null,
         notes: d.notes ?? null,
         receiptId: doc?.id ?? null,
         createdById: t.user.id,
+        approvedById: approver ? t.user.id : null,
+        approvedAt: approver ? new Date() : null,
       },
     });
     if (e.status === "PAID") await postExpenseToLedger(tx, e, t.user.id);
-    await audit({ orgId: t.org.id, actorUserId: t.user.id, action: "expense.created", entityType: "Expense", entityId: e.id, metadata: { amountCents: e.amountCents, status: e.status } }, tx);
+    await audit(
+      {
+        orgId: t.org.id,
+        actorUserId: t.user.id,
+        action: approver ? "expense.created" : "expense.submitted",
+        entityType: "Expense",
+        entityId: e.id,
+        metadata: { amountCents: e.amountCents, status: e.status, requested: d.status },
+      },
+      tx,
+    );
     return e;
   });
+  if (!approver) {
+    const admins = await db.membership.findMany({ where: { orgId: t.org.id, role: "ADMIN" }, select: { userId: true } });
+    await notifyUsers({
+      userIds: admins.map((a) => a.userId),
+      orgId: t.org.id,
+      title: `Expense to approve: ${formatMoney(expense.amountCents, t.org.currency)}`,
+      body: `${t.user.name} submitted "${expense.description}" (${formatMoney(expense.amountCents, t.org.currency)}) for ${t.trip.name}.`,
+      href: `/o/${t.org.slug}/trips/${t.trip.id}/finances`,
+      category: "account",
+    });
+  }
   return expense;
+}
+
+/** Administrators approve or reject an expense a leader submitted. */
+export async function reviewExpense(t: TripContext, expenseId: string, decision: "APPROVE" | "REJECT", note?: string) {
+  assertPerm(t.perms.administerFinances, "Only church administrators can approve expenses.");
+  const cleanNote = z.string().trim().max(1000).optional().parse(note || undefined);
+  if (decision === "REJECT" && !cleanNote) throw invalid("Say why the expense is being declined.");
+  const e = await db.$transaction(async (tx) => {
+    const current = await tx.expense.findFirst({ where: { id: expenseId, tripId: t.trip.id, orgId: t.org.id } });
+    if (!current) throw notFound("Expense");
+    if (current.status !== "PENDING_APPROVAL") throw invalid("This expense isn't waiting for approval.");
+    const target = decision === "REJECT" ? "REJECTED" : (current.requestedStatus ?? "COMMITTED");
+    // Guarded update: if two admins click at once, only one decision applies.
+    const claimed = await tx.expense.updateMany({
+      where: { id: current.id, status: "PENDING_APPROVAL" },
+      data: { status: target, approvedById: t.user.id, approvedAt: new Date(), reviewNote: cleanNote ?? null },
+    });
+    if (claimed.count !== 1) throw invalid("This expense was already reviewed.");
+    const updated = await tx.expense.findUniqueOrThrow({ where: { id: current.id } });
+    if (updated.status === "PAID") await postExpenseToLedger(tx, updated, t.user.id);
+    await audit(
+      { orgId: t.org.id, actorUserId: t.user.id, action: decision === "APPROVE" ? "expense.approved" : "expense.rejected", entityType: "Expense", entityId: current.id, metadata: { amountCents: current.amountCents, note: cleanNote ?? null } },
+      tx,
+    );
+    return updated;
+  });
+  await notifyUsers({
+    userIds: [e.createdById],
+    orgId: t.org.id,
+    title: decision === "APPROVE" ? `Expense approved: ${e.description}` : `Expense declined: ${e.description}`,
+    body: decision === "APPROVE" ? `"${e.description}" (${formatMoney(e.amountCents, t.org.currency)}) was approved.` : `"${e.description}" was declined: ${cleanNote}`,
+    href: `/o/${t.org.slug}/trips/${t.trip.id}/finances`,
+    category: "account",
+  });
+  return e;
 }
 
 async function postExpenseToLedger(tx: Prisma.TransactionClient, e: { id: string; orgId: string; tripId: string; amountCents: number; paidOn: Date | null; description: string }, actor: string) {
@@ -77,26 +144,33 @@ async function postExpenseToLedger(tx: Prisma.TransactionClient, e: { id: string
   });
 }
 
+/** Paying moves money, so only administrators mark an approved expense as paid. */
 export async function markExpensePaid(t: TripContext, expenseId: string, paidOnInput: string) {
-  assertPerm(t.perms.recordExpenses);
+  assertPerm(t.perms.administerFinances, "Only church administrators can mark expenses as paid.");
   const paidOn = zDate("Paid date").parse(paidOnInput);
   await db.$transaction(async (tx) => {
     const claimed = await tx.expense.updateMany({ where: { id: expenseId, tripId: t.trip.id, orgId: t.org.id, status: "COMMITTED" }, data: { status: "PAID", paidOn } });
-    if (claimed.count === 0) throw invalid("Only committed expenses can be marked paid.");
+    if (claimed.count === 0) throw invalid("Only approved, unpaid expenses can be marked paid.");
     const e = await tx.expense.findUniqueOrThrow({ where: { id: expenseId } });
     await postExpenseToLedger(tx, e, t.user.id);
     await audit({ orgId: t.org.id, actorUserId: t.user.id, action: "expense.paid", entityType: "Expense", entityId: e.id }, tx);
   });
 }
 
-/** Voiding keeps the record. A paid expense gets an offsetting ledger entry rather than being erased. */
+/**
+ * Voiding keeps the record. A paid expense gets an offsetting ledger entry
+ * rather than being erased. Approved expenses can only be voided by
+ * administrators; a leader may withdraw their own pending submission.
+ */
 export async function voidExpense(t: TripContext, expenseId: string, reason: string) {
   assertPerm(t.perms.recordExpenses);
   const why = z.string().trim().min(3, "Give a short reason.").max(500).parse(reason);
   await db.$transaction(async (tx) => {
     const e = await tx.expense.findFirst({ where: { id: expenseId, tripId: t.trip.id, orgId: t.org.id } });
     if (!e) throw notFound("Expense");
-    if (e.status === "VOID") throw invalid("This expense is already void.");
+    if (e.status === "VOID" || e.status === "REJECTED") throw invalid("This expense is already closed.");
+    const ownPending = e.status === "PENDING_APPROVAL" && e.createdById === t.user.id;
+    assertPerm(t.perms.administerFinances || ownPending, "Only church administrators can void an approved expense.");
     await tx.expense.update({ where: { id: e.id }, data: { status: "VOID", notes: [e.notes, `Voided: ${why}`].filter(Boolean).join("\n") } });
     if (e.status === "PAID") {
       await tx.ledgerEntry.create({
@@ -114,7 +188,7 @@ export async function voidExpense(t: TripContext, expenseId: string, reason: str
         },
       });
     }
-    await audit({ orgId: t.org.id, actorUserId: t.user.id, action: "expense.voided", entityType: "Expense", entityId: e.id, metadata: { reason: why } }, tx);
+    await audit({ orgId: t.org.id, actorUserId: t.user.id, action: "expense.voided", entityType: "Expense", entityId: e.id, metadata: { reason: why, previousStatus: e.status } }, tx);
   });
 }
 
@@ -171,14 +245,18 @@ export type FinancialSummary = {
   pledgesOpenCount: number;
   giftCount: number;
   pendingGiftCount: number;
+  /** Submitted by leaders, not yet approved: not counted anywhere else. */
+  pendingApprovalCents: number;
+  pendingApprovalCount: number;
 };
 
 export async function financialSummary(tripId: string, orgId: string): Promise<FinancialSummary> {
-  const [totals, restricted, trip, expenses, budgetLines, pledges, giftCount, pendingGiftCount] = await Promise.all([
+  const [totals, restricted, trip, expenses, pendingExpenses, budgetLines, pledges, giftCount, pendingGiftCount] = await Promise.all([
     ledgerTotals({ tripId, orgId }),
     balanceByRestriction({ tripId, orgId }),
     db.trip.findUniqueOrThrow({ where: { id: tripId } }),
-    db.expense.groupBy({ by: ["category", "status"], where: { tripId, orgId, status: { not: "VOID" } }, _sum: { amountCents: true } }),
+    db.expense.groupBy({ by: ["category", "status"], where: { tripId, orgId, status: { in: ["COMMITTED", "PAID"] } }, _sum: { amountCents: true } }),
+    db.expense.aggregate({ where: { tripId, orgId, status: "PENDING_APPROVAL" }, _sum: { amountCents: true }, _count: true }),
     db.budgetLine.findMany({ where: { tripId, orgId } }),
     db.pledge.aggregate({ where: { tripId, orgId, status: "OPEN" }, _sum: { amountCents: true }, _count: true }),
     db.donation.count({ where: { tripId, orgId, status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED"] } } }),
@@ -202,6 +280,8 @@ export async function financialSummary(tripId: string, orgId: string): Promise<F
     pledgesOpenCount: pledges._count,
     giftCount,
     pendingGiftCount,
+    pendingApprovalCents: pendingExpenses._sum.amountCents ?? 0,
+    pendingApprovalCount: pendingExpenses._count,
   };
 }
 

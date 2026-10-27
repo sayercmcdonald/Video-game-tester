@@ -2,8 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Mission Trips", template: "%s · Mission Trips" },
-  description: "Plan mission trips, support participants, and show donors exactly how gifts are used.",
+  title: { default: "Sent — Mission management", template: "%s · Sent" },
+  description: "Sent helps churches plan mission trips, support participants, and show donors how gifts are used.",
+  applicationName: "Sent",
 };
 
 export const viewport: Viewport = {

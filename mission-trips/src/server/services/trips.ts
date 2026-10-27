@@ -63,7 +63,7 @@ export async function createTrip(ctx: OrgContext, input: z.input<typeof createTr
 }
 
 export const updateTripSchema = z
-  .object({ ...tripFields, leadersSeeFinances: zCheckbox })
+  .object({ ...tripFields, leadersSeeFinances: zCheckbox, showLiveFinancials: zCheckbox })
   .refine((d) => d.endDate >= d.startDate, { message: "End date must be on or after the start date.", path: ["endDate"] });
 
 export async function updateTrip(t: TripContext, input: z.input<typeof updateTripSchema>) {
@@ -83,7 +83,7 @@ export async function updateTrip(t: TripContext, input: z.input<typeof updateTri
       participantLimit: d.participantLimit ?? null,
       applicationsOpen: d.applicationsOpen,
       // Only church admins decide whether leaders see finances.
-      ...(t.perms.isOrgAdmin ? { leadersSeeFinances: d.leadersSeeFinances } : {}),
+      ...(t.perms.isOrgAdmin ? { leadersSeeFinances: d.leadersSeeFinances, showLiveFinancials: d.showLiveFinancials } : {}),
     },
   });
   await db.campaign.updateMany({ where: { tripId: trip.id, kind: "TRIP" }, data: { goalCents: d.fundraisingGoal } });

@@ -33,6 +33,7 @@ export default async function TripSettingsPage({ params }: { params: Promise<{ o
             participantLimit: trip.participantLimit?.toString(),
             applicationsOpen: trip.applicationsOpen,
             leadersSeeFinances: trip.leadersSeeFinances,
+            showLiveFinancials: trip.showLiveFinancials,
           }}
         />
       </Card>

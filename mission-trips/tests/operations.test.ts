@@ -103,16 +103,16 @@ describe("expenses, ledger and reports", () => {
   it("records paid expenses in the ledger and reverses them when voided", async () => {
     const s = await setup();
     await recordOfflineDonation(s.adminT, { campaignId: s.fund.id, amount: "1000", donorName: "D", method: "CHECK", receivedOn: "2027-01-01" });
-    const committed = await createExpense(s.leader, { category: "LODGING", description: "Hotel", amount: "400", status: "COMMITTED", incurredOn: "2027-02-01" });
+    const committed = await createExpense(s.adminT, { category: "LODGING", description: "Hotel", amount: "400", status: "COMMITTED", incurredOn: "2027-02-01" });
     let sum = await financialSummary(s.trip.id, s.org.id);
     expect(sum.totals.expenses).toBe(0);
     expect(sum.committedCents).toBe(40000);
 
-    await markExpensePaid(s.leader, committed.id, "2027-02-02");
+    await markExpensePaid(s.adminT, committed.id, "2027-02-02");
     sum = await financialSummary(s.trip.id, s.org.id);
     expect(sum.totals.expenses).toBe(40000);
     expect(sum.totals.balance).toBe(60000);
-    await expect(markExpensePaid(s.leader, committed.id, "2027-02-02")).rejects.toThrow(/Only committed/);
+    await expect(markExpensePaid(s.adminT, committed.id, "2027-02-02")).rejects.toThrow(/Only approved, unpaid/);
 
     await voidExpense(s.adminT, committed.id, "Booked twice");
     sum = await financialSummary(s.trip.id, s.org.id);
@@ -120,6 +120,49 @@ describe("expenses, ledger and reports", () => {
     expect(sum.totals.balance).toBe(100000);
     // History is preserved
     expect(await db.ledgerEntry.count({ where: { expenseId: committed.id } })).toBe(2);
+  });
+
+  it("holds leaders' expenses for administrator approval before they count", async () => {
+    const s = await setup();
+    const paid = await createExpense(s.leader, { category: "FOOD", description: "Team dinner", amount: "120", status: "PAID", incurredOn: "2027-02-01", paidOn: "2027-02-01" });
+    const booked = await createExpense(s.leader, { category: "LODGING", description: "Guesthouse", amount: "900", status: "COMMITTED", incurredOn: "2027-02-01" });
+    expect(paid.status).toBe("PENDING_APPROVAL");
+    let sum = await financialSummary(s.trip.id, s.org.id);
+    expect(sum).toMatchObject({ committedCents: 0, paidCents: 0, pendingApprovalCents: 102000, pendingApprovalCount: 2 });
+    expect(sum.totals.expenses).toBe(0);
+    expect(await db.ledgerEntry.count({ where: { expenseId: paid.id } })).toBe(0);
+    // Admins were asked to review
+    expect(await db.notification.count({ where: { userId: s.admin.id, title: { startsWith: "Expense to approve" } } })).toBe(2);
+
+    // Leaders can't approve, pay, or void approved expenses
+    const { reviewExpense } = await import("@/server/services/finance");
+    await expect(reviewExpense(s.leader, paid.id, "APPROVE")).rejects.toThrow(/administrators/);
+    await expect(reviewExpense(s.adminT, booked.id, "REJECT")).rejects.toThrow(/Say why/);
+
+    await reviewExpense(s.adminT, paid.id, "APPROVE");
+    await reviewExpense(s.adminT, booked.id, "REJECT", "Use the church's existing booking");
+    await expect(reviewExpense(s.adminT, paid.id, "APPROVE")).rejects.toThrow(/isn't waiting/);
+    sum = await financialSummary(s.trip.id, s.org.id);
+    expect(sum).toMatchObject({ paidCents: 12000, committedCents: 0, pendingApprovalCents: 0 });
+    expect(sum.totals.expenses).toBe(12000);
+    expect((await db.expense.findUniqueOrThrow({ where: { id: paid.id } })).approvedById).toBe(s.admin.id);
+    expect(await db.auditLog.count({ where: { action: { in: ["expense.submitted", "expense.approved", "expense.rejected"] } } })).toBe(4);
+
+    await expect(voidExpense(s.leader, paid.id, "mistake")).rejects.toThrow(/administrators can void/);
+    const leaderCommitted = await createExpense(s.leader, { category: "FOOD", description: "Snacks", amount: "20", status: "COMMITTED", incurredOn: "2027-02-01" });
+    await voidExpense(s.leader, leaderCommitted.id, "Withdrawn by submitter"); // own pending submission
+    await reviewExpense(s.adminT, (await createExpense(s.leader, { category: "FOOD", description: "Water", amount: "15", status: "COMMITTED", incurredOn: "2027-02-01" })).id, "APPROVE");
+    const approvedCommitted = await db.expense.findFirstOrThrow({ where: { description: "Water" } });
+    await expect(markExpensePaid(s.leader, approvedCommitted.id, "2027-02-03")).rejects.toThrow(/administrators can mark/);
+  });
+
+  it("approval races apply only once", async () => {
+    const s = await setup();
+    const e = await createExpense(s.leader, { category: "FOOD", description: "Lunch", amount: "50", status: "PAID", incurredOn: "2027-02-01", paidOn: "2027-02-01" });
+    const { reviewExpense } = await import("@/server/services/finance");
+    const results = await Promise.allSettled([reviewExpense(s.adminT, e.id, "APPROVE"), reviewExpense(s.adminT, e.id, "APPROVE")]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(await db.ledgerEntry.count({ where: { expenseId: e.id } })).toBe(1);
   });
 
   it("requires a paid date for paid expenses and blocks participants", async () => {

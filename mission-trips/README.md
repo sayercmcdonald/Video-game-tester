@@ -1,4 +1,6 @@
-# Mission Trips
+# Sent
+
+_Mission management. Transparent giving. Greater impact._ (Codebase folder: `mission-trips`.)
 
 A platform for churches to run mission trips end to end: recruit and approve a team, collect required documents and waivers, raise support through Stripe, track expenses against a budget, and publish honest financial reports to donors.
 
@@ -10,6 +12,10 @@ A platform for churches to run mission trips end to end: recruit and approve a t
 | --- | --- |
 | [docs/PRD.md](docs/PRD.md) | Product requirements: who it's for, what it must do, what's out of scope |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the system is built and why, in plain English |
+| [docs/AUDIT-2026-10-27.md](docs/AUDIT-2026-10-27.md) | Current-state audit against the Sent vision |
+| [docs/COMPETITIVE.md](docs/COMPETITIVE.md) | Competitor research with sources |
+| [docs/VALIDATION.md](docs/VALIDATION.md) | Riskiest business assumptions, interview guide, pilot design |
+| [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | What connects to what, verified, and how the integration layer works |
 | [docs/DESIGN.md](docs/DESIGN.md) | The design system, based on Apple's Human Interface Guidelines |
 | [docs/STATUS.md](docs/STATUS.md) | What's implemented, what's tested, what's incomplete |
 | [docs/TASKS.md](docs/TASKS.md) | Prioritized task list |
@@ -59,8 +65,8 @@ Leave the Stripe variables blank and the app works normally, with giving pages s
 ## Tests
 
 ```bash
-npm test             # 75 unit + integration tests against a real Postgres test database
-npm run build && npm run test:e2e   # 12 browser tests of complete workflows
+npm test             # 98 unit + integration tests against a real Postgres test database
+npm run build && npm run test:e2e   # 15 browser tests of complete workflows
 npm run lint && npm run typecheck
 ```
 

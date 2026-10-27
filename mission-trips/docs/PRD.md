@@ -1,6 +1,13 @@
-# Product Requirements — Mission Trips
+# Product Requirements — Sent
 
-_Last updated: 2026-10-26_
+_Last updated: 2026-10-27_
+
+> **Sent** — Mission management. Transparent giving. Greater impact.
+> A focused mission-operations product for churches that works alongside their existing church software. It does not try to replace a church management system.
+
+## Positioning (see COMPETITIVE.md)
+
+Several products already offer trip applications, fundraising pages, documents and even budgets. Sent's bet, **to be validated with churches**, is depth on the connected workflow and on **financial integrity**: money counted only when settled, pledges kept apart, two-person approval on spending, an append-only ledger, exports for the bookkeeper, explainable readiness alerts, and donor-facing reports drawn from the records.
 
 ## Problem
 
@@ -38,7 +45,13 @@ Church data is isolated: no user can reach another church's records by changing 
 
 **Fundraising** — one team fund per trip, one support page per approved participant, optional project campaigns. Goals, amount received, remaining. Pledges tracked separately and never counted as received. Online gifts via Stripe Checkout only; received only on Stripe's signed confirmation. Check/cash gifts recorded by admins and clearly marked. Refunds (admin only), disputes, failed and abandoned payments handled. Sequential receipt numbers per church; receipts by email link, donor account, or admin.
 
-**Financial transparency** — append-only ledger of every money movement; gross gifts, fees, refunds, disputes, expenses, available balance and balance after commitments; restricted vs unrestricted; budget by category vs committed vs paid; expense receipts; donor reports published as reviewed snapshots containing totals only.
+**Financial transparency** — expenses submitted by leaders require church-admin approval before they count; append-only ledger of every money movement; gross gifts, fees, refunds, disputes, expenses, available balance and balance after commitments; restricted vs unrestricted; budget by category vs committed vs paid; expense receipts; donor reports published as reviewed snapshots containing totals only.
+
+**Readiness & automation** — "Needs attention" alerts computed from records (overdue and due-soon items, fundraising behind pace, departure risk, budget overruns, committed spending beyond funds, expense approvals, disputes and refunds), each explaining the numbers behind it; leader-reviewed reminders; report drafts generated from the ledger for an admin to edit. Nothing consequential happens automatically.
+
+**Donor transparency** — opt-in live financial summary on the public trip page (totals only), published reports, and the standing note that gifts are pooled and not matched to individual expenses.
+
+**Integrations** — CSV exports (gifts, expenses, ledger) today; integration layer with credential encryption, record links and sync history; Planning Center Giving next (see INTEGRATIONS.md).
 
 **Requirements** — upload, signed waiver (typed full-name signature with timestamp), configurable questions, and tasks; optional leader review; due dates; readiness matrix; automatic deadline reminders at 7 days, 2 days and due date.
 

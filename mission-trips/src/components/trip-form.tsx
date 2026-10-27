@@ -14,6 +14,7 @@ type TripDefaults = {
   participantLimit?: string;
   applicationsOpen?: boolean;
   leadersSeeFinances?: boolean;
+  showLiveFinancials?: boolean;
 };
 
 export function TripForm({
@@ -56,7 +57,15 @@ export function TripForm({
             label="Trip leaders can see finances"
             name="leadersSeeFinances"
             defaultChecked={defaults.leadersSeeFinances ?? true}
-            hint="Lets leaders see trip-wide gifts, fees and expenses, and record expenses. Refunds and reports stay with church admins."
+            hint="Lets leaders see trip-wide gifts, fees and expenses, and submit expenses for approval. Refunds and reports stay with church admins."
+          />
+        )}
+        {showFinanceToggle && (
+          <CheckboxField
+            label="Show live finances to donors"
+            name="showLiveFinancials"
+            defaultChecked={defaults.showLiveFinancials ?? false}
+            hint="Adds current totals to the public trip page: amount given, fees, spending by category and what remains. Never names or individual gifts."
           />
         )}
       </fieldset>

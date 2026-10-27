@@ -4,7 +4,7 @@ _Last updated: 2026-10-26. Written for a non-engineer owner; technical detail is
 
 ## The short version
 
-Mission Trips is a single web application (Next.js) backed by one PostgreSQL database. Stripe handles all card data and money movement. Every request that touches church data passes through one permission layer that checks *who you are*, *which church you belong to*, and *what your role allows* — on the server, every time.
+Sent (codebase: `mission-trips`) is a single web application (Next.js) backed by one PostgreSQL database. Stripe handles all card data and money movement. Every request that touches church data passes through one permission layer that checks *who you are*, *which church you belong to*, and *what your role allows* — on the server, every time.
 
 ```
 Browser ──► Next.js server ──► permission layer ──► services ──► PostgreSQL
@@ -93,3 +93,37 @@ Every notification is an in-app record plus, if the person's preferences allow, 
 ## Audit trail
 
 `AuditLog` records who did what: role changes, approvals, gifts recorded, refunds, expense changes, report publishing, waiver signatures, and every view of private profiles and files. A database trigger prevents edits. Church admins can read it under **Activity log**.
+
+## Spending controls (added 0.3.0)
+
+Expenses have a lifecycle: `PENDING_APPROVAL` → `COMMITTED` or `PAID` (approved) or `REJECTED`; approved ones can later become `VOID`. A trip leader's expense always starts as `PENDING_APPROVAL` and counts toward nothing (budget, spending, ledger, donor figures) until a church administrator approves it. Only administrators mark expenses paid or void approved ones; a leader may withdraw their own pending submission. Approval uses a guarded update so two simultaneous approvals apply once. Paid expenses create a ledger entry; voiding a paid expense creates an offsetting entry. Every step is audit-logged.
+
+## "Needs attention" (`src/server/services/insights.ts`)
+
+Alerts are computed on demand from records; nothing is stored or changed. Rules and thresholds (in `RULES`, unit-tested):
+
+| Alert | Trigger |
+| --- | --- |
+| Overdue | A required item with a due date in the past that some approved participants haven't completed |
+| Due soon | Due within 7 days and not completed by everyone |
+| Reviews / applications | Submissions awaiting review; applications awaiting a decision |
+| Departure risk | Departure within 30 days and anyone not 100% ready |
+| Fundraising behind pace | Fundraising is due 14 days before departure. Between a participant's approval and that date, the expected amount grows evenly. Flagged when received is more than 15 points of the goal behind the even pace, once 25% of the window has passed; "short" once the deadline passes |
+| Budget over | A category's paid + committed exceeds its budget line |
+| Shortfall | Available funds minus committed (unpaid) costs is below zero; open pledges are mentioned but not counted |
+| Expense approvals | Any expense awaiting approval (admins only) |
+| Disputes / refunds | Gifts under dispute (urgent); refunds in the last 30 days (FYI) |
+
+Who sees what: management alerts go to admins and leaders; financial alerts follow "leaders can see finances"; approvals and disputes go to admins only. Severity is shown with a shape and a word, never color alone.
+
+Reminders a leader sends are previewed first (who, and which items) and limited to one per person per day.
+
+## Donor transparency (`src/server/services/transparency.ts`)
+
+- **Live summary** (opt-in per trip, admin-only setting): given (after refunds), fees, spent by category vs. budget, committed, remaining, last-updated time. Aggregates only; pending expenses and pledges are excluded; hidden if the church is suspended.
+- **Report drafts**: `composeReportDraft` writes plain sentences using only figures from the ledger and trip records; an admin edits before publishing. Published reports remain snapshots.
+- Every donor-facing figure carries the note that gifts are pooled and not matched to specific expenses.
+
+## Integrations
+
+See [INTEGRATIONS.md](INTEGRATIONS.md). Tables: `Integration` (per church/provider, encrypted credentials, status), `ExternalLink` (record mapping with owner, unique to prevent duplicates), `SyncRun` (history). CSV exports run through `runExport`, which is admin-only, church-scoped, logged, and protects against spreadsheet formula injection.

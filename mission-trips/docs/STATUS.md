@@ -1,6 +1,23 @@
 # Implementation Status
 
-_Last updated: 2026-10-26 (session 1)_
+_Last updated: 2026-10-27 (session 3: Sent)_
+
+## Session 3 additions
+
+| Capability | State | Tested by |
+| --- | --- | --- |
+| Rename to Sent (UI, metadata, emails, mark) | ✅ | e2e + screenshots |
+| Expense approval (leader submits → admin approves/declines; admin-only pay/void) | ✅ | `operations.test.ts` (incl. race), e2e |
+| "Needs attention" alerts (9 rules), dashboard + trip overview | ✅ | `insights.test.ts`, e2e |
+| Reviewed reminders (preview → send, daily de-dup) | ✅ | `insights.test.ts`; UI manual |
+| Live donor financial summary (opt-in) | ✅ | `transparency.test.ts`, e2e |
+| Report drafts from records | ✅ | `transparency.test.ts`; UI manual |
+| CSV exports (gifts, expenses, ledger) + sync history | ✅ | `integrations.test.ts`, e2e |
+| Integration plumbing (encrypted credentials, record links) | ✅ | `integrations.test.ts` |
+| Planning Center / QuickBooks / Tithely / Subsplash connections | ⬜ | Not built; status documented in INTEGRATIONS.md |
+
+Totals: **98** integration/unit tests, **15** browser tests, lint/typecheck clean, `npm audit` clean.
+
 
 Legend: ✅ implemented and tested · 🟡 implemented, partly tested or needs real-world verification · ⬜ not built
 

@@ -259,3 +259,71 @@ test("viewing a participant's private profile is recorded in the activity log", 
   await expect(admin.getByRole("cell", { name: "Profile viewed" }).first()).toBeVisible();
   await expect(admin.getByRole("cell", { name: "Document viewed" }).first()).toBeVisible();
 });
+
+const LEADER = `leader-${run}@e2e.test`;
+
+test("a leader's expense waits for an administrator's approval", async ({ browser }) => {
+  const signupPage = await (await browser.newContext()).newPage();
+  await signUp(signupPage, "Lou Leader", LEADER);
+  const orgId = (await sql<{ id: string }>(`SELECT id FROM "Organization" WHERE slug=$1`, [ORG]))[0].id;
+  const userId = (await sql<{ id: string }>(`SELECT id FROM "User" WHERE email=$1`, [LEADER]))[0].id;
+  await sql(`INSERT INTO "Membership" (id, "orgId", "userId", role) VALUES ($1, $2, $3, 'MEMBER')`, [`m-${run}`, orgId, userId]);
+  await sql(`INSERT INTO "TripMember" (id, "orgId", "tripId", "userId", role, status, "updatedAt") VALUES ($1, $2, $3, $4, 'LEADER', 'APPROVED', now())`, [`tm-${run}`, orgId, tripId, userId]);
+
+  const leader = await asUser(browser, LEADER);
+  await leader.goto(`/o/${ORG}/trips/${tripId}/finances`);
+  const expenses = card(leader, "Expenses");
+  await expenses.getByText("+ Record an expense").click();
+  await expenses.getByLabel("Description").fill("Paint");
+  await expenses.getByLabel("Amount").fill("80");
+  await expenses.getByLabel("Status").selectOption("PAID");
+  await expenses.getByLabel("Date paid").fill("2027-05-02");
+  await expenses.getByRole("button", { name: "Record expense" }).click();
+  await expect(leader.getByText("Expense submitted. A church administrator will review it before it counts.")).toBeVisible();
+  await expect(card(leader, "Awaiting approval").getByText("Paint")).toBeVisible();
+  await expect(card(leader, "Ledger").getByText("Paint")).toHaveCount(0);
+
+  const admin = await asUser(browser, ADMIN);
+  await admin.goto(`/o/${ORG}`);
+  await expect(card(admin, "Needs attention").getByText("1 expense waiting for approval")).toBeVisible();
+  await admin.goto(`/o/${ORG}/trips/${tripId}/finances`);
+  const pending = card(admin, "Awaiting approval");
+  await expect(pending.getByText("submitted by Lou Leader")).toBeVisible();
+  await pending.getByRole("button", { name: "Approve" }).click();
+  await expect(admin.getByRole("heading", { name: "Awaiting approval" })).toBeHidden();
+  await expect(card(admin, "Ledger").getByText("−$80.00")).toBeVisible();
+});
+
+test("administrators can export records for the bookkeeper; others can't", async ({ browser, request }) => {
+  const admin = await asUser(browser, ADMIN);
+  const res = await admin.request.get(`/api/orgs/${ORG}/export/ledger`);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toContain("text/csv");
+  const body = await res.text();
+  expect(body).toContain("Expense paid,-80.00");
+  expect(body).toContain("Gift received,150.00");
+
+  const p = await asUser(browser, PARTICIPANT);
+  expect((await p.request.get(`/api/orgs/${ORG}/export/donations`)).status()).toBe(404);
+  expect((await request.get(`/api/orgs/${ORG}/export/donations`)).status()).toBe(401);
+  await admin.goto(`/o/${ORG}/settings/integrations`);
+  await expect(card(admin, "Recent exports and syncs").getByText("ledger export")).toBeVisible();
+});
+
+test("live finances appear on the public page only after the church opts in", async ({ browser }) => {
+  const anon = await (await browser.newContext()).newPage();
+  await anon.goto(`/t/${ORG}/${tripSlug}`);
+  await expect(anon.getByRole("heading", { name: "Where the money stands" })).toHaveCount(0);
+
+  const admin = await asUser(browser, ADMIN);
+  await admin.goto(`/o/${ORG}/trips/${tripId}/settings`);
+  await admin.getByLabel("Show live finances to donors").check();
+  await admin.getByRole("button", { name: "Save changes" }).click();
+  await expect(admin.getByText("Trip saved.")).toBeVisible();
+
+  await anon.reload();
+  const live = card(anon, "Where the money stands");
+  await expect(live.getByText("Individual gifts are not matched to specific expenses.")).toBeVisible();
+  await expect(live.getByText("$180.00").first()).toBeVisible(); // spent: lumber $100 + paint $80
+  await expect(anon.getByText("Grandma Jo")).toHaveCount(0);
+});

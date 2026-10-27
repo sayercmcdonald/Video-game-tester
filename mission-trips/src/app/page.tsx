@@ -3,45 +3,41 @@ import { Logo } from "@/components/brand";
 import { LinkButton } from "@/components/ui";
 import { getCurrentUser } from "@/server/context";
 
-const features = [
-  {
-    title: "One place for every trip",
-    body: "Dates, itinerary, team roster, required forms and deadlines — for every trip your church runs, side by side.",
-  },
-  {
-    title: "Fundraising that adds up",
-    body: "Each participant gets a support page. Gifts are processed by Stripe and recorded only when the money actually arrives.",
-  },
-  {
-    title: "Clear readiness",
-    body: "See at a glance who still needs a passport copy, a signed waiver or their fundraising balance — and remind them.",
-  },
-  {
-    title: "Honest reporting to donors",
-    body: "Record expenses with receipts, compare against budget, and publish a reviewed summary of how gifts were used.",
-  },
+const steps = [
+  { title: "Plan", body: "Trips, dates, budgets, itineraries and team limits for every trip your church runs." },
+  { title: "Build the team", body: "Applications, approvals and invitations. Approving someone sets up their support page and their checklist." },
+  { title: "Fund it", body: "Participant and team giving pages through Stripe. Gifts count only when the money arrives; pledges are tracked separately." },
+  { title: "Get ready", body: "Waivers, passport copies, forms and tasks with due dates. See who is behind before it becomes a problem." },
+  { title: "Spend carefully", body: "Expenses with receipts, approved by an administrator, measured against the budget." },
+  { title: "Report back", body: "Publish a reviewed summary of what was given and how it was used. No donor or participant names." },
 ];
 
 export default async function Landing() {
   if (await getCurrentUser()) redirect("/home");
   return (
     <div className="min-h-dvh">
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5 sm:px-6">
+      <header
+        className="mx-auto flex max-w-5xl items-center justify-between py-4"
+        style={{ paddingLeft: "max(16px, env(safe-area-inset-left))", paddingRight: "max(16px, env(safe-area-inset-right))", paddingTop: "max(16px, env(safe-area-inset-top))" }}
+      >
         <Logo />
-        <nav className="flex gap-2">
+        <nav className="flex gap-1">
           <LinkButton href="/login" variant="ghost">
             Sign in
           </LinkButton>
-          <LinkButton href="/signup">Get started</LinkButton>
+          <LinkButton href="/signup" className="hidden sm:inline-flex">
+            Get started
+          </LinkButton>
         </nav>
       </header>
-      <main id="main" className="mx-auto max-w-5xl px-4 pt-16 pb-24 sm:px-6">
-        <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">Mission trips, organized from first meeting to final report.</h1>
-        <p className="mt-5 max-w-xl text-lg text-ink-2">
-          Replace the spreadsheets, email threads and separate donation tools. Leaders, participants and donors each see what they need — and nothing they
-          shouldn&apos;t.
+      <main id="main" className="mx-auto max-w-5xl px-4 pt-10 pb-24 sm:px-6 sm:pt-16">
+        <p className="text-[15px] font-semibold text-accent">Mission management for churches</p>
+        <h1 className="mt-2 max-w-3xl text-[40px] leading-[1.08] font-bold tracking-tight sm:text-[56px]">Everything a mission trip needs, from first meeting to final report.</h1>
+        <p className="mt-5 max-w-2xl text-[19px] leading-relaxed text-ink-2">
+          Sent connects your team, fundraising, paperwork and spending in one place, and shows donors how their gifts were used. It works alongside the church
+          software you already have.
         </p>
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <LinkButton href="/signup?next=/new-church" className="h-12 px-6 lg:h-11">
             Set up your church
           </LinkButton>
@@ -49,14 +45,15 @@ export default async function Landing() {
             I was invited to a trip
           </LinkButton>
         </div>
-        <div className="mt-16 grid gap-3 sm:grid-cols-2">
-          {features.map((f) => (
-            <div key={f.title} className="rounded-[var(--radius-card)] bg-surface p-6">
-              <h2 className="font-semibold">{f.title}</h2>
-              <p className="mt-1.5 text-ink-2">{f.body}</p>
-            </div>
+        <ol className="mt-16 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {steps.map((s, i) => (
+            <li key={s.title} className="rounded-[var(--radius-card)] bg-surface p-6 dark:ring-1 dark:ring-line">
+              <div className="text-[13px] font-semibold text-ink-3 tabular-nums">Step {i + 1}</div>
+              <h2 className="mt-1 text-[20px] font-semibold tracking-tight">{s.title}</h2>
+              <p className="mt-1.5 text-ink-2">{s.body}</p>
+            </li>
           ))}
-        </div>
+        </ol>
       </main>
     </div>
   );

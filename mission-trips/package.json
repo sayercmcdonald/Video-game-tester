@@ -42,8 +42,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
-    "make-admin": "tsx --tsconfig tsconfig.scripts.json scripts/make-platform-admin.ts",
-    "jobs:run": "tsx --tsconfig tsconfig.scripts.json scripts/run-jobs.ts",
+    "make-admin": "tsx --env-file-if-exists=.env --tsconfig tsconfig.scripts.json scripts/make-platform-admin.ts",
+    "jobs:run": "tsx --env-file-if-exists=.env --tsconfig tsconfig.scripts.json scripts/run-jobs.ts",
     "postinstall": "prisma generate"
   },
   "engines": {

@@ -115,7 +115,7 @@ export async function createInvitation(ctx: OrgContext, input: z.input<typeof in
   await queueEmail({
     to: data.email,
     subject: `${ctx.user.name} invited you to ${what}`,
-    text: `Hi,\n\n${ctx.user.name} invited you to ${what} on Mission Trips.\n\nAccept the invitation:\n${appUrl(`/invite/${token}`)}\n\nThis link expires in 14 days.`,
+    text: `Hi,\n\n${ctx.user.name} invited you to ${what} on Sent.\n\nAccept the invitation:\n${appUrl(`/invite/${token}`)}\n\nThis link expires in 14 days.`,
   });
   await audit({
     orgId: ctx.org.id,

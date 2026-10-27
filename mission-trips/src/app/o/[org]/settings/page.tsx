@@ -20,6 +20,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ org: 
             <ListRow href={`/o/${o.slug}/settings/payments`} title="Payments" subtitle="Connect Stripe so gifts go straight to your bank account" trailing={<Badge tone={o.stripeChargesEnabled ? "good" : "neutral"}>{o.stripeChargesEnabled ? "On" : "Off"}</Badge>} />
           </li>
           <li>
+            <ListRow href={`/o/${o.slug}/settings/integrations`} title="Integrations & exports" subtitle="Spreadsheet exports for your bookkeeper, and connections to other church software" />
+          </li>
+          <li>
             <ListRow href={`/o/${o.slug}/audit`} title="Activity log" subtitle="Every change, money movement and view of private records" />
           </li>
           <li>
@@ -38,7 +41,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ org: 
               <h3 className="mb-1 text-sm font-semibold">Receipts</h3>
               <div className="mb-4">
                 <Alert tone="info">
-                  Mission Trips never states that a gift is tax-deductible. Receipts show exactly the wording you enter below. Confirm it with your accountant or
+                  Sent never states that a gift is tax-deductible. Receipts show exactly the wording you enter below. Confirm it with your accountant or
                   denomination before going live.
                 </Alert>
               </div>

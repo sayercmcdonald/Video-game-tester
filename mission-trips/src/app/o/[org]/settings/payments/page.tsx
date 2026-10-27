@@ -41,7 +41,7 @@ export default async function PaymentsPage({ params }: { params: Promise<{ org: 
           ) : (
             <>
               <p className="text-ink-2">
-                Your church connects its <strong>own</strong> Stripe account. Gifts are charged on that account and paid out to your bank by Stripe; Mission Trips
+                Your church connects its <strong>own</strong> Stripe account. Gifts are charged on that account and paid out to your bank by Stripe; Sent
                 never holds your money. Stripe will ask for your church&apos;s legal details and bank account.
               </p>
               {ctx.org.stripeAccountId && (

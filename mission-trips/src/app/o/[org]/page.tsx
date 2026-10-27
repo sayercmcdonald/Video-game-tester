@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { pageOrg } from "@/server/page-guard";
 import { orgDashboard } from "@/server/services/dashboards";
+import { orgAlerts } from "@/server/services/insights";
+import { AlertList } from "@/components/alert-list";
 import { db } from "@/server/db";
 import { Badge, Card, CardBody, CardHeader, EmptyState, LinkButton, PageHeader, Stat, Table, Td, Th } from "@/components/ui";
 import { GoalMeter } from "@/components/charts";
@@ -18,11 +20,13 @@ export default async function OrgDashboardPage({ params }: { params: Promise<{ o
   const d = await orgDashboard(ctx);
   const base = `/o/${ctx.org.slug}`;
   const cur = ctx.org.currency;
-  const attention = [
-    d.applications > 0 && { label: `${d.applications} application${d.applications === 1 ? "" : "s"} waiting for a decision`, href: `${base}/trips` },
-    d.pendingReviews > 0 && { label: `${d.pendingReviews} submitted requirement${d.pendingReviews === 1 ? "" : "s"} to review`, href: `${base}/trips` },
-    d.pendingPosts > 0 && { label: `${d.pendingPosts} donor update${d.pendingPosts === 1 ? "" : "s"} awaiting approval`, href: `${base}/trips` },
-  ].filter(Boolean) as { label: string; href: string }[];
+  // Admins see every alert on every active trip; donor-update approvals are added here too.
+  const alerts = await orgAlerts(ctx.org.id);
+  const extra =
+    d.pendingPosts > 0
+      ? [{ id: "posts", kind: "reviews" as const, severity: "soon" as const, title: `${d.pendingPosts} donor update${d.pendingPosts === 1 ? "" : "s"} awaiting approval`, detail: "Leaders wrote these for the public trip page. Review them before donors see them.", href: `${base}/trips`, audience: "admin" as const }]
+      : [];
+  const attention = [...alerts, ...extra];
 
   return (
     <>
@@ -37,23 +41,17 @@ export default async function OrgDashboardPage({ params }: { params: Promise<{ o
         </CardBody>
       </Card>
 
-      {attention.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader title="Needs your attention" />
-          <ul className="divide-y divide-line">
-            {attention.map((a) => (
-              <li key={a.label}>
-                <Link href={a.href} className="flex items-center justify-between px-5 py-3 text-sm min-h-11 transition-colors hover:bg-subtle active:bg-subtle">
-                  <span>{a.label}</span>
-                  <span aria-hidden className="text-ink-3">
-                    →
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+      <Card className="mb-6">
+        <CardHeader
+          title="Needs attention"
+          description={attention.length ? `${attention.length} item${attention.length === 1 ? "" : "s"} across your trips, most urgent first.` : undefined}
+        />
+        {attention.length === 0 ? (
+          <EmptyState title="Nothing needs attention">Overdue items, fundraising that&apos;s behind pace, budget overruns and approvals will appear here.</EmptyState>
+        ) : (
+          <AlertList alerts={attention} showTrip limit={8} />
+        )}
+      </Card>
 
       <Card className="mb-6">
         <CardHeader title="Active and upcoming trips" description="Fundraising, spending and team readiness." />

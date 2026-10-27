@@ -1,6 +1,17 @@
 # Known Bugs, Technical Risks and Open Decisions
 
-_Last updated: 2026-10-26_
+_Last updated: 2026-10-27_
+
+## New in session 3
+
+| Risk / decision | Notes |
+| --- | --- |
+| **Market:** established competitors (ManagedMissions, Go Method, Focus Missions, ServiceReef, GO) already cover most features at $0–$175/month. | Differentiation (financial integrity, donor transparency, readiness) is a hypothesis. Validate before building more features (VALIDATION.md). |
+| **Name "Sent":** not checked for trademarks or domain availability. | Do a trademark search and domain check before public launch; we found no mission-trip product named Sent in a quick search, which is not a clearance. |
+| **Expense approvals add a step** that small churches may find slow. | Ask in interviews; a per-church "auto-approve below $X" setting is easy to add if needed. |
+| **Fundraising-pace alerts assume an even pace** and a deadline 14 days before departure. | Explained in each alert; make the deadline configurable if pilots disagree. |
+| **Live donor figures** could prompt questions if the books are messy. | Off by default; admins choose when to turn it on. |
+| **Dev environment:** this cloud container stops PostgreSQL on restart. | Not a product issue; `service postgresql start` before running tests. |
 
 ## Decisions needed from the product owner
 
@@ -37,3 +48,18 @@ _Last updated: 2026-10-26_
 | A future code change forgets the `orgId` filter. | Medium over time | Composite foreign keys; isolation tests; "not found" pattern. | Row-level security (P1 #9); code review checklist. |
 | Email deliverability (receipts in spam). | Medium | Outbox with retries. | Verified sending domain (SPF/DKIM/DMARC) in Resend. |
 | Dependency vulnerabilities. | Ongoing | `npm audit` was clean at time of writing. | Dependabot / weekly audit in CI. |
+
+## Professional review needed before handling real donations
+
+These are questions for a church's accountant and attorney (and Sent's own counsel), not conclusions. Sent is **not** claimed to be compliant with any of them yet.
+
+| Area | Question to review |
+| --- | --- |
+| **Gifts designated for an individual participant** | Tax guidance on gifts earmarked for a specific person's trip generally depends on the church keeping control and discretion over the funds. Does the church's policy, and the wording on participant pages and receipts ("applied to X's share"), keep gifts deductible under that guidance? The church sets this wording in Sent. |
+| **Receipts / written acknowledgments** | Does the receipt (amount, date, church name, the church's own statement on goods and services) meet the church's acknowledgment obligations for its jurisdiction and gift sizes? |
+| **Charitable solicitation registration** | Do any states where donors live require registration by the church, or by Sent as a platform? Does Sent's role (software; the church's own Stripe account receives funds) change that? |
+| **Money transmission** | With Stripe Connect direct charges Sent never holds funds; confirm that `platform` mode (one Stripe account for a single-church pilot) is set up so the church, not the operator, is the merchant. |
+| **Payment card rules** | Stripe Checkout keeps card data off Sent's servers (typically the lightest PCI scope); confirm with Stripe's guidance and complete the required self-assessment. |
+| **Privacy** | Privacy policy and terms (not yet written); handling of medical and emergency data; data retention and deletion; children's data if minors participate (parental consent); state privacy laws where donors/participants live. |
+| **Waivers** | Enforceability of typed-name electronic signatures for the church's waiver; whether a guardian must sign for minors. |
+| **Donor-facing figures** | Whether live and published financial summaries are consistent with the church's books and any restricted-fund policies. |

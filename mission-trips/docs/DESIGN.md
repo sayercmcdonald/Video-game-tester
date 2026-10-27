@@ -2,7 +2,7 @@
 
 _Last updated: 2026-10-27_
 
-Mission Trips is used mostly on phones, so its interface follows Apple's **Human Interface Guidelines** (HIG), adapted for the web. The goal: simple, calm, and familiar to anyone who uses an iPhone, while working equally well on Android and desktop.
+Sent is used mostly on phones, so its interface follows Apple's **Human Interface Guidelines** (HIG), adapted for the web. The goal: simple, calm, and familiar to anyone who uses an iPhone, while working equally well on Android and desktop.
 
 We follow Apple's *principles and patterns*. We do **not** copy Apple's branding or assets: icons are our own drawings (Apple's SF Symbols are licensed for Apple platforms only), and the font is each device's own system font (which is San Francisco on Apple devices).
 

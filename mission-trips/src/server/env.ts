@@ -14,7 +14,7 @@ const schema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional().default(""),
   STRIPE_MODE: z.enum(["connect", "platform"]).default("connect"),
   EMAIL_TRANSPORT: z.enum(["log", "resend"]).default("log"),
-  EMAIL_FROM: z.string().default("Mission Trips <no-reply@example.org>"),
+  EMAIL_FROM: z.string().default("Sent <no-reply@example.org>"),
   RESEND_API_KEY: z.string().optional().default(""),
   STORAGE_DIR: z.string().default("./storage/uploads"),
   CRON_SECRET: z.string().optional().default(""),

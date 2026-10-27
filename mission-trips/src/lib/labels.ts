@@ -73,7 +73,7 @@ export const expenseCategoryLabel = {
   OTHER: "Other",
 } as const;
 
-export const expenseStatusLabel = { COMMITTED: "Committed", PAID: "Paid", VOID: "Void" } as const;
+export const expenseStatusLabel = { PENDING_APPROVAL: "Awaiting approval", COMMITTED: "Committed", PAID: "Paid", REJECTED: "Declined", VOID: "Void" } as const;
 
 export const requirementKindLabel = {
   UPLOAD: "File upload",

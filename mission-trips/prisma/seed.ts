@@ -135,6 +135,11 @@ async function main() {
   await createExpense(t, { category: "TRAVEL", description: "Demo: group airfare deposit", vendor: "Demo Travel Co.", amount: "2400", status: "PAID", incurredOn: new Date().toISOString().slice(0, 10), paidOn: new Date().toISOString().slice(0, 10) });
   await createExpense(t, { category: "LODGING", description: "Demo: guesthouse booking", vendor: "Demo Guesthouse", amount: "3200", status: "COMMITTED", incurredOn: new Date().toISOString().slice(0, 10) });
 
+  // A leader submits an expense; it waits for an administrator's approval.
+  const leaderT = await tripContextFor(await orgContextFor(leader, org.slug), trip.id);
+  await createExpense(leaderT, { category: "GROUND_TRANSPORT", description: "Demo: van rental deposit", vendor: "Demo Rentals", amount: "450", status: "PAID", incurredOn: new Date().toISOString().slice(0, 10), paidOn: new Date().toISOString().slice(0, 10) });
+  await db.trip.update({ where: { id: trip.id }, data: { showLiveFinancials: true } });
+
   await createPost(t, { title: "Welcome to the team!", body: "We're thrilled to serve together. Please finish your passport copy and waiver this month. (Demo)", audience: "TEAM" });
   await createPost(t, { title: "Fundraising is underway", body: "Thank you for praying and giving. The team is preparing a kids' program and helping finish a classroom. (Demo)", audience: "PUBLIC" });
   await addItineraryItem(t, { kind: "MEETING", title: "Team orientation", startsAt: `${year}-05-03T12:30`, location: "Room 204" });

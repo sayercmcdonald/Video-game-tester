@@ -8,6 +8,8 @@ import { financialSummary } from "@/server/services/finance";
 import { allowedStatusChanges } from "@/server/services/trips";
 import { givingAvailability } from "@/server/services/donations";
 import { db } from "@/server/db";
+import { alertsForViewer } from "@/server/services/insights";
+import { AlertList } from "@/components/alert-list";
 import { appUrl } from "@/server/email";
 import { Alert, Badge, Card, CardBody, CardHeader, DescriptionList, EmptyState, LinkButton, Progress, Stat } from "@/components/ui";
 import { ActionButton } from "@/components/forms";
@@ -180,10 +182,10 @@ async function ParticipantOverview({ t }: { t: TripContext }) {
 async function ManagerOverview({ t }: { t: TripContext }) {
   const base = `/o/${t.org.slug}/trips/${t.trip.id}`;
   const cur = t.org.currency;
-  const [readiness, campaigns, applications, summary, deadlines] = await Promise.all([
+  const [readiness, campaigns, alerts, summary, deadlines] = await Promise.all([
     tripReadiness(t.trip.id, t.org.id),
     tripCampaignsWithProgress(t.trip.id, t.org.id),
-    db.tripMember.count({ where: { tripId: t.trip.id, status: "APPLIED" } }),
+    alertsForViewer(t),
     t.perms.viewFinances ? financialSummary(t.trip.id, t.org.id) : Promise.resolve(null),
     db.requirement.findMany({ where: { tripId: t.trip.id, isRequired: true, dueDate: { not: null } }, orderBy: { dueDate: "asc" } }),
   ]);
@@ -202,12 +204,11 @@ async function ManagerOverview({ t }: { t: TripContext }) {
           Only church admins and trip leaders can see it. {t.perms.isOrgAdmin ? "Open it when you're ready to recruit and fundraise." : "A church admin can open it when it's ready."}
         </Alert>
       )}
-      {applications > 0 && (
-        <Alert tone="warn" title={`${applications} application${applications === 1 ? "" : "s"} waiting`}>
-          <Link href={`${base}/team`} className="underline">
-            Review applications
-          </Link>
-        </Alert>
+      {alerts.length > 0 && (
+        <Card>
+          <CardHeader title="Needs attention" description="Found in this trip's records. Each item explains why it's here." />
+          <AlertList alerts={alerts} />
+        </Card>
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">

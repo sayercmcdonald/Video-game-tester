@@ -2,14 +2,15 @@ import { notFound } from "next/navigation";
 import { pageTrip } from "@/server/page-guard";
 import { db } from "@/server/db";
 import { financialSummary, EXPENSE_CATEGORIES } from "@/server/services/finance";
+import { composeReportDraft, reportFacts } from "@/server/services/transparency";
 import { allowedTypesDescription } from "@/server/storage";
 import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Stat, Table, Td, Th } from "@/components/ui";
-import { ActionForm, CheckboxField, MoneyField, SelectField, SubmitButton, TextArea, TextField } from "@/components/forms";
+import { ActionButton, ActionForm, CheckboxField, MoneyField, SelectField, SubmitButton, TextArea, TextField } from "@/components/forms";
 import { BulletChart } from "@/components/charts";
 import { centsToInput, formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime, toDateInput } from "@/lib/dates";
 import { expenseCategoryLabel, expenseStatusLabel } from "@/lib/labels";
-import { attachReceiptAction, createExpenseAction, markExpensePaidAction, publishReportAction, setBudgetAction, voidExpenseAction } from "../actions";
+import { attachReceiptAction, createExpenseAction, markExpensePaidAction, publishReportAction, reviewExpenseAction, setBudgetAction, voidExpenseAction } from "../actions";
 
 export const metadata = { title: "Finances" };
 
@@ -36,6 +37,11 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
     db.ledgerEntry.findMany({ where: { tripId: t.trip.id, orgId: t.org.id }, orderBy: { createdAt: "desc" }, take: 25 }),
     db.financialReport.findMany({ where: { tripId: t.trip.id }, orderBy: { publishedAt: "desc" } }),
   ]);
+  const draft = t.perms.administerFinances ? composeReportDraft(await reportFacts(t.trip.id, t.org.id)) : null;
+  const pending = expenses.filter((e) => e.status === "PENDING_APPROVAL");
+  const settled = expenses.filter((e) => e.status !== "PENDING_APPROVAL");
+  const people = await db.user.findMany({ where: { id: { in: [...new Set(expenses.map((e) => e.createdById))] } }, select: { id: true, name: true } });
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "Former member";
   const budgetRows = s.categories
     .filter((c) => c.budgetCents > 0 || c.paidCents > 0 || c.committedCents > 0)
     .map((c) => ({ label: expenseCategoryLabel[c.category], primary: c.paidCents, secondary: c.committedCents, target: c.budgetCents }));
@@ -99,9 +105,66 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
         </Card>
       </div>
 
+      {pending.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Awaiting approval"
+            description={
+              t.perms.administerFinances
+                ? "Submitted by trip leaders. Nothing here counts toward spending or the budget until you approve it."
+                : "Your submissions are waiting for a church administrator. They don't count until approved."
+            }
+          />
+          <ul className="divide-y divide-line">
+            {pending.map((e) => (
+              <li key={e.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5">
+                <div className="min-w-0">
+                  <div className="flex items-baseline justify-between gap-3 sm:justify-start">
+                    <span className="font-medium">{e.description}</span>
+                    <span className="font-semibold tabular-nums">{formatMoney(e.amountCents, cur)}</span>
+                  </div>
+                  <div className="text-[13px] text-ink-3">
+                    {expenseCategoryLabel[e.category]} · {e.vendor ? `${e.vendor} · ` : ""}
+                    {e.requestedStatus === "PAID" ? `paid ${formatDate(e.paidOn)}` : "to be paid"} · submitted by {nameOf(e.createdById)}
+                  </div>
+                  {e.receipt ? (
+                    <a href={`/api/files/${e.receipt.id}`} className="text-[15px] text-accent hover:underline lg:text-sm">
+                      View receipt
+                    </a>
+                  ) : (
+                    <span className="text-[13px] text-warn">No receipt attached</span>
+                  )}
+                </div>
+                {t.perms.administerFinances ? (
+                  <div className="flex shrink-0 flex-col gap-2 sm:w-64">
+                    <ActionButton action={reviewExpenseAction.bind(null, slug, t.trip.id, e.id, "APPROVE")} variant="primary" className="w-full [&>button]:w-full">
+                      Approve
+                    </ActionButton>
+                    <details>
+                      <summary className="cursor-pointer text-[15px] text-ink-2 lg:text-sm">Decline…</summary>
+                      <ActionForm action={reviewExpenseAction.bind(null, slug, t.trip.id, e.id, "REJECT")} className="mt-2 space-y-2">
+                        <TextField label="Reason" name="note" required />
+                        <SubmitButton variant="danger">Decline</SubmitButton>
+                      </ActionForm>
+                    </details>
+                  </div>
+                ) : e.createdById === t.user.id ? (
+                  <ActionForm action={voidExpenseAction.bind(null, slug, t.trip.id, e.id)} className="flex shrink-0 items-end gap-2">
+                    <input type="hidden" name="reason" value="Withdrawn by submitter" />
+                    <SubmitButton variant="ghost" confirm="Withdraw this submission?">
+                      Withdraw
+                    </SubmitButton>
+                  </ActionForm>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Card>
-        <CardHeader title="Expenses" description="Committed = booked but not yet paid. Paid expenses are recorded in the ledger. Voiding keeps the record." />
-        {expenses.length === 0 ? (
+        <CardHeader title="Expenses" description="Committed = approved but not yet paid. Paid expenses are recorded in the ledger. Voiding keeps the record." />
+        {settled.length === 0 ? (
           <EmptyState title="No expenses recorded" />
         ) : (
           <Table>
@@ -116,10 +179,10 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
               </tr>
             </thead>
             <tbody>
-              {expenses.map((e) => (
-                <tr key={e.id} className={e.status === "VOID" ? "opacity-60" : ""}>
+              {settled.map((e) => (
+                <tr key={e.id} className={e.status === "VOID" || e.status === "REJECTED" ? "opacity-60" : ""}>
                   <Td>
-                    <div className={e.status === "VOID" ? "font-medium line-through" : "font-medium"}>{e.description}</div>
+                    <div className={e.status === "VOID" || e.status === "REJECTED" ? "font-medium line-through" : "font-medium"}>{e.description}</div>
                     <div className="text-xs text-ink-3">
                       {e.vendor && `${e.vendor} · `}
                       {formatDate(e.incurredOn)}
@@ -129,7 +192,8 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
                   <Td label="Category" className="text-ink-2">{expenseCategoryLabel[e.category]}</Td>
                   <Td label="Amount" className="text-right tabular-nums">{formatMoney(e.amountCents, cur)}</Td>
                   <Td label="Status">
-                    <Badge tone={e.status === "PAID" ? "good" : e.status === "COMMITTED" ? "warn" : "neutral"}>{expenseStatusLabel[e.status]}</Badge>
+                    <Badge tone={e.status === "PAID" ? "good" : e.status === "COMMITTED" ? "warn" : e.status === "REJECTED" ? "bad" : "neutral"}>{expenseStatusLabel[e.status]}</Badge>
+                    {e.status === "REJECTED" && e.reviewNote && <div className="text-xs text-ink-3">{e.reviewNote}</div>}
                     {e.paidOn && <div className="text-xs text-ink-3">{formatDate(e.paidOn)}</div>}
                   </Td>
                   <Td label="Receipt">
@@ -137,7 +201,7 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
                       <a href={`/api/files/${e.receipt.id}`} className="text-sm text-accent hover:underline">
                         View
                       </a>
-                    ) : e.status !== "VOID" ? (
+                    ) : e.status !== "VOID" && e.status !== "REJECTED" ? (
                       <details>
                         <summary className="cursor-pointer text-sm text-ink-3">Attach</summary>
                         <ActionForm action={attachReceiptAction.bind(null, slug, t.trip.id, e.id)} className="mt-2 space-y-2">
@@ -150,7 +214,7 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
                     )}
                   </Td>
                   <Td className="text-right">
-                    {e.status !== "VOID" && (
+                    {t.perms.administerFinances && (e.status === "COMMITTED" || e.status === "PAID") && (
                       <details className="relative inline-block text-left">
                         <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-full px-3 text-[15px] font-medium text-accent hover:bg-fill lg:min-h-8 lg:text-sm">Actions</summary>
                         <div className="absolute right-0 z-20 mt-1 w-64 space-y-4 rounded-2xl bg-surface shadow-[0_12px_40px_rgb(0_0_0/0.18)] ring-1 ring-line p-4">
@@ -223,8 +287,9 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
             {t.perms.administerFinances ? (
               <ActionForm action={publishReportAction.bind(null, slug, t.trip.id)} resetOnSuccess className="space-y-3">
                 <p className="text-sm text-ink-2">Publishing takes a snapshot of today&apos;s figures above. Check them first — once published, donors can see it.</p>
-                <TextField label="Title" name="title" placeholder={t.trip.status === "COMPLETED" ? "Final trip report" : "Fundraising update"} required />
-                <TextArea label="Message to donors" name="narrative" rows={4} hint="Explain how funds were used in plain language." optional />
+                <Alert tone="info">We drafted this from the trip&apos;s records. Every number comes from the ledger. Read it, edit it in your own words, then publish.</Alert>
+                <TextField label="Title" name="title" defaultValue={draft?.title} required />
+                <TextArea label="Message to donors" name="narrative" rows={10} defaultValue={draft?.narrative} hint="Explain how funds were used in plain language. Don't name donors or share participants' private details." optional />
                 <CheckboxField label="This is the final post-trip report" name="isFinal" />
                 <SubmitButton confirm="Publish this report to the public trip page?">Publish report</SubmitButton>
               </ActionForm>

@@ -1,13 +1,24 @@
 import Link from "next/link";
 
+export const PRODUCT_NAME = "Sent";
+
+/** The Sent mark: an arrow going out, for being sent to serve. */
+export function LogoMark({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <rect width="24" height="24" rx="7" fill="var(--color-accent)" />
+      <path d="M8.5 15.5 15.5 8.5M10 8.5h5.5V14" fill="none" stroke="var(--color-on-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function Logo({ href = "/", compact = false }: { href?: string; compact?: boolean }) {
   return (
-    <Link href={href} aria-label="Mission Trips home" className="inline-flex shrink-0 items-center gap-2 font-semibold tracking-tight whitespace-nowrap text-ink">
-      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
-        <rect width="24" height="24" rx="6" fill="var(--color-accent)" />
-        <path d="M6 16.5 10 8l3 5.5 1.8-3 3.2 6" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <span aria-hidden className={compact ? "hidden sm:inline" : undefined}>Mission Trips</span>
+    <Link href={href} aria-label={`${PRODUCT_NAME} home`} className="inline-flex shrink-0 items-center gap-2 text-[19px] font-bold tracking-tight whitespace-nowrap text-ink">
+      <LogoMark />
+      <span aria-hidden className={compact ? "hidden sm:inline" : undefined}>
+        {PRODUCT_NAME}
+      </span>
     </Link>
   );
 }

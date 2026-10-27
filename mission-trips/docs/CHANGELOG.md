@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 — 2026-10-27 — Sent
+
+### Added
+- **Renamed the product to Sent** (interface, metadata, emails, new mark). Internal identifiers unchanged.
+- **Expense approvals:** expenses submitted by trip leaders wait for a church administrator; only approved expenses count toward the budget, spending or the ledger. Only administrators mark expenses paid or void approved ones. Decisions are notified and audit-logged; simultaneous approvals apply once.
+- **"Needs attention" engine:** explainable alerts on the church dashboard and trip overview for overdue/due-soon requirements, departure risk, participants behind fundraising pace, budget overruns, committed spending beyond funds, expenses awaiting approval, disputes and refunds. Rules and thresholds documented and unit-tested.
+- **Reviewed reminders:** leaders see exactly who will be reminded about what before sending; one per person per day.
+- **Donor transparency:** opt-in live financial summary on the public trip page; report drafts written from the ledger for an admin to review before publishing; pooled-funds note on all donor-facing figures.
+- **Integrations & exports:** CSV exports of gifts, expenses and the ledger (formula-injection safe, logged); integration layer (encrypted credentials, duplicate-proof record links, sync history); truthful integrations catalog.
+- Docs: audit, competitive research, validation/pilot plan, integrations.
+
+### Fixed
+- `npm run make-admin` and `npm run jobs:run` failed because they didn't load `.env`.
+
+
 ## 0.2.0 — 2026-10-27
 
 ### Changed

@@ -22,7 +22,7 @@ Run a single web instance until rate limiting moves to the database (RISKS).
 | `STRIPE_WEBHOOK_SECRET` | from the staging endpoint | from the production endpoint |
 | `STRIPE_MODE` | `connect` (or `platform` for one church) | same |
 | `EMAIL_TRANSPORT` | `resend` | `resend` (production requires it) |
-| `EMAIL_FROM` | `Mission Trips <no-reply@staging.yourdomain>` | your verified sender |
+| `EMAIL_FROM` | `Sent <no-reply@staging.yourdomain>` | your verified sender |
 | `RESEND_API_KEY` | staging key | production key |
 | `STORAGE_DIR` | path on the persistent disk | path on the persistent disk |
 | `CRON_SECRET` | random | random (production requires it) |

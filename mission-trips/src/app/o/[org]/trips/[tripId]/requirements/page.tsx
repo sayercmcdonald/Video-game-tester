@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { pageTrip } from "@/server/page-guard";
 import type { TripContext } from "@/server/context";
 import { db } from "@/server/db";
-import { myRequirements, readFormFields, tripReadiness } from "@/server/services/requirements";
+import { myRequirements, readFormFields, reminderPreview, tripReadiness } from "@/server/services/requirements";
 import { allowedTypesDescription } from "@/server/storage";
 import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Table, Td, Th } from "@/components/ui";
 import { ActionButton, ActionForm, CheckboxField, SelectField, SubmitButton, TextArea, TextField } from "@/components/forms";
@@ -13,6 +13,7 @@ import {
   createRequirementAction,
   deleteRequirementAction,
   reviewSubmissionAction,
+  sendRemindersAction,
   setRequirementRequiredAction,
   submitRequirementAction,
 } from "../actions";
@@ -124,13 +125,14 @@ async function ParticipantView({ t }: { t: TripContext }) {
 
 async function ManagerView({ t }: { t: TripContext }) {
   const slug = t.org.slug;
-  const [{ requirements, rows }, toReview] = await Promise.all([
+  const [{ requirements, rows }, toReview, remind] = await Promise.all([
     tripReadiness(t.trip.id, t.org.id),
     db.requirementSubmission.findMany({
       where: { status: "SUBMITTED", requirement: { tripId: t.trip.id } },
       include: { requirement: true, tripMember: { include: { user: { select: { name: true } } } }, document: { select: { id: true, filename: true } } },
       orderBy: { submittedAt: "asc" },
     }),
+    reminderPreview(t),
   ]);
 
   return (
@@ -183,6 +185,26 @@ async function ManagerView({ t }: { t: TripContext }) {
               );
             })}
           </ul>
+        </Card>
+      )}
+
+      {remind.length > 0 && (
+        <Card>
+          <CardHeader title="Remind participants" description="Review who will get a reminder and what it will list. Nothing is sent until you press the button." />
+          <ul className="divide-y divide-line">
+            {remind.map((p) => (
+              <li key={p.userId} className="px-4 py-2.5 sm:px-5">
+                <div className="font-medium">{p.name}</div>
+                <div className="text-[15px] text-ink-2 lg:text-sm">{p.outstanding.join(" · ")}</div>
+              </li>
+            ))}
+          </ul>
+          <CardBody className="border-t border-line">
+            <ActionButton action={sendRemindersAction.bind(null, slug, t.trip.id)} variant="primary" confirm={`Send a reminder to ${remind.length} ${remind.length === 1 ? "person" : "people"}?`}>
+              {`Send reminder to ${remind.length} ${remind.length === 1 ? "person" : "people"}`}
+            </ActionButton>
+            <p className="mt-2 text-[13px] text-ink-3">Each person gets one in-app notification (and an email if they allow deadline emails). At most one reminder per person per day.</p>
+          </CardBody>
         </Card>
       )}
 

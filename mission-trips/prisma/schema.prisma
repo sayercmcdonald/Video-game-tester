@@ -1,4 +1,4 @@
-// Mission Trips platform data model.
+// Sent (mission operations platform) data model.
 //
 // Conventions
 // - Every church-owned record carries `orgId`. Child records reference their
@@ -41,7 +41,7 @@ model User {
   profiles      PersonProfile[]
   notifications Notification[]
   preferences   NotificationPreference?
-  donations     Donation[]               @relation("DonorUser")
+  donations     Donation[]              @relation("DonorUser")
   tokens        UserToken[]
 }
 
@@ -126,6 +126,7 @@ model Organization {
   documents     Document[]
   auditLogs     AuditLog[]
   profiles      PersonProfile[]
+  integrations  Integration[]
 }
 
 model Membership {
@@ -170,17 +171,17 @@ model Invitation {
 // Personal details a church holds about a person. Sensitive medical details
 // are encrypted at the application layer (see src/server/crypto.ts).
 model PersonProfile {
-  id                    String   @id @default(cuid())
-  orgId                 String
-  userId                String
-  phone                 String?
-  dateOfBirth           DateTime? @db.Date
-  emergencyContactName  String?
-  emergencyContactPhone String?
+  id                       String    @id @default(cuid())
+  orgId                    String
+  userId                   String
+  phone                    String?
+  dateOfBirth              DateTime? @db.Date
+  emergencyContactName     String?
+  emergencyContactPhone    String?
   emergencyContactRelation String?
-  sensitiveEncrypted    String? // AES-256-GCM JSON: { medicalNotes, allergies, medications }
-  updatedAt             DateTime @updatedAt
-  createdAt             DateTime @default(now())
+  sensitiveEncrypted       String? // AES-256-GCM JSON: { medicalNotes, allergies, medications }
+  updatedAt                DateTime  @updatedAt
+  createdAt                DateTime  @default(now())
 
   org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -199,37 +200,39 @@ enum TripStatus {
 }
 
 model Trip {
-  id                  String     @id @default(cuid())
-  orgId               String
-  name                String
-  slug                String
-  destination         String
-  summary             String     @default("")
-  startDate           DateTime   @db.Date
-  endDate             DateTime   @db.Date
-  status              TripStatus @default(DRAFT)
-  budgetCents         Int        @default(0)
-  fundraisingGoalCents Int       @default(0)
-  defaultParticipantGoalCents Int @default(0)
-  participantLimit    Int?
-  applicationsOpen    Boolean    @default(false)
-  leadersSeeFinances  Boolean    @default(true)
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  id                          String     @id @default(cuid())
+  orgId                       String
+  name                        String
+  slug                        String
+  destination                 String
+  summary                     String     @default("")
+  startDate                   DateTime   @db.Date
+  endDate                     DateTime   @db.Date
+  status                      TripStatus @default(DRAFT)
+  budgetCents                 Int        @default(0)
+  fundraisingGoalCents        Int        @default(0)
+  defaultParticipantGoalCents Int        @default(0)
+  participantLimit            Int?
+  applicationsOpen            Boolean    @default(false)
+  leadersSeeFinances          Boolean    @default(true)
+  // Opt-in: show live, aggregate figures (given, spent by category, remaining) on the public trip page.
+  showLiveFinancials          Boolean    @default(false)
+  createdAt                   DateTime   @default(now())
+  updatedAt                   DateTime   @updatedAt
 
-  org             Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  members         TripMember[]
-  invitations     Invitation[]
-  campaigns       Campaign[]
-  itinerary       ItineraryItem[]
-  requirements    Requirement[]
-  posts           Post[]
-  expenses        Expense[]
-  budgetLines     BudgetLine[]
-  donations       Donation[]
-  pledges         Pledge[]
-  ledgerEntries   LedgerEntry[]
-  documents       Document[]
+  org              Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members          TripMember[]
+  invitations      Invitation[]
+  campaigns        Campaign[]
+  itinerary        ItineraryItem[]
+  requirements     Requirement[]
+  posts            Post[]
+  expenses         Expense[]
+  budgetLines      BudgetLine[]
+  donations        Donation[]
+  pledges          Pledge[]
+  ledgerEntries    LedgerEntry[]
+  documents        Document[]
   financialReports FinancialReport[]
 
   @@unique([id, orgId])
@@ -308,22 +311,22 @@ enum FundRestriction {
 }
 
 model Campaign {
-  id           String          @id @default(cuid())
-  orgId        String
-  tripId       String
-  tripMemberId String?
-  kind         CampaignKind
-  slug         String
-  title        String
-  story        String          @default("")
-  goalCents    Int             @default(0)
-  restriction  FundRestriction @default(RESTRICTED)
+  id              String          @id @default(cuid())
+  orgId           String
+  tripId          String
+  tripMemberId    String?
+  kind            CampaignKind
+  slug            String
+  title           String
+  story           String          @default("")
+  goalCents       Int             @default(0)
+  restriction     FundRestriction @default(RESTRICTED)
   // Plain-language description of how the church applies these gifts. Shown to donors.
   designationNote String?
-  isPublic     Boolean         @default(true)
-  isClosed     Boolean         @default(false)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  isPublic        Boolean         @default(true)
+  isClosed        Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   org        Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   trip       Trip          @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
@@ -355,26 +358,26 @@ enum DonationMethod {
 }
 
 model Donation {
-  id              String         @id @default(cuid())
-  orgId           String
-  tripId          String
-  campaignId      String
-  donorUserId     String?
-  donorName       String
-  donorEmail      String?
-  isAnonymous     Boolean        @default(false) // hide name on public pages
-  message         String?
-  amountCents     Int
-  currency        String         @default("usd")
-  method          DonationMethod @default(CARD_ONLINE)
-  status          DonationStatus @default(PENDING)
-  feeCents        Int            @default(0)
-  refundedCents   Int            @default(0)
-  failureReason   String?
-  receiptNumber   Int?
-  receiptTokenHash String?       @unique // lets a donor open their receipt from the email link
-  receivedAt      DateTime?
-  recordedById    String? // admin who recorded an offline gift
+  id               String         @id @default(cuid())
+  orgId            String
+  tripId           String
+  campaignId       String
+  donorUserId      String?
+  donorName        String
+  donorEmail       String?
+  isAnonymous      Boolean        @default(false) // hide name on public pages
+  message          String?
+  amountCents      Int
+  currency         String         @default("usd")
+  method           DonationMethod @default(CARD_ONLINE)
+  status           DonationStatus @default(PENDING)
+  feeCents         Int            @default(0)
+  refundedCents    Int            @default(0)
+  failureReason    String?
+  receiptNumber    Int?
+  receiptTokenHash String?        @unique // lets a donor open their receipt from the email link
+  receivedAt       DateTime?
+  recordedById     String? // admin who recorded an offline gift
   offlineReference String? // check number etc.
 
   stripeAccountId         String?
@@ -385,11 +388,11 @@ model Donation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  org      Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  trip     Trip          @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
-  campaign Campaign      @relation(fields: [campaignId, orgId], references: [id, orgId], onDelete: Restrict)
-  donor    User?         @relation("DonorUser", fields: [donorUserId], references: [id], onDelete: SetNull)
-  ledger   LedgerEntry[]
+  org             Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  trip            Trip          @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
+  campaign        Campaign      @relation(fields: [campaignId, orgId], references: [id, orgId], onDelete: Restrict)
+  donor           User?         @relation("DonorUser", fields: [donorUserId], references: [id], onDelete: SetNull)
+  ledger          LedgerEntry[]
   pledgeFulfilled Pledge[]
 
   @@unique([orgId, receiptNumber])
@@ -405,20 +408,20 @@ enum PledgeStatus {
 }
 
 model Pledge {
-  id            String       @id @default(cuid())
-  orgId         String
-  tripId        String
-  campaignId    String
-  donorName     String
-  donorEmail    String?
-  amountCents   Int
-  expectedBy    DateTime?    @db.Date
-  status        PledgeStatus @default(OPEN)
-  note          String?
-  donationId    String?
-  createdById   String
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id          String       @id @default(cuid())
+  orgId       String
+  tripId      String
+  campaignId  String
+  donorName   String
+  donorEmail  String?
+  amountCents Int
+  expectedBy  DateTime?    @db.Date
+  status      PledgeStatus @default(OPEN)
+  note        String?
+  donationId  String?
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   trip     Trip         @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
@@ -497,27 +500,34 @@ enum ExpenseCategory {
 }
 
 enum ExpenseStatus {
-  COMMITTED // agreed/booked but not yet paid
-  PAID
-  VOID
+  PENDING_APPROVAL // submitted by a leader; not counted until an administrator approves
+  COMMITTED // approved; agreed/booked but not yet paid
+  PAID // approved and paid; recorded in the ledger
+  REJECTED // an administrator declined it; kept for the record
+  VOID // cancelled after approval; a paid one is reversed in the ledger
 }
 
 model Expense {
-  id          String          @id @default(cuid())
-  orgId       String
-  tripId      String
-  category    ExpenseCategory
-  description String
-  vendor      String?
-  amountCents Int
-  status      ExpenseStatus   @default(COMMITTED)
-  incurredOn  DateTime        @db.Date
-  paidOn      DateTime?       @db.Date
-  notes       String?
-  receiptId   String?         @unique
-  createdById String
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id              String          @id @default(cuid())
+  orgId           String
+  tripId          String
+  category        ExpenseCategory
+  description     String
+  vendor          String?
+  amountCents     Int
+  status          ExpenseStatus   @default(COMMITTED)
+  incurredOn      DateTime        @db.Date
+  paidOn          DateTime?       @db.Date
+  notes           String?
+  receiptId       String?         @unique
+  // What the submitter asked for (COMMITTED or PAID) while awaiting approval.
+  requestedStatus ExpenseStatus?
+  approvedById    String?
+  approvedAt      DateTime?
+  reviewNote      String?
+  createdById     String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   org     Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
   trip    Trip          @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
@@ -542,14 +552,14 @@ model BudgetLine {
 // A snapshot of a trip's finances that an admin has reviewed and chosen to
 // publish to donors. Donors see these approved figures, never live internals.
 model FinancialReport {
-  id          String   @id @default(cuid())
-  orgId       String
-  tripId      String
-  title       String
-  narrative   String   @default("")
-  snapshot    Json
-  isFinal     Boolean  @default(false) // post-trip report
-  publishedAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  orgId         String
+  tripId        String
+  title         String
+  narrative     String   @default("")
+  snapshot      Json
+  isFinal       Boolean  @default(false) // post-trip report
+  publishedAt   DateTime @default(now())
   publishedById String
 
   trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
@@ -580,11 +590,11 @@ model Document {
   uploadedById String
   createdAt    DateTime     @default(now())
 
-  org         Organization            @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  trip        Trip?                   @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
-  expense     Expense?
-  submission  RequirementSubmission?
-  requirementTemplate Requirement?    @relation("RequirementTemplate")
+  org                 Organization           @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  trip                Trip?                  @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Restrict)
+  expense             Expense?
+  submission          RequirementSubmission?
+  requirementTemplate Requirement?           @relation("RequirementTemplate")
 
   @@index([tripId, kind])
 }
@@ -597,20 +607,20 @@ enum RequirementKind {
 }
 
 model Requirement {
-  id          String          @id @default(cuid())
-  orgId       String
-  tripId      String
-  kind        RequirementKind
-  title       String
-  instructions String         @default("")
-  waiverText  String?
-  formFields  Json? // [{ key, label, type: "text"|"textarea"|"yesno"|"date", required }]
-  needsReview Boolean         @default(true) // leader must approve; false = completing it is enough
-  isRequired  Boolean         @default(true)
-  dueDate     DateTime?       @db.Date
-  sortOrder   Int             @default(0)
-  templateDocumentId String?  @unique
-  createdAt   DateTime        @default(now())
+  id                 String          @id @default(cuid())
+  orgId              String
+  tripId             String
+  kind               RequirementKind
+  title              String
+  instructions       String          @default("")
+  waiverText         String?
+  formFields         Json? // [{ key, label, type: "text"|"textarea"|"yesno"|"date", required }]
+  needsReview        Boolean         @default(true) // leader must approve; false = completing it is enough
+  isRequired         Boolean         @default(true)
+  dueDate            DateTime?       @db.Date
+  sortOrder          Int             @default(0)
+  templateDocumentId String?         @unique
+  createdAt          DateTime        @default(now())
 
   trip        Trip                    @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
   template    Document?               @relation("RequirementTemplate", fields: [templateDocumentId], references: [id], onDelete: SetNull)
@@ -661,18 +671,18 @@ enum PostStatus {
 }
 
 model Post {
-  id          String       @id @default(cuid())
-  orgId       String
-  tripId      String
-  authorId    String
-  audience    PostAudience @default(TEAM)
-  status      PostStatus   @default(PUBLISHED)
-  title       String
-  body        String
-  publishedAt DateTime?
+  id           String       @id @default(cuid())
+  orgId        String
+  tripId       String
+  authorId     String
+  audience     PostAudience @default(TEAM)
+  status       PostStatus   @default(PUBLISHED)
+  title        String
+  body         String
+  publishedAt  DateTime?
   approvedById String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
 
@@ -696,10 +706,10 @@ model Notification {
 }
 
 model NotificationPreference {
-  userId               String  @id
-  emailDonations       Boolean @default(true)
-  emailAnnouncements   Boolean @default(true)
-  emailDeadlines       Boolean @default(true)
+  userId             String  @id
+  emailDonations     Boolean @default(true)
+  emailAnnouncements Boolean @default(true)
+  emailDeadlines     Boolean @default(true)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -740,4 +750,94 @@ model AuditLog {
 
   @@index([orgId, createdAt])
   @@index([entityType, entityId])
+}
+
+// ─────────────────────────── Integrations ───────────────────────────
+// A modular layer for working alongside other church software. Each provider
+// has an adapter (src/server/integrations). Nothing here pretends a
+// connection exists: a provider is only CONNECTED after a real, verified handshake.
+
+enum IntegrationProvider {
+  CSV_EXPORT // accounting/ChMS export files; always available
+  PLANNING_CENTER
+  TITHELY
+  SUBSPLASH
+  QUICKBOOKS
+}
+
+enum IntegrationStatus {
+  NOT_CONNECTED
+  CONNECTED
+  ERROR
+  DISABLED
+}
+
+model Integration {
+  id                   String              @id @default(cuid())
+  orgId                String
+  provider             IntegrationProvider
+  status               IntegrationStatus   @default(NOT_CONNECTED)
+  credentialsEncrypted String? // AES-256-GCM; never returned to the browser
+  settings             Json?
+  connectedById        String?
+  connectedAt          DateTime?
+  lastSyncAt           DateTime?
+  lastError            String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider])
+}
+
+enum RecordOwner {
+  SENT // Sent is the source of truth; the other system receives copies
+  EXTERNAL // the other system is the source of truth; Sent holds a copy
+}
+
+// Links a Sent record to its counterpart in another system, so a sync never
+// creates duplicates and everyone knows which system owns the record.
+model ExternalLink {
+  id           String              @id @default(cuid())
+  orgId        String
+  provider     IntegrationProvider
+  entityType   String // "Donation", "User", …
+  entityId     String
+  externalId   String
+  owner        RecordOwner
+  lastSyncedAt DateTime            @default(now())
+  createdAt    DateTime            @default(now())
+
+  @@unique([orgId, provider, entityType, externalId])
+  @@unique([orgId, provider, entityType, entityId])
+}
+
+enum SyncDirection {
+  IMPORT
+  EXPORT
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+}
+
+model SyncRun {
+  id            String              @id @default(cuid())
+  orgId         String
+  provider      IntegrationProvider
+  direction     SyncDirection
+  kind          String // e.g. "donations", "expenses", "ledger"
+  status        SyncStatus          @default(RUNNING)
+  recordsTotal  Int                 @default(0)
+  recordsFailed Int                 @default(0)
+  error         String?
+  triggeredById String?
+  startedAt     DateTime            @default(now())
+  finishedAt    DateTime?
+
+  @@index([orgId, startedAt])
 }

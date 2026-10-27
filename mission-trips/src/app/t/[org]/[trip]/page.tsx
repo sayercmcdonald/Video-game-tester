@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { raisedByCampaign } from "@/server/services/ledger";
 import { givingAvailability } from "@/server/services/donations";
 import type { ReportSnapshot } from "@/server/services/finance";
+import { POOLED_FUNDS_NOTE, publicTripFinancials } from "@/server/services/transparency";
 import { PublicShell } from "@/components/public-shell";
 import { Badge, Card, CardBody, CardHeader, LinkButton, Stat } from "@/components/ui";
 import { BulletChart, GoalMeter } from "@/components/charts";
@@ -37,7 +38,7 @@ export default async function PublicTripPage({ params }: Props) {
     db.financialReport.findMany({ where: { tripId: trip.id }, orderBy: { publishedAt: "desc" } }),
     db.campaign.findMany({ where: { tripId: trip.id, kind: { in: ["TRIP", "PROJECT"] }, isPublic: true }, orderBy: { createdAt: "asc" } }),
   ]);
-  const raised = await raisedByCampaign(campaigns.map((c) => c.id));
+  const [raised, live] = await Promise.all([raisedByCampaign(campaigns.map((c) => c.id)), publicTripFinancials(trip.id)]);
   const latest = reports[0];
   const snap = latest?.snapshot as unknown as ReportSnapshot | undefined;
   const giving = givingAvailability(trip.org);
@@ -55,6 +56,32 @@ export default async function PublicTripPage({ params }: Props) {
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {live && (
+            <Card>
+              <CardHeader
+                title="Where the money stands"
+                description={`Live figures from ${trip.org.name}'s records${live.asOf ? `, last updated ${formatDate(live.asOf)}` : ""}.`}
+              />
+              <CardBody className="space-y-5">
+                <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
+                  <Stat label="Given" value={formatMoney(live.givenCents, live.currency)} sub={`${live.giftCount} gifts`} />
+                  <Stat label="Processing fees" value={formatMoney(live.feesCents, live.currency)} />
+                  <Stat label="Spent" value={formatMoney(live.spentCents, live.currency)} sub={live.committedCents ? `${formatMoney(live.committedCents, live.currency)} committed` : undefined} />
+                  <Stat label="Remaining" value={formatMoney(live.remainingCents, live.currency)} />
+                </div>
+                {live.spendingByCategory.length > 0 && (
+                  <BulletChart
+                    rows={live.spendingByCategory.map((c) => ({ label: expenseCategoryLabel[c.category], primary: c.paidCents, target: c.budgetCents }))}
+                    primaryLabel="Spent"
+                    targetLabel="Budget"
+                    currency={live.currency}
+                    caption="Spending so far by category, against the budget"
+                  />
+                )}
+                <p className="text-[13px] text-ink-3">{POOLED_FUNDS_NOTE} A budget is a plan, not spending; only paid expenses are counted as spent.</p>
+              </CardBody>
+            </Card>
+          )}
           {latest && snap && (
             <Card>
               <CardHeader
@@ -67,6 +94,7 @@ export default async function PublicTripPage({ params }: Props) {
               />
               <CardBody className="space-y-5">
                 {latest.narrative && <p className="whitespace-pre-line text-ink-2">{latest.narrative}</p>}
+                <p className="text-[13px] text-ink-3">{POOLED_FUNDS_NOTE}</p>
                 <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
                   <Stat label="Given" value={formatMoney(snap.raisedCents, snap.currency)} sub={`${snap.giftCount} gifts`} />
                   <Stat label="Processing fees" value={formatMoney(snap.feesCents, snap.currency)} />

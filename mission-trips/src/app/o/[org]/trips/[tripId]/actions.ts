@@ -6,8 +6,8 @@ import { requireTrip } from "@/server/context";
 import { stripeGateway } from "@/server/payments/gateway";
 import { updateCampaign, createProjectCampaign } from "@/server/services/campaigns";
 import { recordOfflineDonation, requestRefund } from "@/server/services/donations";
-import { createPledge, setPledgeStatus, createExpense, markExpensePaid, voidExpense, attachExpenseReceipt, setBudgetLines, publishFinancialReport } from "@/server/services/finance";
-import { createRequirement, deleteRequirement, reviewSubmission, setRequirementRequired, submitRequirement } from "@/server/services/requirements";
+import { createPledge, setPledgeStatus, createExpense, markExpensePaid, voidExpense, attachExpenseReceipt, setBudgetLines, publishFinancialReport, reviewExpense } from "@/server/services/finance";
+import { createRequirement, deleteRequirement, reviewSubmission, sendRequirementReminders, setRequirementRequired, submitRequirement } from "@/server/services/requirements";
 import { createPost, approvePost, deletePost } from "@/server/services/posts";
 import { uploadTripResource, deleteTripResource } from "@/server/services/documents";
 
@@ -150,9 +150,10 @@ export async function deleteResourceAction(org: string, tripId: string, document
 
 export async function createExpenseAction(org: string, tripId: string, _prev: ActionState, fd: FormData) {
   return run(async () => {
-    await createExpense(await requireTrip(org, tripId), formObject(fd) as never, fd.get("receipt") as File | null);
+    const t = await requireTrip(org, tripId);
+    await createExpense(t, formObject(fd) as never, fd.get("receipt") as File | null);
     revalidatePath(path(org, tripId), "layout");
-    return { ok: true, message: "Expense recorded." };
+    return { ok: true, message: t.perms.administerFinances ? "Expense recorded." : "Expense submitted. A church administrator will review it before it counts." };
   });
 }
 
@@ -190,5 +191,21 @@ export async function publishReportAction(org: string, tripId: string, _prev: Ac
     await publishFinancialReport(await requireTrip(org, tripId), formObject(fd) as never);
     revalidatePath(path(org, tripId), "layout");
     return { ok: true, message: "Report published to the public trip page." };
+  });
+}
+
+export async function reviewExpenseAction(org: string, tripId: string, expenseId: string, decision: "APPROVE" | "REJECT", _prev: ActionState, fd: FormData) {
+  return run(async () => {
+    await reviewExpense(await requireTrip(org, tripId), expenseId, decision, String(fd.get("note") ?? ""));
+    revalidatePath(path(org, tripId), "layout");
+    return { ok: true, message: decision === "APPROVE" ? "Approved." : "Declined." };
+  });
+}
+
+export async function sendRemindersAction(org: string, tripId: string, _prev: ActionState) {
+  return run(async () => {
+    const n = await sendRequirementReminders(await requireTrip(org, tripId));
+    revalidatePath(path(org, tripId, "/requirements"));
+    return { ok: true, message: n === 0 ? "Everyone is up to date; no reminders sent." : `Reminder sent to ${n} ${n === 1 ? "person" : "people"}.` };
   });
 }

@@ -1,6 +1,21 @@
 # Prioritized Task List
 
-_Last updated: 2026-10-26_
+_Last updated: 2026-10-27_
+
+## Next three (recommended)
+
+1. **Run the real Stripe flow in test mode** (checkout, webhook, receipt, refund, dispute, reconciliation, Connect onboarding). Needs Stripe test keys.
+2. **Deploy staging** (managed Postgres with point-in-time recovery, persistent disk or S3 driver, error monitoring, hourly jobs) and run the browser tests against it.
+3. **Start church interviews** (VALIDATION.md) and line up one pilot church; decide on minors/guardian consent before recruiting a youth trip.
+
+## Added in session 3 (backlog)
+
+- Planning Center Giving sync (first live integration; needs a Planning Center account).
+- Trip cloning (competitors offer it; saves setup time for repeat trips).
+- SMS reminders (competitors offer it; needs a provider and consent handling).
+- Background-check integration (Go Method offers it; youth trips often require it).
+- Platform admin view of failed syncs alongside failed Stripe events.
+- Make the fundraising deadline (currently 14 days before departure) a per-trip setting.
 
 ## P0 — Before a real church pilot
 

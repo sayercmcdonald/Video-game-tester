@@ -272,3 +272,39 @@ export async function myRequirements(t: TripContext) {
     return { requirement: r, submission, state: cellState(submission) };
   });
 }
+
+// ── Reminders a leader reviews before sending ──
+
+export type ReminderPreview = { userId: string; name: string; outstanding: string[] }[];
+
+/** Who would be reminded, and about what. Shown to the leader before anything is sent. */
+export async function reminderPreview(t: TripContext): Promise<ReminderPreview> {
+  assertPerm(t.perms.manage);
+  const { rows } = await tripReadiness(t.trip.id, t.org.id);
+  return rows
+    .map((r) => ({
+      userId: r.member.user.id,
+      name: r.member.user.name,
+      outstanding: r.cells.filter((c) => c.requirement.isRequired && c.state !== "APPROVED" && c.state !== "SUBMITTED").map((c) => c.requirement.title),
+    }))
+    .filter((r) => r.outstanding.length > 0);
+}
+
+/** Sends the reminders shown in the preview. At most one per person per day. */
+export async function sendRequirementReminders(t: TripContext) {
+  const preview = await reminderPreview(t);
+  const day = new Date().toISOString().slice(0, 10);
+  for (const p of preview) {
+    await notifyUsers({
+      userIds: [p.userId],
+      orgId: t.org.id,
+      title: `Reminder from ${t.user.name}: ${t.trip.name}`,
+      body: `Still to do for ${t.trip.name}: ${p.outstanding.join(", ")}.`,
+      href: `/o/${t.org.slug}/trips/${t.trip.id}/requirements`,
+      category: "deadlines",
+      dedupePrefix: `manual-reminder:${t.trip.id}:${day}`,
+    });
+  }
+  await audit({ orgId: t.org.id, actorUserId: t.user.id, action: "requirement.reminders_sent", entityType: "Trip", entityId: t.trip.id, metadata: { people: preview.length } });
+  return preview.length;
+}
