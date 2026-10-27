@@ -38,3 +38,7 @@ services:
         value: ./storage/uploads
       - key: SEED_DEMO
         value: "true"
+      - key: DEMO_MODE # one-tap demo sign-ins on the sign-in page
+        value: "true"
+      - key: PASSWORD_HASH_COST # faster sign-in on the small free server
+        value: "10"

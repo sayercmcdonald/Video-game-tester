@@ -69,8 +69,10 @@ describe("travel segments", () => {
 
   it("rejects arrival before departure once time zones are applied", async () => {
     const s = await setup();
-    // 09:45 in Guatemala is after 08:00 in New York... but 07:30 there is before it.
-    await expectError(createSegment(s.leader, { ...flight, arriveLocal: "2027-06-10T07:30" }), "INVALID");
+    // 07:30 in Guatemala (13:30 UTC) is after 08:00 in New York (12:00 UTC) and is fine;
+    // 05:30 in Guatemala (11:30 UTC) is before departure.
+    await createSegment(s.leader, { ...flight, arriveLocal: "2027-06-10T07:30" });
+    await expectError(createSegment(s.leader, { ...flight, arriveLocal: "2027-06-10T05:30" }), "INVALID");
     await expect(createSegment(s.leader, { ...flight, flightNumber: "" })).rejects.toThrow();
   });
 });

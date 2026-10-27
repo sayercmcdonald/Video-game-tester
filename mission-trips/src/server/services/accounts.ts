@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { db } from "../db";
 import { hashToken, newToken } from "../crypto";
-import { hashPassword, verifyPassword, burnPasswordCheck, PASSWORD_MIN_LENGTH } from "../auth/password";
+import { hashPassword, verifyPassword, burnPasswordCheck, needsRehash, PASSWORD_MIN_LENGTH } from "../auth/password";
 import { createSession, deleteAllSessionsForUser } from "../auth/session";
 import { AppError, conflict, invalid } from "../errors";
 import { rateLimit } from "../rate-limit";
@@ -57,6 +57,10 @@ export async function logIn(input: z.input<typeof loginSchema>, meta: { ip?: str
   }
   if (!(await verifyPassword(data.password, user.passwordHash))) {
     throw invalid("That email and password don't match an account.");
+  }
+  // Keep stored hashes at the configured work factor (only possible here, while we have the password).
+  if (needsRehash(user.passwordHash)) {
+    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(data.password) } });
   }
   const session = await createSession(user.id, meta.userAgent);
   return { user, session };

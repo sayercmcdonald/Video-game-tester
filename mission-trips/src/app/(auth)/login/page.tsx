@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionForm, SubmitButton, TextField } from "@/components/forms";
+import { DemoPending } from "@/components/demo-pending";
 import { Alert, Card } from "@/components/ui";
-import { loginAction } from "../actions";
+import { demoLoginAction, loginAction } from "../actions";
+import { env } from "@/server/env";
+import { DEMO_ACCOUNTS } from "@/lib/demo";
 import { getCurrentUser } from "@/server/context";
 import { safeNextPath } from "@/server/auth/cookies";
 
@@ -12,7 +15,33 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const next = safeNextPath(sp.next);
   if (await getCurrentUser()) redirect(next);
+  const demo = env().DEMO_MODE;
   return (
+    <>
+    {demo && (
+      <Card className="mb-4 p-6" id="demo">
+        <h1 className="text-xl font-semibold">Explore the demo</h1>
+        <p className="mt-1 mb-4 text-sm text-ink-3">A sample church with one trip. Tap a person to see Sent through their eyes. Nothing here is real.</p>
+        <ul className="divide-y divide-line">
+          {DEMO_ACCOUNTS.map((a) => (
+            <li key={a.email}>
+              <ActionForm action={demoLoginAction}>
+                <input type="hidden" name="email" value={a.email} />
+                <button type="submit" className="flex min-h-14 w-full items-center justify-between gap-3 py-2.5 text-left">
+                  <span className="min-w-0">
+                    <span className="block font-medium">
+                      {a.name} · <span className="text-ink-2">{a.role}</span>
+                    </span>
+                    <span className="block text-sm text-ink-3">{a.what}</span>
+                  </span>
+                  <DemoPending />
+                </button>
+              </ActionForm>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    )}
     <Card className="p-6">
       <h1 className="text-xl font-semibold">Sign in</h1>
       <p className="mt-1 mb-5 text-sm text-ink-3">Welcome back.</p>
@@ -38,5 +67,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </Link>
       </div>
     </Card>
+    </>
   );
 }

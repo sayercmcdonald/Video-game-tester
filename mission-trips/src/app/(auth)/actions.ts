@@ -7,6 +7,9 @@ import { logIn, requestPasswordReset, resetPassword, sendVerificationEmail, sign
 import { clearSessionCookie, safeNextPath, setSessionCookie } from "@/server/auth/cookies";
 import { SESSION_COOKIE, deleteSessionToken } from "@/server/auth/session";
 import { getCurrentUser } from "@/server/context";
+import { env } from "@/server/env";
+import { invalid } from "@/server/errors";
+import { DEMO_ACCOUNTS, DEMO_PASSWORD } from "@/lib/demo";
 
 async function requestMeta() {
   const h = await headers();
@@ -25,6 +28,16 @@ export const loginAction = formAction(async (fd) => {
   const { session } = await logIn({ email: f.email ?? "", password: (fd.get("password") as string) ?? "" }, await requestMeta());
   await setSessionCookie(session.token, session.expiresAt);
   redirect(safeNextPath(f.next));
+});
+
+/** Public demo only: signs in as one of the seeded demo accounts with one tap. */
+export const demoLoginAction = formAction(async (fd) => {
+  if (!env().DEMO_MODE) throw invalid("The demo isn't available here.");
+  const email = String(fd.get("email") ?? "");
+  if (!DEMO_ACCOUNTS.some((a) => a.email === email)) throw invalid("Choose a demo account.");
+  const { session } = await logIn({ email, password: DEMO_PASSWORD }, await requestMeta());
+  await setSessionCookie(session.token, session.expiresAt);
+  redirect("/home");
 });
 
 export async function logoutAction() {

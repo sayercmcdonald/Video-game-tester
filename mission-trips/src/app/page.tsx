@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Logo } from "@/components/brand";
 import { LinkButton } from "@/components/ui";
 import { getCurrentUser } from "@/server/context";
+import { env } from "@/server/env";
 
 const steps = [
   { title: "Plan", body: "Trips, dates, budgets, itineraries and team limits for every trip your church runs." },
@@ -38,7 +39,12 @@ export default async function Landing() {
           software you already have.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <LinkButton href="/signup?next=/new-church" className="h-12 px-6 lg:h-11">
+          {env().DEMO_MODE && (
+            <LinkButton href="/login#demo" className="h-12 px-6 lg:h-11">
+              Explore the demo
+            </LinkButton>
+          )}
+          <LinkButton href="/signup?next=/new-church" variant={env().DEMO_MODE ? "secondary" : "primary"} className="h-12 px-6 lg:h-11">
             Set up your church
           </LinkButton>
           <LinkButton href="/login" variant="secondary" className="h-12 px-6 lg:h-11">

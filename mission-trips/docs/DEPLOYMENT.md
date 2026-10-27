@@ -102,6 +102,8 @@ Steps:
 1. Sign in at [render.com](https://render.com) with GitHub and allow access to this repository.
 2. **New → Blueprint**, pick this repository. Render reads `render.yaml` and proposes a database `sent-demo-db` and a web service `sent-demo` (branch `claude/mission-trip-platform`, folder `mission-trips`).
 3. Click **Apply**. The first build takes a few minutes. On start, the service applies migrations and loads the demo data once (`SEED_DEMO=true`; the seed skips itself if the demo church already exists).
-4. Open the service's `https://sent-demo-….onrender.com` address. The app uses it automatically for links (`RENDER_EXTERNAL_URL`).
+4. Open the service's `https://sent-demo-….onrender.com` address and tap **Explore the demo**: the sign-in page lists the demo people (`DEMO_MODE=true`) so visitors can sign in with one tap. `DEMO_MODE` is refused in production. The app uses it automatically for links (`RENDER_EXTERNAL_URL`).
+
+**Speed:** the free instance has a tenth of a CPU, so pages take noticeably longer than on a paid instance, and password checks (deliberately slow work) take longest. The demo sets `PASSWORD_HASH_COST=10` (instead of 12) so sign-in takes about a quarter of the time; existing hashes are upgraded or downgraded to the configured cost on the next sign-in. A thin bar at the top of the screen shows that a tap was registered while the server works. For a responsive demo, switch the service to Render's Starter instance.
 
 To turn the demo into a real staging environment, follow sections 2–9: set `SEED_DEMO=false`, add a persistent disk or S3 storage, Stripe test keys and Resend.

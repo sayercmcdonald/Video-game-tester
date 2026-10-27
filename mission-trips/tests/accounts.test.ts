@@ -6,10 +6,28 @@ import { safeNextPath } from "@/server/auth/cookies";
 import { encryptJson, decryptJson } from "@/server/crypto";
 import { parseMoneyToCents, formatMoney } from "@/lib/money";
 import { resetDb } from "./helpers/factory";
+import { resetEnvCache } from "@/server/env";
+import bcrypt from "bcryptjs";
 
 beforeEach(resetDb);
 
 describe("accounts", () => {
+  it("re-hashes a password at sign-in when the configured work factor changes", async () => {
+    const { user } = await signUp({ name: "Cost", email: "cost@example.test", password: "long-enough-pw" });
+    expect(bcrypt.getRounds(user.passwordHash)).toBe(12);
+    process.env.PASSWORD_HASH_COST = "10";
+    resetEnvCache();
+    try {
+      await logIn({ email: "cost@example.test", password: "long-enough-pw" }, {});
+      const after = await db.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(bcrypt.getRounds(after.passwordHash)).toBe(10);
+      await logIn({ email: "cost@example.test", password: "long-enough-pw" }, {}); // still works
+    } finally {
+      delete process.env.PASSWORD_HASH_COST;
+      resetEnvCache();
+    }
+  });
+
   it("signs up, normalizes email, and creates a working session", async () => {
     const { user, session } = await signUp({ name: "Ana", email: "  Ana@Example.TEST ", password: "long-enough-pw" });
     expect(user.email).toBe("ana@example.test");

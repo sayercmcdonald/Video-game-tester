@@ -18,6 +18,10 @@ const schema = z.object({
   RESEND_API_KEY: z.string().optional().default(""),
   STORAGE_DIR: z.string().default("./storage/uploads"),
   CRON_SECRET: z.string().optional().default(""),
+  // Public demo only: shows one-tap demo sign-ins. Refused in production.
+  DEMO_MODE: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
+  // bcrypt work factor for new password hashes. 12 by default; 10 suits very small demo servers.
+  PASSWORD_HASH_COST: z.coerce.number().int().min(10).max(14).default(12),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -42,6 +46,7 @@ export function env(): Env {
       throw new Error("Production requires a real email transport (EMAIL_TRANSPORT=resend).");
     }
     if (!e.CRON_SECRET) throw new Error("Production requires CRON_SECRET.");
+    if (e.DEMO_MODE) throw new Error("DEMO_MODE must not be enabled in production.");
   }
   cached = e;
   return e;
