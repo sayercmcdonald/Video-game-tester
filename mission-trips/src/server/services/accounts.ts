@@ -134,6 +134,6 @@ async function consumeToken(token: string, kind: "EMAIL_VERIFICATION" | "PASSWOR
   return row;
 }
 
-export async function updatePreferences(userId: string, prefs: { emailDonations: boolean; emailAnnouncements: boolean; emailDeadlines: boolean }) {
+export async function updatePreferences(userId: string, prefs: { emailDonations: boolean; emailAnnouncements: boolean; emailDeadlines: boolean; emailStories: boolean; emailTravel: boolean; emailReports: boolean }) {
   await db.notificationPreference.upsert({ where: { userId }, create: { userId, ...prefs }, update: prefs });
 }

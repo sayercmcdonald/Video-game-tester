@@ -43,6 +43,7 @@ model User {
   preferences   NotificationPreference?
   donations     Donation[]              @relation("DonorUser")
   tokens        UserToken[]
+  following     TripFollower[]
 }
 
 model Session {
@@ -200,27 +201,32 @@ enum TripStatus {
 }
 
 model Trip {
-  id                          String     @id @default(cuid())
+  id                          String          @id @default(cuid())
   orgId                       String
   name                        String
   slug                        String
   destination                 String
-  summary                     String     @default("")
-  startDate                   DateTime   @db.Date
-  endDate                     DateTime   @db.Date
-  status                      TripStatus @default(DRAFT)
-  budgetCents                 Int        @default(0)
-  fundraisingGoalCents        Int        @default(0)
-  defaultParticipantGoalCents Int        @default(0)
+  summary                     String          @default("")
+  startDate                   DateTime        @db.Date
+  endDate                     DateTime        @db.Date
+  status                      TripStatus      @default(DRAFT)
+  budgetCents                 Int             @default(0)
+  fundraisingGoalCents        Int             @default(0)
+  defaultParticipantGoalCents Int             @default(0)
   participantLimit            Int?
-  applicationsOpen            Boolean    @default(false)
-  leadersSeeFinances          Boolean    @default(true)
+  applicationsOpen            Boolean         @default(false)
+  leadersSeeFinances          Boolean         @default(true)
   // Opt-in: show live, aggregate figures (given, spent by category, remaining) on the public trip page.
-  showLiveFinancials          Boolean    @default(false)
-  createdAt                   DateTime   @default(now())
-  updatedAt                   DateTime   @updatedAt
+  showLiveFinancials          Boolean         @default(false)
+  // Mission stories: who outside the team may see published stories, and whether a reviewer must approve them first.
+  storyVisibility             StoryVisibility @default(SUPPORTERS)
+  storiesRequireApproval      Boolean         @default(true)
+  // People who gave to this trip may follow it without a separate approval.
+  donorsCanFollow             Boolean         @default(true)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
 
-  org              Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org              Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   members          TripMember[]
   invitations      Invitation[]
   campaigns        Campaign[]
@@ -234,6 +240,11 @@ model Trip {
   ledgerEntries    LedgerEntry[]
   documents        Document[]
   financialReports FinancialReport[]
+  stories          Story[]
+  followers        TripFollower[]
+  travelSegments   TravelSegment[]
+  milestones       JourneyMilestone[]
+  missionReport    MissionReport?
 
   @@unique([id, orgId])
   @@unique([orgId, slug])
@@ -710,6 +721,9 @@ model NotificationPreference {
   emailDonations     Boolean @default(true)
   emailAnnouncements Boolean @default(true)
   emailDeadlines     Boolean @default(true)
+  emailStories       Boolean @default(true)
+  emailTravel        Boolean @default(true)
+  emailReports       Boolean @default(true)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -840,4 +854,271 @@ model SyncRun {
   finishedAt    DateTime?
 
   @@index([orgId, startedAt])
+}
+
+// ── Mission stories (trip journal) ──
+
+enum StoryVisibility {
+  PUBLIC // anyone with the trip link
+  SUPPORTERS // signed-in, approved followers (and donors, if the trip allows)
+  TEAM // nobody outside the team
+}
+
+enum StoryStatus {
+  DRAFT
+  SUBMITTED
+  PUBLISHED
+  RETURNED
+  ARCHIVED
+}
+
+enum StoryAudience {
+  TEAM
+  FOLLOWERS
+}
+
+enum StoryCategory {
+  SERVICE
+  WORSHIP
+  COMMUNITY
+  TEAM
+  TRAVEL
+  OTHER
+}
+
+model Story {
+  id                    String         @id @default(cuid())
+  orgId                 String
+  tripId                String
+  authorId              String
+  postedAsTeam          Boolean        @default(false)
+  body                  String         @default("")
+  category              StoryCategory?
+  audience              StoryAudience  @default(FOLLOWERS)
+  status                StoryStatus    @default(DRAFT)
+  // The author says the photos show children or vulnerable people. Such stories
+  // always need a reviewer, never appear on the open public page, and need
+  // the reviewer to confirm consent before publishing.
+  showsVulnerablePeople Boolean        @default(false)
+  consentConfirmedById  String?
+  occurredAt            DateTime       @default(now())
+  submittedAt           DateTime?
+  publishedAt           DateTime?
+  reviewedById          String?
+  reviewedAt            DateTime?
+  reviewNote            String?
+  archivedAt            DateTime?
+  archivedById          String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  trip  Trip         @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+  media StoryMedia[]
+
+  @@unique([id, orgId])
+  @@index([tripId, status, publishedAt])
+  @@index([authorId])
+}
+
+enum MediaKind {
+  PHOTO
+  VIDEO
+}
+
+model StoryMedia {
+  id           String    @id @default(cuid())
+  orgId        String
+  storyId      String
+  kind         MediaKind
+  storageKey   String    @unique // private storage; served only through /api/media
+  thumbKey     String?   @unique
+  mimeType     String
+  width        Int?
+  height       Int?
+  durationMs   Int?
+  sizeBytes    Int
+  sha256       String
+  position     Int       @default(0)
+  altText      String    @default("")
+  uploadedById String
+  createdAt    DateTime  @default(now())
+
+  story Story @relation(fields: [storyId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@index([storyId, position])
+}
+
+enum FollowerStatus {
+  REQUESTED
+  APPROVED
+  REVOKED
+}
+
+model TripFollower {
+  id          String         @id @default(cuid())
+  orgId       String
+  tripId      String
+  userId      String
+  status      FollowerStatus @default(REQUESTED)
+  decidedAt   DateTime?
+  decidedById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@index([userId])
+}
+
+// ── Journey ──
+
+enum SegmentKind {
+  FLIGHT
+  GROUND
+  LODGING
+}
+
+enum SegmentLeg {
+  OUTBOUND
+  IN_COUNTRY
+  RETURN
+}
+
+enum TravelStatus {
+  SCHEDULED
+  CHECK_IN
+  BOARDING
+  DEPARTED
+  DELAYED
+  LANDED
+  ARRIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum StatusSource {
+  MANUAL // entered by a leader
+  PROVIDER // from a flight-data provider
+}
+
+model TravelSegment {
+  id                 String        @id @default(cuid())
+  orgId              String
+  tripId             String
+  kind               SegmentKind
+  leg                SegmentLeg    @default(OUTBOUND)
+  title              String
+  airline            String? // IATA code, e.g. "DL"
+  flightNumber       String? // e.g. "DL 123"
+  fromPlace          String // airport code or a place label
+  toPlace            String
+  departTz           String // IANA time zone of departure
+  arriveTz           String // IANA time zone of arrival
+  scheduledDepartAt  DateTime // an instant (UTC)
+  scheduledArriveAt  DateTime?
+  status             TravelStatus  @default(SCHEDULED)
+  statusSource       StatusSource?
+  statusObservedAt   DateTime?
+  estimatedArriveAt  DateTime?
+  estimateSource     StatusSource?
+  shareWithFollowers Boolean       @default(true)
+  notes              String? // team only
+  createdById        String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  trip    Trip                 @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+  updates TravelStatusUpdate[]
+
+  @@unique([id, orgId])
+  @@index([tripId, scheduledDepartAt])
+}
+
+model TravelStatusUpdate {
+  id                String       @id @default(cuid())
+  orgId             String
+  segmentId         String
+  status            TravelStatus
+  source            StatusSource
+  provider          String?
+  externalId        String? // the provider's event id, for de-duplication
+  observedAt        DateTime
+  estimatedArriveAt DateTime?
+  delayMinutes      Int?
+  note              String?
+  recordedById      String?
+  applied           Boolean      @default(true) // false when it arrived out of order and didn't change the current status
+  createdAt         DateTime     @default(now())
+
+  segment TravelSegment @relation(fields: [segmentId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@unique([segmentId, source, externalId])
+  @@index([segmentId, observedAt])
+}
+
+enum MilestoneKind {
+  LANDED
+  ARRIVED_LODGING
+  REACHED_DESTINATION
+  DEPARTED_FOR_RETURN
+  RETURNED_HOME
+  OTHER
+}
+
+/// A leader's confirmation that the team reached a point in the journey.
+/// Separate from flight status: a person confirms it, with a timestamp.
+model JourneyMilestone {
+  id                 String        @id @default(cuid())
+  orgId              String
+  tripId             String
+  kind               MilestoneKind
+  label              String? // for OTHER
+  segmentId          String?
+  occurredAt         DateTime
+  confirmedById      String
+  followerNote       String        @default("") // shared with followers when the milestone is shared
+  teamNote           String        @default("") // team only
+  shareWithFollowers Boolean       @default(true)
+  notifyFollowers    Boolean       @default(true)
+  editedAt           DateTime?
+  retractedAt        DateTime?
+  retractedById      String?
+  createdAt          DateTime      @default(now())
+
+  trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@index([tripId, occurredAt])
+}
+
+// ── Final mission report ──
+
+enum MissionReportStatus {
+  DRAFT
+  SUBMITTED
+  PUBLISHED
+}
+
+model MissionReport {
+  id               String              @id @default(cuid())
+  orgId            String
+  tripId           String              @unique
+  status           MissionReportStatus @default(DRAFT)
+  overview         String              @default("")
+  teamSummary      String              @default("")
+  closing          String              @default("")
+  fundsDisposition String              @default("") // what happens to remaining funds, as decided by the church
+  storyIds         String[]
+  financials       Json? // ledger snapshot taken when published
+  preparedById     String
+  submittedAt      DateTime?
+  publishedAt      DateTime?
+  publishedById    String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  trip Trip @relation(fields: [tripId, orgId], references: [id, orgId], onDelete: Cascade)
+
+  @@unique([tripId, orgId])
 }

@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { appUrl, queueEmail } from "./email";
 
-export type NotifyCategory = "donations" | "announcements" | "deadlines" | "account";
+export type NotifyCategory = "donations" | "announcements" | "deadlines" | "stories" | "travel" | "reports" | "account";
 
 /**
  * In-app notification for each user, plus an email when the user's
@@ -53,7 +53,10 @@ export async function notifyUsers(input: {
       input.category === "account" ||
       (input.category === "donations" && (p?.emailDonations ?? true)) ||
       (input.category === "announcements" && (p?.emailAnnouncements ?? true)) ||
-      (input.category === "deadlines" && (p?.emailDeadlines ?? true));
+      (input.category === "deadlines" && (p?.emailDeadlines ?? true)) ||
+      (input.category === "stories" && (p?.emailStories ?? true)) ||
+      (input.category === "travel" && (p?.emailTravel ?? true)) ||
+      (input.category === "reports" && (p?.emailReports ?? true));
     if (!wants) continue;
     const link = input.href ? `\n\nOpen: ${appUrl(input.href)}` : "";
     await queueEmail({

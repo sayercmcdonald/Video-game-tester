@@ -92,3 +92,53 @@ export function canAccessDocument(input: {
       return perms.viewTeam;
   }
 }
+
+// ── Mission stories and the supporter feed ──
+
+/**
+ * How someone relates to a trip's journal:
+ * MANAGER (leaders, church admins), TEAM (approved participants),
+ * FOLLOWER (approved supporters, and donors when the trip allows),
+ * PUBLIC (anyone with the link), NONE (nothing to see).
+ */
+export type FeedViewer = "MANAGER" | "TEAM" | "FOLLOWER" | "PUBLIC" | "NONE";
+export type StoryVisibilityT = "PUBLIC" | "SUPPORTERS" | "TEAM";
+export type StoryStatusT = "DRAFT" | "SUBMITTED" | "PUBLISHED" | "RETURNED" | "ARCHIVED";
+
+/** Whether the outside world (followers or the public) may see a trip's journal at all. */
+export function outsiderFeedAllowed(viewer: FeedViewer, visibility: StoryVisibilityT): boolean {
+  if (viewer === "FOLLOWER") return visibility !== "TEAM";
+  if (viewer === "PUBLIC") return visibility === "PUBLIC";
+  return false;
+}
+
+export function canSeeStory(input: {
+  viewer: FeedViewer;
+  isAuthor: boolean;
+  status: StoryStatusT;
+  audience: "TEAM" | "FOLLOWERS";
+  showsVulnerablePeople: boolean;
+  visibility: StoryVisibilityT;
+}): boolean {
+  const { viewer, isAuthor, status, audience, showsVulnerablePeople, visibility } = input;
+  if (viewer === "NONE") return false;
+  // Authors always see their own work; drafts are private to the author.
+  if (isAuthor && (viewer === "MANAGER" || viewer === "TEAM")) return true;
+  if (viewer === "MANAGER") return status !== "DRAFT";
+  if (status !== "PUBLISHED") return false;
+  if (viewer === "TEAM") return true;
+  if (audience !== "FOLLOWERS" || !outsiderFeedAllowed(viewer, visibility)) return false;
+  // Photos of children or vulnerable people never appear on the open public page.
+  if (viewer === "PUBLIC" && showsVulnerablePeople) return false;
+  return true;
+}
+
+/** Shared journey details (milestones, shared travel segments) for people outside the team. */
+export function canSeeJourneyItem(input: { viewer: FeedViewer; shared: boolean; visibility: StoryVisibilityT; isTravelSegment: boolean }): boolean {
+  const { viewer, shared, visibility, isTravelSegment } = input;
+  if (viewer === "MANAGER" || viewer === "TEAM") return true;
+  if (!shared || !outsiderFeedAllowed(viewer, visibility)) return false;
+  // Flight and transfer details (times, routes) are for signed-in supporters only, never the open web.
+  if (isTravelSegment && viewer === "PUBLIC") return false;
+  return true;
+}

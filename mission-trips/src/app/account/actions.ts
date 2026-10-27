@@ -15,6 +15,9 @@ export async function savePreferencesAction(_prev: ActionState, fd: FormData) {
       emailDonations: fd.get("emailDonations") === "on",
       emailAnnouncements: fd.get("emailAnnouncements") === "on",
       emailDeadlines: fd.get("emailDeadlines") === "on",
+      emailStories: fd.get("emailStories") === "on",
+      emailTravel: fd.get("emailTravel") === "on",
+      emailReports: fd.get("emailReports") === "on",
     });
     return { ok: true, message: "Email preferences saved." };
   });

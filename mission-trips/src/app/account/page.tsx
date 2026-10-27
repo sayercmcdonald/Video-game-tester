@@ -47,6 +47,9 @@ export default async function AccountPage() {
                 <CheckboxField label="Gifts" name="emailDonations" defaultChecked={prefs?.emailDonations ?? true} hint="When someone gives to your page or a trip you lead." />
                 <CheckboxField label="Announcements" name="emailAnnouncements" defaultChecked={prefs?.emailAnnouncements ?? true} hint="Updates posted by your trip leaders." />
                 <CheckboxField label="Deadlines and requirements" name="emailDeadlines" defaultChecked={prefs?.emailDeadlines ?? true} hint="Reminders and review results." />
+                <CheckboxField label="Mission stories" name="emailStories" defaultChecked={prefs?.emailStories ?? true} hint="New stories from trips you're on or follow." />
+                <CheckboxField label="Travel milestones" name="emailTravel" defaultChecked={prefs?.emailTravel ?? true} hint="Departures, arrivals and significant delays. Never includes locations." />
+                <CheckboxField label="Mission reports" name="emailReports" defaultChecked={prefs?.emailReports ?? true} hint="When a trip you support publishes its final report." />
                 <SubmitButton>Save preferences</SubmitButton>
               </ActionForm>
             </CardBody>
