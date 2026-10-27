@@ -59,11 +59,11 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
           </div>
         </dl>
         {d.refundedCents > 0 && (
-          <div className="mt-6 rounded-md bg-warn-soft px-4 py-3 text-sm text-warn">
+          <div className="mt-6 rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
             {formatMoney(d.refundedCents, d.currency)} of this gift was refunded. Net gift: <strong>{formatMoney(net, d.currency)}</strong>.
           </div>
         )}
-        {d.status === "DISPUTED" && <div className="mt-6 rounded-md bg-bad-soft px-4 py-3 text-sm text-bad">This gift is under a payment dispute.</div>}
+        {d.status === "DISPUTED" && <div className="mt-6 rounded-2xl bg-bad-soft px-4 py-3 text-sm text-bad">This gift is under a payment dispute.</div>}
         {/* Only the church's own wording; the platform makes no tax claims. */}
         {d.org.receiptStatement && <p className="mt-8 border-t border-line pt-6 text-sm whitespace-pre-line text-ink-2">{d.org.receiptStatement}</p>}
       </Card>

@@ -51,9 +51,9 @@ export default async function AdminPage() {
                       {ev.type}
                       <div className="text-ink-3">{ev.id}</div>
                     </Td>
-                    <Td className="whitespace-nowrap">{formatDateTime(ev.receivedAt)}</Td>
-                    <Td>{ev.attempts}</Td>
-                    <Td className="max-w-96 truncate text-xs text-bad">{ev.lastError}</Td>
+                    <Td label="Received" className="whitespace-nowrap">{formatDateTime(ev.receivedAt)}</Td>
+                    <Td label="Attempts">{ev.attempts}</Td>
+                    <Td label="Error" className="max-w-96 truncate text-xs text-bad">{ev.lastError}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -87,12 +87,12 @@ export default async function AdminPage() {
                         /{o.slug} · {o.contactEmail}
                       </div>
                     </Td>
-                    <Td className="whitespace-nowrap text-ink-2">{formatDate(o.createdAt)}</Td>
-                    <Td className="text-right tabular-nums">
+                    <Td label="Created" className="whitespace-nowrap text-ink-2">{formatDate(o.createdAt)}</Td>
+                    <Td label="Members / trips" className="text-right tabular-nums">
                       {o._count.memberships} / {o._count.trips}
                     </Td>
-                    <Td>{o.stripeChargesEnabled ? <Badge tone="good">Connected</Badge> : o.stripeAccountId ? <Badge tone="warn">Setup unfinished</Badge> : <Badge>Not connected</Badge>}</Td>
-                    <Td>
+                    <Td label="Payments">{o.stripeChargesEnabled ? <Badge tone="good">Connected</Badge> : o.stripeAccountId ? <Badge tone="warn">Setup unfinished</Badge> : <Badge>Not connected</Badge>}</Td>
+                    <Td label="Status">
                       <Badge tone={o.status === "ACTIVE" ? "good" : o.status === "SUSPENDED" ? "bad" : "warn"}>{o.status === "PENDING_REVIEW" ? "Pending review" : o.status === "ACTIVE" ? "Active" : "Suspended"}</Badge>
                     </Td>
                     <Td className="text-right whitespace-nowrap">

@@ -133,16 +133,18 @@ function PledgesCard({ t, pledges, campaigns, canClose }: { t: TripContext; pled
       {pledges.length > 0 && (
         <ul className="divide-y divide-line">
           {pledges.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
-              <span className="min-w-0">
-                <span className="font-medium">{p.donorName}</span>
-                <span className="block text-xs text-ink-3">
-                  {campaigns.length > 1 && `${campaigns.find((c) => c.id === p.campaignId)?.title ?? ""} · `}
-                  {p.expectedBy ? `expected ${formatDate(p.expectedBy)}` : "no date"}
+            <li key={p.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-5">
+              <span className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="font-medium">{p.donorName}</span>
+                  <span className="block text-[13px] text-ink-3">
+                    {campaigns.length > 1 && `${campaigns.find((c) => c.id === p.campaignId)?.title ?? ""} · `}
+                    {p.expectedBy ? `expected ${formatDate(p.expectedBy)}` : "no date"}
+                  </span>
                 </span>
+                <span className="shrink-0 font-medium tabular-nums">{formatMoney(p.amountCents, cur)}</span>
               </span>
-              <span className="flex shrink-0 items-center gap-2">
-                <span className="tabular-nums">{formatMoney(p.amountCents, cur)}</span>
+              <span className="-ml-3 flex shrink-0 items-center gap-1 sm:ml-0">
                 {p.status === "OPEN" && canClose ? (
                   <>
                     <ActionButton action={setPledgeStatusAction.bind(null, t.org.slug, t.trip.id, p.id, "FULFILLED")} variant="ghost">
@@ -225,17 +227,17 @@ async function ManagerView({ t, campaigns, givingOn }: { t: TripContext; campaig
                     {c.tripMember && c.tripMember.status !== "APPROVED" && <Badge tone="warn">Not on team</Badge>}
                   </div>
                 </Td>
-                <Td>
+                <Td label="Progress">
                   <GoalMeter raised={c.raisedCents} goal={c.goalCents} currency={cur} label={`${c.title} progress`} />
                 </Td>
-                <Td className="text-right tabular-nums">
+                <Td label="Raised" className="text-right tabular-nums">
                   {formatMoney(c.raisedCents, cur, { compact: true })}
                   <span className="text-ink-3"> / {formatMoney(c.goalCents, cur, { compact: true })}</span>
                 </Td>
                 <Td className="text-right">
                   <details className="relative inline-block text-left">
-                    <summary className="cursor-pointer list-none rounded-md px-2 py-1 text-sm text-accent hover:bg-subtle">Edit</summary>
-                    <div className="absolute right-0 z-20 mt-1 w-[min(90vw,28rem)] rounded-md border border-line bg-surface p-5 shadow-lg">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-full px-3 text-[15px] font-medium text-accent hover:bg-fill lg:min-h-8 lg:text-sm">Edit</summary>
+                    <div className="absolute right-0 z-20 mt-1 w-[min(90vw,28rem)] rounded-2xl bg-surface shadow-[0_12px_40px_rgb(0_0_0/0.18)] ring-1 ring-line p-5">
                       <CampaignEditor t={t} c={c} canManage />
                       {givingOn && c.isPublic && t.trip.status !== "DRAFT" && (
                         <div className="mt-4 border-t border-line pt-4">
@@ -299,20 +301,20 @@ async function ManagerView({ t, campaigns, givingOn }: { t: TripContext; campaig
                       <div className="font-medium">{d.donorName}</div>
                       {t.perms.administerFinances && d.donorEmail && <div className="text-xs text-ink-3">{d.donorEmail}</div>}
                     </Td>
-                    <Td className="max-w-48 truncate text-ink-2">{d.campaign.title}</Td>
-                    <Td className="text-right tabular-nums">
+                    <Td label="For" className="text-ink-2 lg:max-w-48 lg:truncate">{d.campaign.title}</Td>
+                    <Td label="Amount" className="text-right tabular-nums">
                       {formatMoney(d.amountCents, d.currency)}
                       {d.refundedCents > 0 && <div className="text-xs text-bad">−{formatMoney(d.refundedCents, d.currency)} refunded</div>}
                       {d.feeCents > 0 && <div className="text-xs text-ink-3">fee {formatMoney(d.feeCents, d.currency)}</div>}
                     </Td>
-                    <Td>
+                    <Td label="Status">
                       <Badge tone={donationStatusTone[d.status]}>{donationStatusLabel[d.status]}</Badge>
                       <div className="mt-0.5 text-xs text-ink-3">
                         {donationMethodLabel[d.method]}
                         {d.offlineReference && ` #${d.offlineReference}`}
                       </div>
                     </Td>
-                    <Td className="whitespace-nowrap text-ink-2">{formatDate(d.receivedAt ?? d.createdAt)}</Td>
+                    <Td label="Date" className="whitespace-nowrap text-ink-2">{formatDate(d.receivedAt ?? d.createdAt)}</Td>
                     {t.perms.administerFinances && (
                       <Td className="text-right whitespace-nowrap">
                         {d.receiptNumber != null && (
@@ -322,8 +324,8 @@ async function ManagerView({ t, campaigns, givingOn }: { t: TripContext; campaig
                         )}
                         {(d.status === "SUCCEEDED" || d.status === "PARTIALLY_REFUNDED") && (
                           <details className="relative inline-block text-left">
-                            <summary className="cursor-pointer list-none rounded-md px-2 py-1 text-sm text-ink-2 hover:bg-subtle">Refund</summary>
-                            <div className="absolute right-0 z-20 mt-1 w-72 rounded-md border border-line bg-surface p-4 text-left whitespace-normal shadow-lg">
+                            <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-full px-3 text-[15px] font-medium text-accent hover:bg-fill lg:min-h-8 lg:text-sm">Refund</summary>
+                            <div className="absolute right-0 z-20 mt-1 w-72 rounded-2xl bg-surface shadow-[0_12px_40px_rgb(0_0_0/0.18)] ring-1 ring-line p-4 text-left whitespace-normal">
                               <ActionForm action={refundAction.bind(null, base, t.trip.id, d.id)} className="space-y-3">
                                 <MoneyField label="Amount to refund" name="amount" defaultValue={centsToInput(d.amountCents - d.refundedCents)} />
                                 <SelectField

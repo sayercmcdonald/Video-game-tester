@@ -17,8 +17,8 @@ export function DonateForm({ action, defaultName, defaultEmail }: { action: (p: 
             <label
               key={v}
               className={cx(
-                "flex h-11 cursor-pointer items-center justify-center rounded-md border text-sm font-medium tabular-nums has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
-                amount === v ? "border-accent bg-accent-soft text-accent-ink" : "border-line-strong bg-surface hover:bg-subtle",
+                "flex h-12 cursor-pointer items-center justify-center rounded-xl text-[17px] font-semibold tabular-nums transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
+                amount === v ? "bg-accent text-on-accent" : "bg-fill text-ink hover:brightness-95",
               )}
             >
               <input type="radio" name="amount" value={v} checked={amount === v} onChange={() => setAmount(v)} className="sr-only" />
@@ -38,7 +38,7 @@ export function DonateForm({ action, defaultName, defaultEmail }: { action: (p: 
       </div>
       <TextArea label="Message of encouragement" name="message" rows={2} hint="Shown on this page with your first name." optional />
       <CheckboxField label="Give anonymously" name="isAnonymous" hint="Your name won't appear publicly. The church and participant still see it for receipts and thank-yous." />
-      <SubmitButton className="h-11 w-full text-base" pendingText="Opening secure checkout…">
+      <SubmitButton className="h-12 w-full lg:h-12 lg:text-[17px]" pendingText="Opening secure checkout…">
         Continue to secure payment
       </SubmitButton>
       <p className="text-center text-xs text-ink-3">Payments are processed by Stripe. Card details go directly to Stripe and are never stored by us or the church.</p>

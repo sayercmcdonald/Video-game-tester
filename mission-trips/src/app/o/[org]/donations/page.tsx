@@ -49,13 +49,18 @@ export default async function DonationsPage({ params, searchParams }: { params: 
           <Stat label="Processing fees" value={formatMoney(totals.fees, cur)} sub={`Net ${formatMoney(totals.netRaised, cur)}`} />
         </CardBody>
       </Card>
-      <nav aria-label="Filter donations" className="mb-3 flex flex-wrap gap-1">
+      {/* Segmented control */}
+      <nav aria-label="Filter donations" className="mb-4 grid grid-cols-2 gap-0.5 rounded-xl bg-fill p-0.5 sm:inline-grid sm:grid-cols-4">
         {FILTERS.map((f) => (
           <Link
             key={f.key}
             href={`?show=${f.key}`}
             aria-current={f.key === filter.key ? "page" : undefined}
-            className={f.key === filter.key ? "rounded-md bg-surface px-3 py-1.5 text-sm font-medium shadow-[0_0_0_1px_var(--color-line)]" : "rounded-md px-3 py-1.5 text-sm text-ink-2 hover:bg-subtle"}
+            className={
+              f.key === filter.key
+                ? "flex min-h-9 items-center justify-center rounded-[10px] bg-surface px-3 text-[15px] font-semibold whitespace-nowrap shadow-[0_3px_8px_rgb(0_0_0/0.12)] lg:min-h-8 lg:text-sm dark:bg-[#636366]"
+                : "flex min-h-9 items-center justify-center rounded-[10px] px-3 text-[15px] whitespace-nowrap text-ink lg:min-h-8 lg:text-sm"
+            }
           >
             {f.label}
           </Link>
@@ -80,21 +85,21 @@ export default async function DonationsPage({ params, searchParams }: { params: 
               {donations.map((d) => (
                 <tr key={d.id}>
                   <Td className="whitespace-nowrap text-ink-2">{formatDate(d.receivedAt ?? d.createdAt)}</Td>
-                  <Td>
+                  <Td label="Donor">
                     <div className="font-medium">{d.donorName}</div>
                     <div className="text-xs text-ink-3">{d.donorEmail ?? "No email"}</div>
                   </Td>
-                  <Td>
+                  <Td label="Trip / campaign">
                     <Link href={`/o/${ctx.org.slug}/trips/${d.trip.id}/fundraising`} className="hover:underline">
                       {d.trip.name}
                     </Link>
                     <div className="max-w-56 truncate text-xs text-ink-3">{d.campaign.title}</div>
                   </Td>
-                  <Td className="text-right tabular-nums">
+                  <Td label="Amount" className="text-right tabular-nums">
                     {formatMoney(d.amountCents, d.currency)}
                     {d.refundedCents > 0 && <div className="text-xs text-bad">−{formatMoney(d.refundedCents, d.currency)}</div>}
                   </Td>
-                  <Td>
+                  <Td label="Status">
                     <Badge tone={donationStatusTone[d.status]}>{donationStatusLabel[d.status]}</Badge>
                     <div className="text-xs text-ink-3">
                       {donationMethodLabel[d.method]}

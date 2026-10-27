@@ -1,54 +1,116 @@
 @import "tailwindcss";
 
-/* Design tokens. Calm neutrals, one accent, semantic status colors.
-   All text/background pairs meet WCAG AA contrast. */
+/*
+  Design system, following Apple's Human Interface Guidelines (see docs/DESIGN.md):
+  - System font (San Francisco on Apple devices) on Apple's type scale, 17px body on phones.
+  - Grouped content: white sections on a soft gray background, no borders in light mode.
+  - One tint color used sparingly; status colors always paired with words.
+  - Every color has a light and a dark value. All text pairs meet WCAG AA.
+*/
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-canvas: #f7f7f5;
+  /* Backgrounds (systemGroupedBackground and its layers) */
+  --color-canvas: #f2f2f7;
   --color-surface: #ffffff;
-  --color-subtle: #f1f1ee;
-  --color-line: #e4e4df;
-  --color-line-strong: #d3d3cc;
-  --color-ink: #1c1d1f;
-  --color-ink-2: #4a4c50;
-  --color-ink-3: #6b6e73;
+  --color-subtle: #f2f2f7; /* hover/pressed and fills inside sections */
+  --color-fill: rgb(118 118 128 / 0.12); /* input and control fills */
+  --color-line: rgb(60 60 67 / 0.14); /* hairline separators */
+  --color-line-strong: rgb(60 60 67 / 0.29);
 
-  --color-accent: #1f5f5b;
-  --color-accent-hover: #184c49;
-  --color-accent-soft: #e6f0ef;
-  --color-accent-ink: #164542;
+  /* Labels */
+  --color-ink: #1d1d1f;
+  --color-ink-2: #48484a;
+  --color-ink-3: #6e6e73;
 
-  --color-good: #1f6f43;
-  --color-good-soft: #e7f3ec;
-  --color-warn: #8a5a00;
-  --color-warn-soft: #fbf1dc;
-  --color-bad: #b42318;
-  --color-bad-soft: #fdecea;
-  --color-info: #1d4f91;
-  --color-info-soft: #e8f0fb;
+  /* Tint */
+  --color-accent: #0a6e67;
+  --color-accent-hover: #085c56;
+  --color-accent-soft: rgb(10 110 103 / 0.1);
+  --color-accent-ink: #075a54;
+  --color-on-accent: #ffffff;
 
-  /* Chart series — validated for color-vision deficiency and 3:1 contrast. */
+  /* Status (always shown with a word or icon too) */
+  --color-good: #1f7a37;
+  --color-good-soft: rgb(52 199 89 / 0.14);
+  --color-warn: #8a5300;
+  --color-warn-soft: rgb(255 159 10 / 0.16);
+  --color-bad: #c4161c;
+  --color-bad-soft: rgb(255 59 48 / 0.12);
+  --color-info: #0058c7;
+  --color-info-soft: rgb(0 122 255 / 0.1);
+
+  /* Chart series — validated for color-vision deficiency and 3:1 contrast in each theme. */
   --color-series-1: #2a6fd6; /* received / paid */
   --color-series-2: #c27c0e; /* pledged / committed */
 
-  --radius-card: 10px;
+  /* Bars that float above content (navigation layer) */
+  --color-glass: rgb(249 249 251 / 0.78);
+
+  --radius-card: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-canvas: #000000;
+    --color-surface: #1c1c1e;
+    --color-subtle: #2c2c2e;
+    --color-fill: rgb(118 118 128 / 0.24);
+    --color-line: rgb(84 84 88 / 0.6);
+    --color-line-strong: rgb(84 84 88 / 0.9);
+
+    --color-ink: #f5f5f7;
+    --color-ink-2: #d1d1d6;
+    --color-ink-3: #a1a1a6;
+
+    --color-accent: #4fd1c5;
+    --color-accent-hover: #73ddd3;
+    --color-accent-soft: rgb(79 209 197 / 0.16);
+    --color-accent-ink: #7fe0d6;
+    --color-on-accent: #00211e;
+
+    --color-good: #30d158;
+    --color-good-soft: rgb(48 209 88 / 0.18);
+    --color-warn: #ffb340;
+    --color-warn-soft: rgb(255 179 64 / 0.18);
+    --color-bad: #ff6961;
+    --color-bad-soft: rgb(255 105 97 / 0.18);
+    --color-info: #5aa8ff;
+    --color-info-soft: rgb(90 168 255 / 0.18);
+
+    --color-series-1: #4a8af0;
+    --color-series-2: #c4861c;
+
+    --color-glass: rgb(28 28 30 / 0.72);
+  }
 }
 
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
     text-rendering: optimizeLegibility;
   }
   body {
     background: var(--color-canvas);
     color: var(--color-ink);
-    font-size: 15px;
-    line-height: 1.5;
+    /* Apple's Body style: 17pt on phones; slightly smaller on wide screens where density helps. */
+    font-size: 17px;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+  }
+  @media (min-width: 1024px) {
+    body {
+      font-size: 15px;
+      line-height: 1.45;
+      letter-spacing: -0.005em;
+    }
   }
   h1, h2, h3, h4 {
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
     text-wrap: balance;
   }
   p {
@@ -60,9 +122,128 @@
   }
   input, textarea, select, button {
     font: inherit;
+    letter-spacing: inherit;
+  }
+  /* iOS Safari zooms into any field under 16px; keep fields at 17px on phones. */
+  @media (max-width: 1023px) {
+    input, textarea, select {
+      font-size: 17px !important;
+    }
   }
   ::selection {
     background: var(--color-accent-soft);
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+/* Translucent material for bars that float above content (Apple's navigation layer). */
+@layer components {
+  .glass {
+    background: var(--color-glass);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background: var(--color-surface);
+    }
+  }
+
+  /* Checkboxes look and act like iOS switches. Still real checkboxes for forms and screen readers. */
+  .switch {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex: none;
+    width: 51px;
+    height: 31px;
+    border-radius: 999px;
+    background: var(--color-fill);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 27px;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+    transition: transform 0.2s ease;
+  }
+  .switch:checked {
+    background: var(--color-accent);
+  }
+  .switch:checked::after {
+    transform: translateX(20px);
+  }
+
+  .td-value {
+    display: contents;
+  }
+
+  /*
+    Tables become grouped list rows on phones: the first cell is the row's title,
+    and every other cell shows its column name on the left and its value on the right.
+  */
+  @media (max-width: 639px) {
+    .list-table,
+    .list-table tbody,
+    .list-table tr,
+    .list-table td {
+      display: block;
+      width: 100%;
+    }
+    .list-table {
+      min-width: 0 !important;
+    }
+    .list-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    .list-table tr {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--color-line);
+    }
+    .list-table tbody tr:last-child {
+      border-bottom: 0;
+    }
+    .list-table td {
+      border: 0 !important;
+      padding: 2px 0 !important;
+      text-align: left !important;
+    }
+    .list-table td[data-label] {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+      text-align: right !important;
+    }
+    .list-table td[data-label]::before {
+      content: attr(data-label);
+      flex: none;
+      color: var(--color-ink-3);
+      font-size: 15px;
+      text-align: left;
+    }
+    .list-table .td-value {
+      display: block;
+      flex: 1 1 auto;
+      min-width: 0;
+      text-align: right;
+    }
+    .list-table td:empty {
+      display: none;
+    }
   }
 }
 

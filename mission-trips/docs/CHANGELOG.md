@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 — 2026-10-27
+
+### Changed
+- **Redesigned the interface after Apple's Human Interface Guidelines**, for phones first (see [DESIGN.md](DESIGN.md)): system font on Apple's type scale with 17 px body text on phones; grouped rounded sections on a gray background; capsule buttons and 44 px touch targets; filled form fields and iOS-style switches; large titles and an iOS-style back link.
+- **Phone navigation:** a floating, translucent bottom tab bar (Home, Trips, Giving, People, Settings); a sidebar on wide screens. The top bar is translucent and sticky and respects the notch and home indicator.
+- **Tables become list rows on phones**, so nothing needs sideways scrolling (verified on 21 pages at 390 px).
+- **Dark mode** following the device setting, with contrast-checked colors for text and charts.
+- Donation filters are a segmented control; Settings links to Payments, Activity log and My profile.
+
+### Fixed
+- Progress bar tracks were invisible on the gray background; ledger amounts could wrap; requirement and pledge rows were cramped on phones.
+
+
 ## 0.1.0 — 2026-10-26 (session 1)
 
 First working version of the platform, built from an empty project.

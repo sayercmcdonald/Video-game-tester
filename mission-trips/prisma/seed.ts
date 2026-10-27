@@ -117,16 +117,16 @@ async function main() {
   const fund = campaigns.find((c) => c.kind === "TRIP")!;
   const forP = (u: SessionUser) => campaigns.find((c) => c.tripMember?.userId === u.id)!;
   const gifts: [string, string, string, string][] = [
-    [forP(p1).id, "Demo Donor — The Coles", "500", "1001"],
-    [forP(p1).id, "Demo Donor — R. Nguyen", "250", "1002"],
-    [forP(p2).id, "Demo Donor — Park Family", "800", "1003"],
-    [forP(p3).id, "Demo Donor — Small Group 4", "300", "1004"],
-    [fund.id, "Demo Donor — Missions Committee", "2000", "1005"],
+    [forP(p1).id, "The Coles (demo)", "500", "1001"],
+    [forP(p1).id, "R. Nguyen (demo)", "250", "1002"],
+    [forP(p2).id, "Park Family (demo)", "800", "1003"],
+    [forP(p3).id, "Small Group 4 (demo)", "300", "1004"],
+    [fund.id, "Missions Committee (demo)", "2000", "1005"],
   ];
   for (const [campaignId, donorName, amount, reference] of gifts) {
     await recordOfflineDonation(t, { campaignId, donorName, amount, method: "CHECK", reference, receivedOn: new Date().toISOString().slice(0, 10) });
   }
-  await createPledge(t, { campaignId: forP(p2).id, donorName: "Demo Pledger — Grandparents Park", amount: "400", expectedBy: `${year}-02-01` });
+  await createPledge(t, { campaignId: forP(p2).id, donorName: "Grandparents Park (demo)", amount: "400", expectedBy: `${year}-02-01` });
 
   // Budget and expenses
   const budget = new FormData();

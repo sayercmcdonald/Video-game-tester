@@ -5,7 +5,7 @@ import { Logo } from "./brand";
 export function PublicShell({ orgName, children }: { orgName?: string; children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-line bg-surface no-print">
+      <header className="glass sticky top-0 z-30 border-b border-line no-print" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4 sm:px-6">
           <span className="font-medium">{orgName ?? <Logo />}</span>
           <Link href="/donor" className="text-sm text-ink-2 hover:text-ink">

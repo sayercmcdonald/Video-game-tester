@@ -45,9 +45,9 @@ export default async function AuditPage({ params, searchParams }: { params: Prom
               {logs.map((l) => (
                 <tr key={l.id}>
                   <Td className="whitespace-nowrap text-ink-2">{formatDateTime(l.createdAt, ctx.org.timezone)}</Td>
-                  <Td className="whitespace-nowrap">{who(l.actorUserId)}</Td>
-                  <Td>{describe(l.action)}</Td>
-                  <Td className="max-w-80 truncate font-mono text-xs text-ink-3">{l.metadata ? JSON.stringify(l.metadata) : `${l.entityType} ${l.entityId.slice(-8)}`}</Td>
+                  <Td label="Who" className="whitespace-nowrap">{who(l.actorUserId)}</Td>
+                  <Td label="What">{describe(l.action)}</Td>
+                  <Td label="Details" className="max-w-80 truncate font-mono text-xs text-ink-3">{l.metadata ? JSON.stringify(l.metadata) : `${l.entityType} ${l.entityId.slice(-8)}`}</Td>
                 </tr>
               ))}
             </tbody>

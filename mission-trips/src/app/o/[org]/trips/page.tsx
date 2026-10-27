@@ -66,14 +66,14 @@ export default async function TripsPage({ params }: { params: Promise<{ org: str
                         <span className="truncate">{t.destination}</span>
                       </div>
                     </Td>
-                    <Td className="whitespace-nowrap text-ink-2">{formatDateRange(t.startDate, t.endDate)}</Td>
-                    <Td>
+                    <Td label="Dates" className="whitespace-nowrap text-ink-2">{formatDateRange(t.startDate, t.endDate)}</Td>
+                    <Td label="Raised">
                       <GoalMeter raised={tripRaised} goal={t.fundraisingGoalCents} currency={ctx.org.currency} label={`${t.name} raised`} />
                       <div className="mt-1 text-xs text-ink-3 tabular-nums">
                         {formatMoney(tripRaised, ctx.org.currency, { compact: true })} of {formatMoney(t.fundraisingGoalCents, ctx.org.currency, { compact: true })}
                       </div>
                     </Td>
-                    <Td className="text-right tabular-nums">
+                    <Td label="Team" className="text-right tabular-nums">
                       {approved}
                       {t.participantLimit ? ` / ${t.participantLimit}` : ""}
                       {applied > 0 && (

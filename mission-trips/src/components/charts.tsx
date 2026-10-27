@@ -9,7 +9,7 @@ function Tip({ children }: { children: ReactNode }) {
   return (
     <span
       role="tooltip"
-      className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 hidden -translate-x-1/2 rounded-md bg-ink px-2 py-1 text-xs whitespace-nowrap text-white shadow group-hover:block group-focus-visible:block"
+      className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 hidden -translate-x-1/2 rounded-lg bg-ink px-2.5 py-1 text-xs whitespace-nowrap text-canvas shadow-lg group-hover:block group-focus-visible:block"
     >
       {children}
     </span>
@@ -143,7 +143,7 @@ export function GoalMeter({ raised, pledged = 0, goal, currency = "usd", label }
         aria-valuemax={goal}
         aria-valuenow={Math.min(raised, goal)}
         aria-valuetext={`${formatMoney(raised, currency)} received of ${formatMoney(goal, currency)}${pledged ? `, plus ${formatMoney(pledged, currency)} pledged` : ""}`}
-        className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-subtle"
+        className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-fill"
       >
         {raised > 0 && <span className="h-full rounded-r-[4px] bg-[var(--color-series-1)]" style={{ width: w(raised) }} />}
         {pledged > 0 && <span className="h-full rounded-r-[4px] bg-[var(--color-series-2)]" style={{ width: w(pledged) }} />}

@@ -77,7 +77,7 @@ async function ParticipantView({ t }: { t: TripContext }) {
                 </p>
               )}
               {r.kind === "WAIVER" && (
-                <div className="max-h-64 overflow-y-auto rounded-md border border-line bg-subtle px-4 py-3 text-sm whitespace-pre-line">{r.waiverText}</div>
+                <div className="max-h-64 overflow-y-auto rounded-xl bg-fill px-4 py-3 text-[15px] whitespace-pre-line lg:text-sm">{r.waiverText}</div>
               )}
               {s?.signedName && (
                 <p className="text-sm text-ink-2">
@@ -211,11 +211,11 @@ async function ManagerView({ t }: { t: TripContext }) {
                 <tr key={row.member.id}>
                   <Td className="font-medium whitespace-nowrap">{row.member.user.name}</Td>
                   {row.cells.map((c) => (
-                    <Td key={c.requirement.id}>
+                    <Td key={c.requirement.id} label={c.requirement.title}>
                       <Badge tone={submissionStatusTone[c.state]}>{submissionStatusLabel[c.state]}</Badge>
                     </Td>
                   ))}
-                  <Td className="text-right tabular-nums">
+                  <Td label="Ready" className="text-right tabular-nums">
                     <Badge tone={row.percent === 100 ? "good" : "warn"}>{row.percent}%</Badge>
                   </Td>
                 </tr>
@@ -233,7 +233,7 @@ async function ManagerView({ t }: { t: TripContext }) {
           ) : (
             <ul className="divide-y divide-line">
               {requirements.map((r) => (
-                <li key={r.id} className="flex items-start justify-between gap-3 px-5 py-3">
+                <li key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3 sm:px-5">
                   <div className="min-w-0">
                     <div className="font-medium">{r.title}</div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
@@ -243,7 +243,7 @@ async function ManagerView({ t }: { t: TripContext }) {
                       {r.dueDate && <span>· due {formatDate(r.dueDate)}</span>}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-1">
+                  <div className="-ml-3 flex shrink-0 gap-1 sm:ml-0">
                     <ActionButton action={setRequirementRequiredAction.bind(null, slug, t.trip.id, r.id, !r.isRequired)} variant="ghost">
                       {r.isRequired ? "Make optional" : "Make required"}
                     </ActionButton>

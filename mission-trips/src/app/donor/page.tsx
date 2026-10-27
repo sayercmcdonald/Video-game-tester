@@ -64,12 +64,12 @@ export default async function DonorPage() {
                   {donations.map((d) => (
                     <tr key={d.id}>
                       <Td className="whitespace-nowrap text-ink-2">{formatDate(d.receivedAt ?? d.createdAt)}</Td>
-                      <Td>
+                      <Td label="To">
                         <div className="font-medium">{d.campaign.title}</div>
                         <div className="text-xs text-ink-3">{d.org.name}</div>
                       </Td>
-                      <Td className="text-right tabular-nums">{formatMoney(d.amountCents, d.currency)}</Td>
-                      <Td>
+                      <Td label="Amount" className="text-right tabular-nums">{formatMoney(d.amountCents, d.currency)}</Td>
+                      <Td label="Status">
                         <Badge tone={donationStatusTone[d.status]}>{d.status === "PENDING" ? "Processing" : donationStatusLabel[d.status]}</Badge>
                       </Td>
                       <Td className="text-right">

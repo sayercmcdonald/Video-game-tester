@@ -39,7 +39,7 @@ export default async function NotificationsPage() {
                 return (
                   <li key={n.id} className={cx(!n.readAt && "bg-accent-soft/40")}>
                     {n.href ? (
-                      <Link href={n.href} className="block px-5 py-3 hover:bg-subtle/60">
+                      <Link href={n.href} className="block px-5 py-3 min-h-11 transition-colors hover:bg-subtle active:bg-subtle">
                         {body}
                       </Link>
                     ) : (

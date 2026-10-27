@@ -36,22 +36,21 @@ export default async function TripLayout({ children, params }: { children: React
 
   return (
     <div>
-      <div className="mb-1 text-sm text-ink-3">
-        <Link href={`/o/${t.org.slug}/trips`} className="hover:underline">
-          Trips
-        </Link>
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">{t.trip.name}</h1>
-        <div className="flex items-center gap-2">
-          {t.perms.isLeader && <Badge tone="accent">You lead this trip</Badge>}
-          <Badge tone={tripStatusTone[t.trip.status]}>{tripStatusLabel[t.trip.status]}</Badge>
-        </div>
-      </div>
+      <Link href={`/o/${t.org.slug}/trips`} className="-ml-1 inline-flex min-h-11 items-center gap-1 text-[17px] text-accent lg:min-h-0 lg:text-[15px]">
+        <svg aria-hidden width="10" height="17" viewBox="0 0 10 17" className="mr-0.5">
+          <path d="M8.5 1.5 1.5 8.5l7 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Trips
+      </Link>
+      <h1 className="mt-1 text-[34px] leading-[1.12] font-bold tracking-tight lg:text-[28px]">{t.trip.name}</h1>
       <p className="mt-1 text-ink-2">
         {t.trip.destination} · {formatDateRange(t.trip.startDate, t.trip.endDate)}
       </p>
-      <div className="mt-5 mb-6 border-b border-line">
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <Badge tone={tripStatusTone[t.trip.status]}>{tripStatusLabel[t.trip.status]}</Badge>
+        {t.perms.isLeader && <Badge tone="accent">You lead this trip</Badge>}
+      </div>
+      <div className="mt-5 mb-6">
         <Tabs items={tabs} />
       </div>
       {children}

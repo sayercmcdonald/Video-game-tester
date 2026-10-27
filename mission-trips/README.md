@@ -10,6 +10,7 @@ A platform for churches to run mission trips end to end: recruit and approve a t
 | --- | --- |
 | [docs/PRD.md](docs/PRD.md) | Product requirements: who it's for, what it must do, what's out of scope |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the system is built and why, in plain English |
+| [docs/DESIGN.md](docs/DESIGN.md) | The design system, based on Apple's Human Interface Guidelines |
 | [docs/STATUS.md](docs/STATUS.md) | What's implemented, what's tested, what's incomplete |
 | [docs/TASKS.md](docs/TASKS.md) | Prioritized task list |
 | [docs/RISKS.md](docs/RISKS.md) | Known bugs, technical risks, and open decisions |

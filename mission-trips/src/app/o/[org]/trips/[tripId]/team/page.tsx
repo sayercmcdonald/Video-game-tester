@@ -121,7 +121,7 @@ export default async function TeamPage({ params }: { params: Promise<{ org: stri
                         </div>
                       </div>
                     </Td>
-                    <Td className="text-right tabular-nums">
+                    <Td label="Raised" className="text-right tabular-nums">
                       {f ? (
                         <>
                           {formatMoney(f.raisedCents, t.org.currency, { compact: true })}
@@ -132,7 +132,7 @@ export default async function TeamPage({ params }: { params: Promise<{ org: stri
                         "—"
                       )}
                     </Td>
-                    <Td className="text-right">
+                    <Td label="Requirements" className="text-right">
                       <Badge tone={r?.percent === 100 ? "good" : "warn"}>{r?.percent ?? 100}%</Badge>
                     </Td>
                     <Td className="text-right">

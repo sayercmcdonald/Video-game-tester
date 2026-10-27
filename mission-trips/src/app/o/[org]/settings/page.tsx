@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { pageOrgAdmin } from "@/server/page-guard";
-import { Alert, Card, CardBody, CardHeader, PageHeader } from "@/components/ui";
+import { Alert, Badge, Card, CardBody, CardHeader, ListRow, PageHeader } from "@/components/ui";
 import { ActionForm, SelectField, SubmitButton, TextArea, TextField } from "@/components/forms";
 import { TIMEZONES } from "@/lib/timezones";
 import { updateOrgSettingsAction } from "../actions";
@@ -16,12 +15,17 @@ export default async function SettingsPage({ params }: { params: Promise<{ org: 
     <div className="max-w-3xl space-y-6">
       <PageHeader title="Settings" />
       <Card>
-        <CardHeader title="Payments" description="Online giving is processed by Stripe and paid out directly to your church's bank account." />
-        <CardBody>
-          <Link href={`/o/${o.slug}/settings/payments`} className="text-sm font-medium text-accent hover:underline">
-            Manage payment account →
-          </Link>
-        </CardBody>
+        <ul className="divide-y divide-line">
+          <li>
+            <ListRow href={`/o/${o.slug}/settings/payments`} title="Payments" subtitle="Connect Stripe so gifts go straight to your bank account" trailing={<Badge tone={o.stripeChargesEnabled ? "good" : "neutral"}>{o.stripeChargesEnabled ? "On" : "Off"}</Badge>} />
+          </li>
+          <li>
+            <ListRow href={`/o/${o.slug}/audit`} title="Activity log" subtitle="Every change, money movement and view of private records" />
+          </li>
+          <li>
+            <ListRow href={`/o/${o.slug}/profile`} title="My profile" subtitle="Your contact, emergency and health details" />
+          </li>
+        </ul>
       </Card>
       <Card>
         <CardHeader title="Church details" />

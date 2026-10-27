@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand";
-import { SideNav, type NavItem } from "@/components/nav";
-import { UserMenu } from "@/components/top-bar";
+import { SideNav, TabBar, type NavItem } from "@/components/nav";
+import { GlassHeader, UserMenu } from "@/components/top-bar";
 import { Alert, Badge } from "@/components/ui";
 import { pageOrg } from "@/server/page-guard";
 import { db } from "@/server/db";
@@ -15,40 +15,53 @@ export default async function OrgLayout({ children, params }: { children: React.
     ctx.isAdmin ? db.tripMember.count({ where: { orgId: ctx.org.id, status: "APPLIED" } }) : Promise.resolve(0),
   ]);
 
-  const items: NavItem[] = [
-    { href: base, label: "Dashboard", exact: true },
-    { href: `${base}/trips`, label: "Trips", count: pendingApplications },
-    ...(ctx.isAdmin
-      ? [
-          { href: `${base}/people`, label: "People" },
-          { href: `${base}/donations`, label: "Donations" },
-          { href: `${base}/settings`, label: "Settings" },
-          { href: `${base}/audit`, label: "Activity log" },
-        ]
-      : []),
-    { href: `${base}/profile`, label: "My profile" },
-  ];
+  // Phones: up to five single-word tabs. Wide screens: the same places plus a few more in a sidebar.
+  const tabs: NavItem[] = ctx.isAdmin
+    ? [
+        { href: base, label: "Home", exact: true, icon: "home" },
+        { href: `${base}/trips`, label: "Trips", icon: "trips", count: pendingApplications },
+        { href: `${base}/donations`, label: "Giving", icon: "giving" },
+        { href: `${base}/people`, label: "People", icon: "people" },
+        { href: `${base}/settings`, label: "Settings", icon: "settings" },
+      ]
+    : [
+        { href: base, label: "Home", exact: true, icon: "home" },
+        { href: `${base}/trips`, label: "Trips", icon: "trips" },
+        { href: `${base}/profile`, label: "Profile", icon: "person" },
+      ];
+  const sidebar: NavItem[] = ctx.isAdmin
+    ? [...tabs, { href: `${base}/audit`, label: "Activity log" }, { href: `${base}/profile`, label: "My profile" }]
+    : tabs;
 
   return (
     <div className="min-h-dvh">
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <Logo href="/home" compact />
-            <span className="hidden text-line-strong sm:inline" aria-hidden>
-              /
+      <GlassHeader>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="hidden lg:inline-flex">
+            <Logo href="/home" />
+          </span>
+          <span className="hidden text-ink-3 lg:inline" aria-hidden>
+            /
+          </span>
+          <Link href={base} className="truncate text-[17px] font-semibold lg:text-[15px]">
+            {ctx.org.name}
+          </Link>
+          {ctx.isAdmin && ctx.org.status !== "ACTIVE" && (
+            <span className="hidden sm:inline-flex">
+              <Badge tone="warn">{ctx.org.status === "PENDING_REVIEW" ? "Pending review" : ctx.org.status}</Badge>
             </span>
-            <Link href={base} className="truncate font-medium">
-              {ctx.org.name}
-            </Link>
-            {ctx.isAdmin && ctx.org.status !== "ACTIVE" && <Badge tone="warn">{ctx.org.status === "PENDING_REVIEW" ? "Pending review" : ctx.org.status}</Badge>}
-          </div>
-          <UserMenu user={ctx.user} unread={unread} />
+          )}
         </div>
-      </header>
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8">
-        <aside className="lg:w-48 lg:shrink-0">
-          <SideNav items={items} />
+        <UserMenu user={ctx.user} unread={unread} />
+      </GlassHeader>
+      <div
+        className="mx-auto flex max-w-7xl gap-8 pt-5 pb-32 lg:pt-8 lg:pb-12"
+        style={{ paddingLeft: "max(16px, env(safe-area-inset-left))", paddingRight: "max(16px, env(safe-area-inset-right))" }}
+      >
+        <aside className="hidden w-52 shrink-0 lg:block">
+          <div className="sticky top-22">
+            <SideNav items={sidebar} />
+          </div>
         </aside>
         <main id="main" className="min-w-0 flex-1">
           {ctx.isAdmin && ctx.org.status === "PENDING_REVIEW" && (
@@ -62,6 +75,7 @@ export default async function OrgLayout({ children, params }: { children: React.
           {children}
         </main>
       </div>
+      <TabBar items={tabs} />
     </div>
   );
 }

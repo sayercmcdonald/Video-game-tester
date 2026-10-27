@@ -86,7 +86,7 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
                       name={`budget_${c}`}
                       inputMode="decimal"
                       defaultValue={centsToInput(s.categories.find((x) => x.category === c)?.budgetCents ?? 0)}
-                      className="w-full rounded-md border border-line-strong bg-surface py-1.5 pr-2 pl-6 text-right text-sm tabular-nums"
+                      className="w-full rounded-xl bg-fill py-2 pr-3 pl-6 text-right tabular-nums lg:py-1.5 lg:text-sm"
                     />
                   </div>
                 </div>
@@ -126,13 +126,13 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
                     </div>
                     {e.notes && <div className="mt-0.5 text-xs whitespace-pre-line text-ink-3">{e.notes}</div>}
                   </Td>
-                  <Td className="text-ink-2">{expenseCategoryLabel[e.category]}</Td>
-                  <Td className="text-right tabular-nums">{formatMoney(e.amountCents, cur)}</Td>
-                  <Td>
+                  <Td label="Category" className="text-ink-2">{expenseCategoryLabel[e.category]}</Td>
+                  <Td label="Amount" className="text-right tabular-nums">{formatMoney(e.amountCents, cur)}</Td>
+                  <Td label="Status">
                     <Badge tone={e.status === "PAID" ? "good" : e.status === "COMMITTED" ? "warn" : "neutral"}>{expenseStatusLabel[e.status]}</Badge>
                     {e.paidOn && <div className="text-xs text-ink-3">{formatDate(e.paidOn)}</div>}
                   </Td>
-                  <Td>
+                  <Td label="Receipt">
                     {e.receipt ? (
                       <a href={`/api/files/${e.receipt.id}`} className="text-sm text-accent hover:underline">
                         View
@@ -152,8 +152,8 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
                   <Td className="text-right">
                     {e.status !== "VOID" && (
                       <details className="relative inline-block text-left">
-                        <summary className="cursor-pointer list-none rounded-md px-2 py-1 text-sm text-ink-2 hover:bg-subtle">Actions</summary>
-                        <div className="absolute right-0 z-20 mt-1 w-64 space-y-4 rounded-md border border-line bg-surface p-4 shadow-lg">
+                        <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-full px-3 text-[15px] font-medium text-accent hover:bg-fill lg:min-h-8 lg:text-sm">Actions</summary>
+                        <div className="absolute right-0 z-20 mt-1 w-64 space-y-4 rounded-2xl bg-surface shadow-[0_12px_40px_rgb(0_0_0/0.18)] ring-1 ring-line p-4">
                           {e.status === "COMMITTED" && (
                             <ActionForm action={markExpensePaidAction.bind(null, slug, t.trip.id, e.id)} className="space-y-2">
                               <TextField label="Paid on" name="paidOn" type="date" defaultValue={toDateInput(new Date())} />
@@ -248,7 +248,7 @@ export default async function FinancesPage({ params }: { params: Promise<{ org: 
                       {l.memo && ` · ${l.memo}`}
                     </span>
                   </span>
-                  <span className={l.amountCents < 0 ? "text-bad tabular-nums" : "text-good tabular-nums"}>
+                  <span className={l.amountCents < 0 ? "shrink-0 whitespace-nowrap text-bad tabular-nums" : "shrink-0 whitespace-nowrap text-good tabular-nums"}>
                     {l.amountCents < 0 ? "−" : "+"}
                     {formatMoney(Math.abs(l.amountCents), cur)}
                   </span>

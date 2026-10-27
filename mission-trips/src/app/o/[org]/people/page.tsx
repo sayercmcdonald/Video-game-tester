@@ -62,12 +62,12 @@ export default async function PeoplePage({ params }: { params: Promise<{ org: st
                       </div>
                     </div>
                   </Td>
-                  <Td className="text-sm text-ink-2">
+                  <Td label="Trips" className="text-sm text-ink-2">
                     {m.user.tripMembers.length === 0
                       ? "—"
                       : m.user.tripMembers.map((tm) => `${tm.trip.name}${tm.role === "LEADER" ? " (leader)" : ""}`).join(", ")}
                   </Td>
-                  <Td>{m.role === "ADMIN" ? <Badge tone="accent">Admin</Badge> : <Badge>Member</Badge>}</Td>
+                  <Td label="Role">{m.role === "ADMIN" ? <Badge tone="accent">Admin</Badge> : <Badge>Member</Badge>}</Td>
                   <Td className="text-right whitespace-nowrap">
                     {m.userId !== ctx.user.id && (
                       <>

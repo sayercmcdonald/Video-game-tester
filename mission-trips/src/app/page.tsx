@@ -42,16 +42,16 @@ export default async function Landing() {
           shouldn&apos;t.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <LinkButton href="/signup?next=/new-church" className="h-10 px-5">
+          <LinkButton href="/signup?next=/new-church" className="h-12 px-6 lg:h-11">
             Set up your church
           </LinkButton>
-          <LinkButton href="/login" variant="secondary" className="h-10 px-5">
+          <LinkButton href="/login" variant="secondary" className="h-12 px-6 lg:h-11">
             I was invited to a trip
           </LinkButton>
         </div>
-        <div className="mt-20 grid gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line sm:grid-cols-2">
+        <div className="mt-16 grid gap-3 sm:grid-cols-2">
           {features.map((f) => (
-            <div key={f.title} className="bg-surface p-6">
+            <div key={f.title} className="rounded-[var(--radius-card)] bg-surface p-6">
               <h2 className="font-semibold">{f.title}</h2>
               <p className="mt-1.5 text-ink-2">{f.body}</p>
             </div>

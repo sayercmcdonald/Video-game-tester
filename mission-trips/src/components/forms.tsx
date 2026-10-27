@@ -58,14 +58,14 @@ export function FormMessage() {
   if (!state) return null;
   if (!state.ok && state.error) {
     return (
-      <div role="alert" className="mb-4 rounded-md border border-transparent bg-bad-soft px-3 py-2 text-sm text-bad">
+      <div role="alert" className="mb-4 rounded-2xl bg-bad-soft px-4 py-3 text-[15px] leading-snug text-bad lg:text-sm">
         {state.error}
       </div>
     );
   }
   if (state.ok && state.message) {
     return (
-      <div role="status" className="mb-4 rounded-md bg-good-soft px-3 py-2 text-sm text-good">
+      <div role="status" className="mb-4 rounded-2xl bg-good-soft px-4 py-3 text-[15px] leading-snug text-good lg:text-sm">
         {state.message}
       </div>
     );
@@ -73,8 +73,9 @@ export function FormMessage() {
   return null;
 }
 
+// iOS-style filled fields: no border, rounded, 44px tall on phones.
 const inputClass =
-  "block w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-[15px] text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-subtle aria-[invalid=true]:border-bad";
+  "block w-full min-h-11 lg:min-h-9 rounded-xl border border-transparent bg-fill px-3.5 py-2.5 lg:py-1.5 text-ink placeholder:text-ink-3 transition-[box-shadow,background-color] focus:bg-surface focus:outline-none focus:ring-2 focus:ring-accent focus-visible:outline-none disabled:opacity-60 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-bad file:mr-3 file:rounded-full file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-[15px] file:font-semibold file:text-accent-ink";
 
 /** Label + control + hint + error, wired together for screen readers. */
 export function Field({
@@ -98,18 +99,18 @@ export function Field({
   const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-err` : null].filter(Boolean).join(" ") || undefined;
   return (
     <div className={cx("space-y-1.5", className)}>
-      <label htmlFor={id} className="block text-sm font-medium text-ink">
+      <label htmlFor={id} className="block text-[15px] font-medium text-ink-2 lg:text-sm">
         {label}
         {optional && <span className="ml-1 font-normal text-ink-3">(optional)</span>}
       </label>
       {children({ id, name, "aria-invalid": error ? true : undefined, "aria-describedby": describedBy })}
       {hint && !error && (
-        <p id={`${id}-hint`} className="text-sm text-ink-3">
+        <p id={`${id}-hint`} className="text-[13px] leading-snug text-ink-3">
           {hint}
         </p>
       )}
       {error && (
-        <p id={`${id}-err`} className="text-sm text-bad">
+        <p id={`${id}-err`} className="text-[13px] leading-snug text-bad">
           {error}
         </p>
       )}
@@ -138,7 +139,7 @@ export function MoneyField(props: { label: ReactNode; name: string; hint?: React
     <Field label={label} name={name} hint={hint} optional={optional} className={className}>
       {(p) => (
         <div className="relative">
-          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-ink-3">$</span>
+          <span className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-ink-3">$</span>
           <input {...p} {...rest} inputMode="decimal" autoComplete="off" className={cx(inputClass, "pl-7 tabular-nums")} />
         </div>
       )}
@@ -180,13 +181,18 @@ export function SelectField({
   return (
     <Field label={label} name={name} hint={hint} optional={optional} className={className}>
       {(p) => (
-        <select {...p} {...sel} className={inputClass}>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <div className="relative">
+          <select {...p} {...sel} className={cx(inputClass, "appearance-none pr-9")}>
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <svg aria-hidden width="12" height="8" viewBox="0 0 12 8" className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-ink-3">
+            <path d="M1 1.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
       )}
     </Field>
   );
@@ -195,14 +201,15 @@ export function SelectField({
 export function CheckboxField({ label, name, hint, defaultChecked }: { label: ReactNode; name: string; hint?: ReactNode; defaultChecked?: boolean }) {
   const id = useId();
   return (
-    <div className="flex items-start gap-2.5">
-      <input id={id} type="checkbox" name={name} defaultChecked={defaultChecked} className="mt-0.5 size-4 rounded border-line-strong accent-[var(--color-accent)]" />
-      <div>
-        <label htmlFor={id} className="text-sm font-medium">
+    // An iOS-style switch row: label on the left, switch on the right.
+    <div className="flex items-center justify-between gap-4 rounded-xl bg-fill px-3.5 py-2.5">
+      <div className="min-w-0">
+        <label htmlFor={id} className="block font-medium">
           {label}
         </label>
-        {hint && <p className="text-sm text-ink-3">{hint}</p>}
+        {hint && <p className="text-[13px] leading-snug text-ink-3">{hint}</p>}
       </div>
+      <input id={id} type="checkbox" name={name} defaultChecked={defaultChecked} className="switch" />
     </div>
   );
 }
@@ -262,7 +269,7 @@ export function ActionButton({
         {children}
       </SubmitButton>
       {state && !state.ok && state.error && (
-        <span role="alert" className="mt-1 text-xs text-bad">
+        <span role="alert" className="mt-1 text-[13px] text-bad">
           {state.error}
         </span>
       )}

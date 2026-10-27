@@ -47,8 +47,8 @@ export default async function DocumentsPage({ params }: { params: Promise<{ org:
                     </a>
                     {d.kind === "REQUIREMENT_TEMPLATE" && <div className="text-xs text-ink-3">Blank form for a requirement</div>}
                   </Td>
-                  <Td className="text-ink-2">{formatDate(d.createdAt)}</Td>
-                  <Td className="text-right text-ink-2 tabular-nums">{size(d.sizeBytes)}</Td>
+                  <Td label="Added" className="text-ink-2">{formatDate(d.createdAt)}</Td>
+                  <Td label="Size" className="text-right text-ink-2 tabular-nums">{size(d.sizeBytes)}</Td>
                   {t.perms.manage && (
                     <Td className="text-right">
                       {d.kind === "TRIP_RESOURCE" && (

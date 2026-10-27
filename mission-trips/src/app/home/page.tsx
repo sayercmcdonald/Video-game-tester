@@ -54,7 +54,7 @@ export default async function HomePage() {
               <ul className="divide-y divide-line">
                 {visibleTrips.map((tm) => (
                   <li key={tm.id}>
-                    <Link href={`/o/${tm.trip.org.slug}/trips/${tm.trip.id}`} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-subtle/60">
+                    <Link href={`/o/${tm.trip.org.slug}/trips/${tm.trip.id}`} className="flex items-center justify-between gap-4 px-5 py-4 min-h-11 transition-colors hover:bg-subtle active:bg-subtle">
                       <div className="min-w-0">
                         <div className="font-medium">{tm.trip.name}</div>
                         <div className="text-sm text-ink-3">
@@ -83,7 +83,7 @@ export default async function HomePage() {
                 <ul className="divide-y divide-line">
                   {memberships.map((m) => (
                     <li key={m.id}>
-                      <Link href={`/o/${m.org.slug}`} className="flex items-center justify-between px-5 py-3 hover:bg-subtle/60">
+                      <Link href={`/o/${m.org.slug}`} className="flex items-center justify-between px-5 py-3 min-h-11 transition-colors hover:bg-subtle active:bg-subtle">
                         <span className="font-medium">{m.org.name}</span>
                         {m.role === "ADMIN" && <Badge tone="accent">Admin</Badge>}
                       </Link>

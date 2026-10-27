@@ -43,7 +43,7 @@ export default async function OrgDashboardPage({ params }: { params: Promise<{ o
           <ul className="divide-y divide-line">
             {attention.map((a) => (
               <li key={a.label}>
-                <Link href={a.href} className="flex items-center justify-between px-5 py-3 text-sm hover:bg-subtle/60">
+                <Link href={a.href} className="flex items-center justify-between px-5 py-3 text-sm min-h-11 transition-colors hover:bg-subtle active:bg-subtle">
                   <span>{a.label}</span>
                   <span aria-hidden className="text-ink-3">
                     →
@@ -83,18 +83,18 @@ export default async function OrgDashboardPage({ params }: { params: Promise<{ o
                       <span>{formatDateRange(trip.startDate, trip.endDate)}</span>
                     </div>
                   </Td>
-                  <Td>
+                  <Td label="Fundraising">
                     <GoalMeter raised={totals.raised} goal={trip.fundraisingGoalCents} currency={cur} label={`${trip.name} fundraising`} />
                     <div className="mt-1 text-xs text-ink-3 tabular-nums">
                       {formatMoney(totals.raised, cur, { compact: true })} of {formatMoney(trip.fundraisingGoalCents, cur, { compact: true })} ·{" "}
                       {percent(totals.raised, trip.fundraisingGoalCents)}%
                     </div>
                   </Td>
-                  <Td className="text-right tabular-nums">
+                  <Td label="Budget used" className="text-right tabular-nums">
                     {formatMoney(paidCents, cur, { compact: true })}
                     <div className="text-xs text-ink-3">of {formatMoney(trip.budgetCents, cur, { compact: true })}</div>
                   </Td>
-                  <Td className="text-right">
+                  <Td label="Team" className="text-right">
                     <span className="tabular-nums">{participants}</span>
                     {trip.participantLimit ? <span className="text-ink-3"> / {trip.participantLimit}</span> : null}
                     {incomplete > 0 ? <div className="text-xs text-warn">{incomplete} not ready</div> : participants > 0 ? <div className="text-xs text-good">All ready</div> : null}
@@ -117,7 +117,7 @@ export default async function OrgDashboardPage({ params }: { params: Promise<{ o
                 const days = daysUntil(r.dueDate!);
                 return (
                   <li key={r.id}>
-                    <Link href={`${base}/trips/${r.trip.id}/requirements`} className="flex items-center justify-between gap-3 px-5 py-3 text-sm hover:bg-subtle/60">
+                    <Link href={`${base}/trips/${r.trip.id}/requirements`} className="flex items-center justify-between gap-3 px-5 py-3 text-sm min-h-11 transition-colors hover:bg-subtle active:bg-subtle">
                       <span className="min-w-0">
                         <span className="font-medium">{r.title}</span>
                         <span className="block truncate text-ink-3">{r.trip.name}</span>
@@ -143,7 +143,7 @@ export default async function OrgDashboardPage({ params }: { params: Promise<{ o
                     {g.isAnonymous && <span className="text-ink-3"> (anonymous publicly)</span>}
                     <span className="block truncate text-ink-3">{g.campaign.title}</span>
                   </span>
-                  <span className="text-right tabular-nums">
+                  <span className="shrink-0 text-right whitespace-nowrap tabular-nums">
                     {formatMoney(g.amountCents, g.currency)}
                     <span className="block text-xs text-ink-3">{formatDate(g.receivedAt)}</span>
                   </span>
@@ -180,7 +180,7 @@ async function MemberHome({ orgId, userId, orgSlug, orgName }: { orgId: string; 
               .filter((tm) => tm.trip.status !== "DRAFT" || tm.role === "LEADER")
               .map((tm) => (
                 <li key={tm.id}>
-                  <Link href={`/o/${orgSlug}/trips/${tm.tripId}`} className="flex items-center justify-between px-5 py-4 hover:bg-subtle/60">
+                  <Link href={`/o/${orgSlug}/trips/${tm.tripId}`} className="flex items-center justify-between px-5 py-4 min-h-11 transition-colors hover:bg-subtle active:bg-subtle">
                     <span>
                       <span className="font-medium">{tm.trip.name}</span>
                       <span className="block text-sm text-ink-3">
