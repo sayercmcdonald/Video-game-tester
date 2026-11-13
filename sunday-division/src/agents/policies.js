@@ -266,4 +266,40 @@ const orchestrator = {
   },
 };
 
-module.exports = { POLICIES: { sales, client_success, project_manager, production, talent, qa, orchestrator }, TECHNICAL_TYPES, fileChecks, HOURS };
+// ── Command Agent (Morning Brief) ────────────────────────────────────
+const BRIEF_SECTIONS = [
+  ['Money', ['payment', 'payment_exception', 'cost']],
+  ['Needs you', ['state']],
+  ['Production', ['assignment', 'qa', 'deliverable', 'message']],
+  ['Agents', ['failure']],
+  ['Pipeline', ['inquiry', 'quote', 'stage']],
+];
+const command = {
+  /** Compiled from the facts without a model: every line is a fact, cited. */
+  async morning_brief(ctx) {
+    const { facts } = await call(ctx, 'get_brief_facts');
+    const of = (kinds) => facts.filter((f) => kinds.includes(f.kind));
+    const sections = BRIEF_SECTIONS.map(([title, kinds]) => ({
+      title,
+      items: of(kinds).filter((f) => f.kind !== 'state' || f.severity !== 'info' || /approval/.test(f.text)).slice(-8).map((f) => ({ text: f.text, fact_ids: [f.id] })),
+    })).filter((s) => s.items.length);
+    const payments = of(['payment']);
+    const urgent = facts.filter((f) => f.severity === 'urgent');
+    const approvals = facts.find((f) => f.ref === 'state:approvals');
+    const parts = [];
+    const cited = [];
+    if (payments.length) { parts.push(`${payments.length} payment(s) received`); cited.push(...payments.map((f) => f.id)); }
+    if (approvals) { parts.push(approvals.text.replace(/ for your approval$/, '')); cited.push(approvals.id); }
+    if (urgent.length) { parts.push(`${urgent.length} urgent item(s)`); cited.push(...urgent.map((f) => f.id)); }
+    const headline = parts.length ? { text: `${parts.join(' · ')}.`, fact_ids: cited.slice(0, 10) } : { text: 'A quiet period: nothing new since the last brief.', fact_ids: facts.length ? [facts[facts.length - 1].id] : [] };
+    const actions = [];
+    if (approvals && approvals.severity !== 'info') actions.push({ text: 'Review the items waiting in Approvals.', fact_ids: [approvals.id], action_type: null, target_id: null });
+    for (const f of of(['failure']).slice(0, 3)) {
+      const id = Number(String(f.ref).split(':')[1]);
+      actions.push({ text: 'Retry the failed agent task, or cancel it and handle the step yourself.', fact_ids: [f.id], action_type: 'retry_task', target_id: Number.isInteger(id) && id > 0 ? id : null });
+    }
+    return { headline, sections, actions: actions.slice(0, 6) };
+  },
+};
+
+module.exports = { POLICIES: { sales, client_success, project_manager, production, talent, qa, orchestrator, command }, TECHNICAL_TYPES, fileChecks, HOURS };

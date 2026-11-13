@@ -33,7 +33,7 @@ function createMetrics(app) {
         openByKind: db.all("SELECT kind, COUNT(*) AS n FROM human_tasks WHERE status = 'open' GROUP BY kind"),
         aiSpentMonthMicros: app.budget.aiSpentThisMonth(),
         aiBudgetMonthUsd: app.settings.get('ai_monthly_budget_usd'),
-        aiSpentAllMicros: n("SELECT COALESCE(SUM(cost_micros), 0) AS n FROM agent_runs WHERE provider = 'claude'"),
+        aiSpentAllMicros: n("SELECT COALESCE(SUM(cost_micros), 0) AS n FROM agent_runs WHERE provider IN ('claude','openai')"),
         externalSpentMicros: n("SELECT COALESCE(SUM(cost_micros), 0) AS n FROM agent_runs WHERE provider = 'integration'"),
         externalSpentMonthMicros: n("SELECT COALESCE(SUM(cost_micros), 0) AS n FROM agent_runs WHERE provider = 'integration' AND created_at >= ?", monthStart),
         budgetBlocked: n("SELECT COUNT(*) AS n FROM agent_runs WHERE status = 'budget_blocked' AND created_at >= ?", monthStart),
@@ -63,7 +63,7 @@ function createMetrics(app) {
           SUM(CASE WHEN attempts > 1 THEN attempts - 1 ELSE 0 END) AS retries,
           AVG(CASE WHEN status = 'succeeded' THEN (julianday(finished_at) - julianday(started_at)) * 86400000 END) AS avg_ms
         FROM jobs GROUP BY agent`);
-      const runs = db.all(`SELECT agent, COALESCE(SUM(cost_micros), 0) AS cost, SUM(provider = 'claude' AND status = 'ok') AS model_ok,
+      const runs = db.all(`SELECT agent, COALESCE(SUM(cost_micros), 0) AS cost, SUM(provider IN ('claude','openai') AND status = 'ok') AS model_ok,
           SUM(provider = 'rules') AS rules, SUM(status IN ('fallback','error','invalid_output','refused','budget_blocked')) AS problems,
           GROUP_CONCAT(DISTINCT NULLIF(model_served, '')) AS models, GROUP_CONCAT(DISTINCT NULLIF(prompt_version, '')) AS prompts
         FROM agent_runs GROUP BY agent`);

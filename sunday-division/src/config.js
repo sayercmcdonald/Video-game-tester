@@ -41,6 +41,23 @@ function createConfig(env = process.env) {
   const messagingProvider = (env.MESSAGING_PROVIDER || (isProd ? 'manual' : 'simulated')).toLowerCase();
   if (!['simulated', 'manual'].includes(messagingProvider)) problems.push(`Unknown MESSAGING_PROVIDER "${messagingProvider}".`);
   if (isProd && messagingProvider === 'simulated') problems.push('MESSAGING_PROVIDER=simulated is refused in production.');
+  // Model providers. OpenAI is only usable with an explicit model and its prices, because
+  // budgets cannot be enforced for a model whose price the application does not know.
+  let aiProvider = (env.AI_PROVIDER || 'auto').toLowerCase();
+  if (aiProvider === 'claude') aiProvider = 'anthropic';
+  if (!['auto', 'rules', 'anthropic', 'openai'].includes(aiProvider)) problems.push(`Unknown AI_PROVIDER "${aiProvider}".`);
+  const openaiPrices = {
+    input: Number(env.OPENAI_PRICE_INPUT_PER_MTOK || NaN),
+    output: Number(env.OPENAI_PRICE_OUTPUT_PER_MTOK || NaN),
+    cacheRead: Number(env.OPENAI_PRICE_CACHED_INPUT_PER_MTOK || env.OPENAI_PRICE_INPUT_PER_MTOK || NaN),
+  };
+  const openaiModel = env.OPENAI_MODEL || '';
+  const openaiPriced = [openaiPrices.input, openaiPrices.output, openaiPrices.cacheRead].every((n) => Number.isFinite(n) && n >= 0);
+  if (aiProvider === 'openai' && (!openaiModel || !openaiPriced)) {
+    problems.push('AI_PROVIDER=openai needs OPENAI_MODEL and OPENAI_PRICE_INPUT_PER_MTOK / OPENAI_PRICE_OUTPUT_PER_MTOK.');
+  }
+  const pushExtraHosts = String(env.PUSH_EXTRA_HOSTS || '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+  if (isProd && pushExtraHosts.length) problems.push('PUSH_EXTRA_HOSTS is for tests and development only.');
   if (problems.length) throw new Error('Configuration error:\n - ' + problems.join('\n - '));
 
   return {
@@ -66,10 +83,22 @@ function createConfig(env = process.env) {
       stripeApiBase: env.STRIPE_API_BASE || 'https://api.stripe.com',
     },
     ai: {
-      // auto: Claude when credentials are available, rules-based drafting otherwise.
-      provider: (env.AI_PROVIDER || 'auto').toLowerCase(),
+      // auto: Anthropic when its key is set, else OpenAI when fully configured, else rules.
+      provider: aiProvider,
       model: env.AI_MODEL || 'claude-opus-5-5',
       agentEffort: env.AI_AGENT_EFFORT || 'medium',
+      openai: {
+        model: openaiModel,
+        baseUrl: (env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+        prices: openaiPriced ? openaiPrices : null,
+      },
+    },
+    command: {
+      // Comma-separated. When set, this list is authoritative for who has founder access.
+      founderEmails: String(env.FOUNDER_EMAIL || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
+      timezone: env.COMPANY_TIMEZONE || '',
+      pushExtraHosts,
+      vapid: { publicKey: env.VAPID_PUBLIC_KEY || '', privateKey: env.VAPID_PRIVATE_KEY || '', subject: env.VAPID_SUBJECT || '' },
     },
     integrations: {
       index_v3: { baseUrl: (env.INDEX_V3_API_URL || '').replace(/\/+$/, ''), apiKey: env.INDEX_V3_API_KEY || '' },

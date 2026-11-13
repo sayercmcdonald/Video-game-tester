@@ -172,6 +172,14 @@ const TOOLS = {
       return out;
     },
   },
+  get_brief_facts: {
+    effect: 'read', input: empty, description: 'The verified facts collected for this Morning Brief (read only). Each has an id to cite.',
+    run(app, scope) {
+      const b = app.db.get('SELECT * FROM briefs WHERE job_id = ?', scope.jobId);
+      if (!b) throw new PermissionDeniedError('No brief is bound to this task.');
+      return { window: { from: b.window_start, to: b.window_end, timezone: app.settings.get('timezone') }, facts: JSON.parse(b.facts).map(({ id, kind, at, text, severity, ref }) => ({ id, kind, at, text, severity, ref })) };
+    },
+  },
   get_finance_summary: {
     effect: 'read', input: empty, description: 'Invoices, verified payment state and profitability for this project (read only).',
     run(app, scope) {
@@ -402,6 +410,12 @@ function toApiSchema(schema) {
   }
   return out;
 }
+/** Provider-neutral tool list for an action: { name, description, schema }. */
+function neutralTools(actionDef) {
+  return actionDef.tools.map((name) => (name === 'submit_result'
+    ? { name, description: 'Submit your final result for this task. Call exactly once, when you are finished.', schema: actionDef.output }
+    : { name, description: TOOLS[name].description, schema: TOOLS[name].input }));
+}
 function apiTools(actionDef) {
   return actionDef.tools.map((name) => {
     if (name === 'submit_result') {
@@ -465,4 +479,4 @@ function summarize(args) {
   return JSON.stringify(out).slice(0, 400);
 }
 
-module.exports = { TOOLS, bindTools, apiTools, toApiSchema, isMutating, routingOptions, ATTACHABLE };
+module.exports = { TOOLS, bindTools, apiTools, neutralTools, toApiSchema, isMutating, routingOptions, ATTACHABLE };

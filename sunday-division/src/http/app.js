@@ -9,13 +9,13 @@ const { parseCookies } = require('./session');
 const STATIC_TYPES = {
   '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp',
-  '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8',
+  '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8',
 };
 
 class Router {
   constructor() { this.routes = []; }
   /**
-   * opts: { auth: 'admin'|'portal', raw: true (unparsed body, no origin/CSRF check),
+   * opts: { auth: 'admin'|'portal'|'contractor'|'founder', raw: true (unparsed body, no origin/CSRF check),
    *         maxBody: bytes }
    */
   add(method, pattern, opts, handler) {
@@ -158,7 +158,19 @@ function createServer(app, router, views) {
       if (portal) ctx.client = app.db.get('SELECT * FROM clients WHERE id = ?', portal.client_id) || null;
       const contractor = app.sessions.load('contractor', ctx.cookies);
       if (contractor) ctx.contractor = app.db.get("SELECT * FROM contractors WHERE id = ? AND status = 'approved'", contractor.contractor_id) || null;
-      ctx.session = { admin, portal, contractor }[route.opts.auth] || null;
+      if (route.opts.auth === 'founder') {
+        // Founder access is decided here, on the server, for every request: a valid founder
+        // session AND the account still flagged as founder. Hidden navigation is not a control.
+        const founder = app.sessions.load('founder', ctx.cookies);
+        ctx.user = founder ? app.db.get('SELECT id, email, name, technical_reviewer, founder FROM users WHERE id = ? AND founder = 1', founder.user_id) || null : null;
+        ctx.session = ctx.user ? founder : null;
+        if (!ctx.user) {
+          if (url.pathname.startsWith('/command/api/')) return ctx.json({ error: 'Sign in to Sunday Division Command.' }, 401);
+          return ctx.redirect('/command/login');
+        }
+      } else {
+        ctx.session = { admin, portal, contractor }[route.opts.auth] || null;
+      }
       if (route.opts.auth === 'admin' && !ctx.user) return ctx.redirect('/admin/login');
       if (route.opts.auth === 'portal' && !ctx.client) return ctx.redirect('/portal');
       if (route.opts.auth === 'contractor' && !ctx.contractor) return ctx.redirect('/contractor');
@@ -174,9 +186,11 @@ function createServer(app, router, views) {
         } else {
           if (!sameOrigin(ctx)) throw new HttpError(403, 'Cross-site request refused.');
           const parsed = await parseRequestBody(req, route.opts.maxBody || 256 * 1024);
+          if (parsed.json && !route.opts.json) throw new HttpError(415, 'Unsupported content type.');
           ctx.body = parsed.fields;
           ctx.files = parsed.files;
-          if (route.opts.auth && !app.sessions.checkCsrf(ctx.session, ctx.body._csrf)) {
+          const submitted = ctx.body._csrf || req.headers['x-csrf-token'];
+          if (route.opts.auth && !app.sessions.checkCsrf(ctx.session, submitted)) {
             throw new HttpError(403, 'Your session expired. Go back, refresh the page and try again.');
           }
         }
@@ -187,7 +201,7 @@ function createServer(app, router, views) {
       const status = err instanceof HttpError ? err.status : 500;
       if (status === 500) console.error(`[error] ${req.method} ${url.pathname}`, err);
       const message = status === 500 ? 'Something went wrong on our side.' : err.message;
-      if (url.pathname.startsWith('/webhooks/')) return ctx.json({ error: message }, status);
+      if (url.pathname.startsWith('/webhooks/') || url.pathname.startsWith('/command/api/')) return ctx.json({ error: message }, status);
       try {
         ctx.html(views.errorPage(ctx, status, message), status);
       } catch (renderError) {

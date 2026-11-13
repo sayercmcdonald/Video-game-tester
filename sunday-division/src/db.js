@@ -516,6 +516,140 @@ CREATE INDEX idx_runs_job ON agent_runs(job_id);
 -- Agents retired in this release: their unfinished jobs are cancelled (finished history is kept).
 UPDATE jobs SET status = 'cancelled', error = 'Agent retired in v3; replaced by the business agents.', finished_at = datetime('now')
   WHERE status IN ('queued','running','failed') AND agent IN ('sales_intake','index_coordinator','form_coordinator','technical_qa','creative_qa','finance_ops');
+`,
+// v4 — Sunday Division Command (founder app), provider-independent models, notifications.
+`
+-- Founder access is a flag set from the server side only (FOUNDER_EMAIL or npm run founder).
+ALTER TABLE users ADD COLUMN founder INTEGER NOT NULL DEFAULT 0;
+-- Founder sessions + step-up verification time. Existing sessions are kept.
+CREATE TABLE sessions_v4 (
+  token_hash TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('admin','portal','contractor','founder')),
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+  contractor_id INTEGER REFERENCES contractors(id) ON DELETE CASCADE,
+  csrf TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  verified_at TEXT
+);
+INSERT INTO sessions_v4 SELECT token_hash, kind, user_id, client_id, contractor_id, csrf, created_at, expires_at, created_at FROM sessions;
+DROP TABLE sessions;
+ALTER TABLE sessions_v4 RENAME TO sessions;
+CREATE INDEX idx_sessions_expiry ON sessions(expires_at);
+-- Model runs can come from OpenAI as well as Anthropic.
+CREATE TABLE agent_runs_v4 (
+  id INTEGER PRIMARY KEY,
+  job_id INTEGER REFERENCES jobs(id),
+  workflow_id INTEGER,
+  project_id INTEGER,
+  agent TEXT NOT NULL,
+  agent_version TEXT NOT NULL DEFAULT '',
+  task TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('claude','openai','simulated','rules','integration','system')),
+  model_requested TEXT NOT NULL DEFAULT '',
+  model_served TEXT NOT NULL DEFAULT '',
+  prompt_version TEXT NOT NULL DEFAULT '',
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_micros INTEGER NOT NULL DEFAULT 0,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('ok','fallback','error','budget_blocked','invalid_output','refused')),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+INSERT INTO agent_runs_v4 SELECT * FROM agent_runs;
+DROP TABLE agent_runs;
+ALTER TABLE agent_runs_v4 RENAME TO agent_runs;
+CREATE INDEX idx_runs_created ON agent_runs(created_at);
+CREATE INDEX idx_runs_project ON agent_runs(project_id);
+CREATE INDEX idx_runs_job ON agent_runs(job_id);
+-- Which provider a model-brain task started on; it finishes there.
+ALTER TABLE agent_sessions ADD COLUMN provider TEXT NOT NULL DEFAULT '';
+UPDATE agent_sessions SET provider = 'anthropic' WHERE brain = 'model';
+
+-- Every change made from Command is proposed, previewed and confirmed through this table.
+CREATE TABLE command_actions (
+  id INTEGER PRIMARY KEY,
+  type TEXT NOT NULL,
+  params TEXT NOT NULL,
+  preview TEXT NOT NULL,
+  digest TEXT NOT NULL,
+  risk TEXT NOT NULL CHECK (risk IN ('low','high')),
+  source TEXT NOT NULL CHECK (source IN ('approvals','chat','brief','settings')),
+  conversation_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed','executed','cancelled','failed','expired')),
+  proposed_by TEXT NOT NULL,
+  decided_by INTEGER REFERENCES users(id),
+  result TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  decided_at TEXT
+);
+CREATE INDEX idx_command_actions_status ON command_actions(status, id);
+CREATE TABLE command_conversations (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL DEFAULT '',
+  provider TEXT NOT NULL DEFAULT '',
+  transcript TEXT NOT NULL DEFAULT '[]',
+  cost_micros INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE command_messages (
+  id INTEGER PRIMARY KEY,
+  conversation_id INTEGER NOT NULL REFERENCES command_conversations(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content TEXT NOT NULL,
+  data TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_command_messages ON command_messages(conversation_id, id);
+CREATE TABLE briefs (
+  id INTEGER PRIMARY KEY,
+  brief_date TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  window_start TEXT NOT NULL,
+  window_end TEXT NOT NULL,
+  facts TEXT NOT NULL,
+  content TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','ready','failed')),
+  brain TEXT NOT NULL DEFAULT '',
+  dropped INTEGER NOT NULL DEFAULT 0,
+  job_id INTEGER REFERENCES jobs(id),
+  requested_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  ready_at TEXT
+);
+CREATE TABLE notifications (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('paid_project','approval','workflow_failed','contractor_delay','project_risk','unusual_expense','brief')),
+  severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info','attention','urgent')),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  link TEXT NOT NULL DEFAULT '',
+  dedupe_key TEXT NOT NULL UNIQUE,
+  project_id INTEGER,
+  push_status TEXT NOT NULL DEFAULT 'none' CHECK (push_status IN ('none','sent','failed','off')),
+  created_at TEXT NOT NULL,
+  read_at TEXT
+);
+CREATE INDEX idx_notifications_unread ON notifications(read_at, id);
+CREATE TABLE push_subscriptions (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL DEFAULT '',
+  auth TEXT NOT NULL DEFAULT '',
+  label TEXT NOT NULL DEFAULT '',
+  failures INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  last_success_at TEXT
+);
 `];
 
 function openDb(config) {

@@ -73,7 +73,7 @@ function register(router, app) {
   const TASK_FILTERS = { active: "j.status IN ('queued','running')", completed: "j.status = 'succeeded'", failed: "j.status IN ('failed','cancelled')", all: '1 = 1' };
   router.get('/admin/ops/tasks', A, (ctx) => {
     const filter = TASK_FILTERS[ctx.query.get('status')] ? ctx.query.get('status') : 'active';
-    const rows = app.db.all(`SELECT j.*, s.brain, s.turns, s.tool_calls, s.denied_calls, s.input_tokens, s.output_tokens, s.cost_micros,
+    const rows = app.db.all(`SELECT j.*, s.brain, s.provider, s.turns, s.tool_calls, s.denied_calls, s.input_tokens, s.output_tokens, s.cost_micros,
         (SELECT 1 FROM agent_runs r WHERE r.job_id = j.id AND r.provider = 'simulated' LIMIT 1) AS simulated, p.code AS project_code, i.ref AS inquiry_ref
       FROM jobs j LEFT JOIN agent_sessions s ON s.job_id = j.id LEFT JOIN projects p ON p.id = j.project_id LEFT JOIN inquiries i ON i.id = j.inquiry_id
       WHERE ${TASK_FILTERS[filter]} ORDER BY j.id DESC LIMIT 200`);

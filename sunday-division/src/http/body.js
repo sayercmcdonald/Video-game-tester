@@ -88,6 +88,13 @@ async function parseRequestBody(req, limit) {
   if (type.startsWith('application/x-www-form-urlencoded')) {
     return { fields: parseUrlEncoded(buf), files: [] };
   }
+  if (type.startsWith('application/json')) {
+    // JSON is accepted for the founder app's API only; values stay plain data (no prototype keys).
+    let parsed;
+    try { parsed = buf.length ? JSON.parse(buf.toString('utf8')) : {}; } catch { throw new HttpError(400, 'Malformed JSON.'); }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new HttpError(400, 'Expected a JSON object.');
+    return { fields: Object.assign(Object.create(null), parsed), files: [], json: true };
+  }
   if (!buf.length) return { fields: Object.create(null), files: [] };
   throw new HttpError(415, 'Unsupported content type.');
 }

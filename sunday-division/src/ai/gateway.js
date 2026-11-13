@@ -3,6 +3,7 @@ const { sha256 } = require('../lib/crypto');
 const { validate } = require('../lib/schema');
 const { now } = require('../lib/util');
 const { SYSTEM, TASKS } = require('./prompts');
+const { toOpenAISchema, fromOpenAIArgs } = require('./providers/schema');
 
 const RULES_VERSION = 'rules@1';
 
@@ -18,29 +19,55 @@ function createAiGateway(app) {
   const { config, db } = app;
   const promptVersion = (task) => sha256(SYSTEM + TASKS[task].instruction + JSON.stringify(TASKS[task].schema)).slice(0, 12);
 
+  /** One structured call through whichever provider is selected. Returns { data, usage, model }. */
+  async function structured(adapter, task, context) {
+    if (adapter.id === 'anthropic' && !adapter.overridden) return require('./claude').draftWithClaude(config, task, context);
+    if (adapter.id === 'openai') {
+      const spec = TASKS[task];
+      const response = await adapter.transport({
+        model: adapter.model(), max_completion_tokens: 16000,
+        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: `${spec.instruction}\n\n${context}` }],
+        response_format: { type: 'json_schema', json_schema: { name: task, strict: true, schema: toOpenAISchema(spec.schema) } },
+      });
+      const choice = (response.choices || [])[0] || {};
+      const u = response.usage || {};
+      const usage = { input: u.prompt_tokens || 0, output: u.completion_tokens || 0 };
+      if (choice.message && choice.message.refusal) throw Object.assign(new Error('model declined the request'), { usage, model: response.model, refusal: true });
+      if (choice.finish_reason === 'length') throw Object.assign(new Error('response was truncated'), { usage, model: response.model });
+      return { data: fromOpenAIArgs(spec.schema, JSON.parse(choice.message.content)), usage, model: response.model || adapter.model() };
+    }
+    throw new Error('No structured-output path for this provider.');
+  }
+
   const gateway = {
-    /** Replaceable in tests; defaults to the Anthropic SDK. Must return { data, usage, model }. */
-    transport: (task, context) => require('./claude').draftWithClaude(config, task, context),
+    /** Replaceable in tests (recorded as Claude); otherwise the selected provider. Must return { data, usage, model }. */
+    transport: null,
     transportOverridden: false,
+    adapter: () => (gateway.transportOverridden ? null : app.providers.selected()),
     enabled() {
       if (gateway.transportOverridden) return true; // tests inject a fake model
-      if (config.ai.provider === 'rules') return false;
-      if (config.ai.provider === 'claude') return true;
-      return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+      return Boolean(app.providers.selected());
     },
-    mode: () => (gateway.enabled() ? `Claude (${config.ai.model})` : 'Rules-based drafting'),
+    mode() {
+      if (gateway.transportOverridden) return `Claude (${config.ai.model})`;
+      const a = app.providers.selected();
+      return a ? `${a.label} (${a.model()})` : 'Rules-based drafting';
+    },
     useTransport(fn) { gateway.transport = fn; gateway.transportOverridden = true; },
 
     /**
      * meta: { agent, agentVersion, jobId, workflowId, projectId }
-     * Returns { data, source: 'claude'|'rules', runId }.
+     * Returns { data, source: 'claude'|'openai'|'rules', runId }.
      */
     async draft(task, context, fallback, meta = {}) {
+      const adapter = gateway.adapter();
+      const recordAs = adapter ? adapter.recordAs() : 'claude';
+      const modelName = adapter ? adapter.model() : config.ai.model;
       const record = (row) => db.insert('agent_runs', {
         job_id: meta.jobId || null, workflow_id: meta.workflowId || null, project_id: meta.projectId || null,
         agent: meta.agent || 'staff_assist', agent_version: meta.agentVersion || '', task,
-        prompt_version: row.provider === 'claude' ? promptVersion(task) : RULES_VERSION,
-        model_requested: row.provider === 'claude' ? config.ai.model : '', created_at: now(), ...row,
+        prompt_version: row.provider !== 'rules' ? promptVersion(task) : RULES_VERSION,
+        model_requested: row.provider !== 'rules' ? modelName : '', created_at: now(), ...row,
       });
       const useRules = (status, detail, extra = {}) => {
         const data = fallback();
@@ -50,24 +77,24 @@ function createAiGateway(app) {
 
       if (!gateway.enabled()) return useRules('ok', 'model not configured');
       try {
-        app.budget.assertAi({ model: config.ai.model, inputChars: SYSTEM.length + context.length + 2000, maxOutputTokens: 4000, projectId: meta.projectId });
+        app.budget.assertAi({ model: modelName, inputChars: SYSTEM.length + context.length + 2000, maxOutputTokens: 4000, projectId: meta.projectId });
       } catch (err) {
         if (err.kind !== 'budget') throw err;
         // Spending limit reached: no model call is made at all.
-        record({ provider: 'claude', status: 'budget_blocked', detail: err.message });
+        record({ provider: recordAs, status: 'budget_blocked', detail: err.message });
         return useRules('fallback', 'budget limit reached');
       }
 
       const started = Date.now();
       let result;
       try {
-        result = await gateway.transport(task, context);
+        result = gateway.transportOverridden ? await gateway.transport(task, context) : await structured(adapter, task, context);
       } catch (err) {
         const usage = err.usage || { input: 0, output: 0 };
         record({
-          provider: 'claude', status: err.refusal ? 'refused' : 'error', detail: String(err.message).slice(0, 300),
+          provider: recordAs, status: err.refusal ? 'refused' : 'error', detail: String(err.message).slice(0, 300),
           model_served: err.model || '', input_tokens: usage.input, output_tokens: usage.output,
-          cost_micros: app.budget.tokenCostMicros(err.model || config.ai.model, usage.input, usage.output), latency_ms: Date.now() - started,
+          cost_micros: app.budget.tokenCostMicros(err.model || modelName, usage.input, usage.output), latency_ms: Date.now() - started,
         });
         console.error(`[ai] ${task}: model call failed, using rules —`, err.message);
         return useRules('fallback', 'model call failed');
@@ -75,8 +102,8 @@ function createAiGateway(app) {
 
       const usage = result.usage || { input: 0, output: 0 };
       const base = {
-        provider: 'claude', model_served: result.model || '', input_tokens: usage.input, output_tokens: usage.output,
-        cost_micros: app.budget.tokenCostMicros(result.model || config.ai.model, usage.input, usage.output), latency_ms: Date.now() - started,
+        provider: recordAs, model_served: result.model || '', input_tokens: usage.input, output_tokens: usage.output,
+        cost_micros: app.budget.tokenCostMicros(result.model || modelName, usage.input, usage.output), latency_ms: Date.now() - started,
       };
       const errors = validate(TASKS[task].schema, result.data);
       if (errors.length) {
@@ -84,7 +111,7 @@ function createAiGateway(app) {
         return useRules('fallback', 'model output failed validation');
       }
       const runId = record({ ...base, status: 'ok' });
-      return { data: result.data, source: 'claude', runId };
+      return { data: result.data, source: recordAs === 'openai' ? 'openai' : 'claude', runId };
     },
   };
   return gateway;

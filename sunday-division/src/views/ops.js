@@ -115,7 +115,7 @@ ${wf.summary ? html`<section class="card"><h2>Completion summary</h2><pre class=
   <section class="card"><h2>Agent runs — model, version and cost</h2>
   ${d.runs.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Agent · task</th><th>Provider</th><th>Model / prompt</th><th class="r">Tokens</th><th class="r">Cost</th><th>Status</th></tr></thead><tbody>
   ${d.runs.map((r) => html`<tr><td>${r.agent} <span class="muted small">v${r.agent_version}</span><br><span class="small">${r.task}</span></td><td>${r.provider}</td>
-    <td class="small mono">${r.model_served || r.model_requested || '—'}${r.provider === 'claude' ? html`<br>prompt ${r.prompt_version}` : ''}</td><td class="r small">${r.input_tokens} / ${r.output_tokens}</td><td class="r">${usd(r.cost_micros)}</td>
+    <td class="small mono">${r.model_served || r.model_requested || '—'}${r.provider === 'claude' || r.provider === 'openai' ? html`<br>prompt ${r.prompt_version}` : ''}</td><td class="r small">${r.input_tokens} / ${r.output_tokens}</td><td class="r">${usd(r.cost_micros)}</td>
     <td>${badge(r.status)}${r.detail ? html`<br><span class="small muted">${r.detail}</span>` : ''}</td></tr>`)}</tbody></table>` : empty('No runs yet.')}
   </section>
   <section class="card"><h2>Tool calls</h2>
@@ -219,12 +219,18 @@ ${rows.map((r) => html`<tr>
   <td><a href="/admin/ops/tasks/${r.id}">${r.agent}.${r.action}</a>${r.error ? html`<br><span class="small muted">${r.error_kind}: ${r.error}</span>` : ''}</td>
   <td>${r.project_code || r.inquiry_ref || '—'}</td>
   <td>${badge(r.status)}${r.attempts > 1 ? html` <span class="small muted">${r.attempts} attempts</span>` : ''}</td>
-  <td>${r.brain ? (r.brain === 'model' ? (r.simulated ? badge('queued', 'Simulated model') : badge('queued', 'Claude')) : badge('ok', 'Rules')) : '—'}</td>
+  <td>${r.brain ? brainBadge(r.brain, r.simulated, r.provider) : '—'}</td>
   <td class="r">${r.turns ?? '—'}</td><td class="r">${r.tool_calls ?? '—'}${r.denied_calls ? html` <span class="badge badge--on">${r.denied_calls} denied</span>` : ''}</td>
   <td class="r small">${r.input_tokens ?? 0} / ${r.output_tokens ?? 0}</td><td class="r">${usd(r.cost_micros || 0)}</td>
   <td class="small">${fmtDate(r.finished_at || r.started_at || r.created_at, true)}</td>
 </tr>`)}</tbody></table>` : empty('Nothing here.')}`,
   });
+}
+
+const PROVIDER_LABEL = { anthropic: 'Claude', openai: 'OpenAI' };
+function brainBadge(brain, simulated, provider) {
+  if (brain !== 'model') return badge('ok', 'Rules');
+  return simulated ? badge('queued', 'Simulated model') : badge('queued', PROVIDER_LABEL[provider] || 'Model');
 }
 
 function blockView(b) {
@@ -240,15 +246,17 @@ function blockView(b) {
 }
 
 function agentTask(ctx, { job, session, runs, calls, workflow }) {
-  const transcript = session ? JSON.parse(session.transcript) : [];
+  const stored = session ? JSON.parse(session.transcript) : [];
+  const adapter = session && session.brain === 'model' && ctx.app.providers.get(session.provider || 'anthropic');
+  const transcript = adapter ? adapter.display(stored) : stored;
   const simulated = runs.some((r) => r.provider === 'simulated');
   return shell(ctx, {
     title: `Agent task ${job.id}`, path: '/admin/ops',
     body: html`<header class="a-head"><div><p class="label"><a href="/admin/ops/tasks">Agent tasks</a> / #${job.id}</p>
     <h1 class="display display--m">${job.agent}.${job.action}</h1>
-    <p class="muted">${badge(job.status)} ${session ? (session.brain === 'model' ? (simulated ? badge('queued', 'Simulated model') : badge('queued', 'Claude')) : badge('ok', 'Rules')) : ''} ${job.attempts}/${job.max_attempts} attempt(s)${workflow ? html` · <a href="/admin/ops/workflows/${workflow.id}">workflow ${workflow.id}</a>` : ''}</p></div>
+    <p class="muted">${badge(job.status)} ${session ? brainBadge(session.brain, simulated, session.provider) : ''} ${job.attempts}/${job.max_attempts} attempt(s)${workflow ? html` · <a href="/admin/ops/workflows/${workflow.id}">workflow ${workflow.id}</a>` : ''}</p></div>
   <div class="a-head__actions">${['failed', 'cancelled'].includes(job.status) ? btn(ctx, `/admin/ops/jobs/${job.id}/retry`, 'Retry', { solid: true }) : ''}</div></header>
-${simulated ? html`<div class="a-flash"><strong>Simulated model.</strong> These turns came from a scripted test model, not from Claude.</div>` : ''}
+${simulated ? html`<div class="a-flash"><strong>Simulated model.</strong> These turns came from a scripted test model, not from a real provider.</div>` : ''}
 ${job.error ? html`<div class="a-flash a-flash--error">${job.error_kind}: ${job.error}</div>` : ''}
 <div class="a-cols a-cols--wide">
 <div>

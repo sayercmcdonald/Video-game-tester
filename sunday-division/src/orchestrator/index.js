@@ -34,6 +34,7 @@ function createOrchestrator(app) {
         }
         const wf = engine.findFor(ev);
         if (wf) engine.advance(wf.id);
+        if (app.command) app.command.onEvent(ev);
       } catch (err) {
         console.error(`[orchestrator] event ${ev.type} #${ev.id} failed:`, err);
         app.audit.log('system', 'orchestrator.event_error', { entity: 'event', entityId: ev.id, projectId: ev.project_id, detail: `${ev.type}: ${err.message}` });
@@ -45,6 +46,9 @@ function createOrchestrator(app) {
 
   async function execute(job) {
     await runJob(app, queue, job, clock);
+    if (app.command) {
+      try { app.command.afterJob(queue.get(job.id)); } catch (err) { console.error('[orchestrator] command hook failed:', err); }
+    }
     if (job.workflow_id) {
       try { engine.advance(job.workflow_id); } catch (err) { console.error('[orchestrator] advance failed:', err); }
     }
@@ -63,6 +67,7 @@ function createOrchestrator(app) {
       for (const wfId of queue.recoverExpired()) engine.advance(wfId);
       if (globallyPaused()) return;
       processEvents();
+      if (app.command) app.command.tick();
       if (clock() - lastSweep > opts.sweepMs) { lastSweep = clock(); sweep(); }
       const free = opts.concurrency - inflight.size;
       if (free > 0) {

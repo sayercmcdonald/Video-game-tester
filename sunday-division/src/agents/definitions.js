@@ -211,6 +211,37 @@ Your role: Client Success Agent. You keep the client informed in a warm, precise
     },
   },
   {
+    id: 'command', name: 'Command Agent', version: '1.0.0',
+    purpose: 'Writes the founder\'s Morning Brief from verified facts collected by the application.',
+    systemPrompt: `${OPERATING_RULES}
+
+Your role: Command Agent. You brief the founder of Sunday Division each morning. The application has already collected verified facts from its records — payments, quotes, contractor activity, QA results, failures, approvals waiting — each with an id like F3. You summarise them; you add nothing.
+- Every sentence you write must be supported by the facts you cite in fact_ids. Statements without a valid citation are removed before the founder sees them.
+- Never state a number, name, date or outcome that is not in a cited fact. Do not speculate about causes.
+- Lead with what needs the founder: money received, decisions waiting, anything failing or late.
+- Recommended actions are suggestions the founder confirms in the app; you cannot carry them out. When one matches an action type, set action_type and target_id from the facts (otherwise null).
+- Facts marked SIMULATED come from development data; say so when you mention them.`,
+    escalation: ['Nothing to escalate: the brief is read-only and every recommendation needs the founder\'s confirmation.'],
+    actions: {
+      morning_brief: {
+        description: 'Summarise verified events since the last brief and recommend actions.',
+        instruction: 'Call get_brief_facts. Write the brief: a one-line headline, up to five short sections (for example Money, Needs you, Production, Agents, Pipeline) and up to five recommended actions. Cite fact ids for every item. Then call submit_result.',
+        tools: ['get_brief_facts', 'submit_result'],
+        input: S.obj({ brief_id: S.int(1) }),
+        output: S.obj({
+          headline: S.obj({ text: S.str(200), fact_ids: S.arr(S.str(8), 10) }),
+          sections: S.arr(S.obj({ title: S.str(60), items: S.arr(S.obj({ text: S.str(400), fact_ids: S.arr(S.str(8), 12) }), 10) }), 6),
+          actions: S.arr(S.obj({
+            text: S.str(300), fact_ids: S.arr(S.str(8), 8),
+            action_type: S.nullable(S.enum(['send_quote', 'approve_assignment', 'send_message', 'issue_invoice', 'sign_off_deliverable', 'release_deliverable', 'retry_task', 'draft_quote'])),
+            target_id: S.nullable(S.int(1)),
+          }), 6),
+        }),
+        brains: ['model', 'rules'], maxTurns: 4, retry: RETRY_MODEL, timeoutMs: 300e3,
+      },
+    },
+  },
+  {
     id: 'orchestrator', name: 'Operations Orchestrator', version: '2.0.0',
     purpose: 'Deterministic application code that moves each project through its workflow, checks payments and drafts invoices. Uses no model.',
     systemPrompt: '',

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const { sha256 } = require('../lib/crypto');
 const { validate } = require('../lib/schema');
 const { now, HttpError } = require('../lib/util');
-const { apiTools } = require('./tools');
+const { neutralTools } = require('./tools');
 const { POLICIES } = require('./policies');
 const { FatalError, PermissionDeniedError, classify } = require('../orchestrator/errors');
 
@@ -16,7 +16,8 @@ const RESULT_LIMIT = 20000;
 /**
  * Runs one agent job. Two brains share the same tools, permissions and output schema:
  *
- *   model — Claude decides which tools to call (manual tool-use loop). Every turn is
+ *   model — a language model (Anthropic or OpenAI, through src/ai/providers) decides which
+ *           tools to call (manual tool-use loop). Every turn is
  *           appended to agent_sessions.transcript before the next step, so a restart or a
  *           retry resumes exactly where it stopped; state-changing tool calls are keyed by
  *           tool_use id in the effect ledger, so resuming never repeats an effect.
@@ -33,26 +34,28 @@ function createRuntime(app) {
     ...Object.values(fields), now(), jobId,
   );
 
-  function startSession(job, agent, action, brain, transcript) {
-    db.insertIgnore('agent_sessions', { job_id: job.id, agent: agent.id, action: action.id, brain, transcript: JSON.stringify(transcript), created_at: now(), updated_at: now() });
+  function startSession(job, agent, action, brain, transcript, provider = '') {
+    db.insertIgnore('agent_sessions', { job_id: job.id, agent: agent.id, action: action.id, brain, provider, transcript: JSON.stringify(transcript), created_at: now(), updated_at: now() });
     return getSession(job.id);
   }
 
+  /** Returns { brain: 'model'|'rules', provider }. A task keeps the brain and provider it started with. */
   function chooseBrain(job, agent, action) {
     const existing = getSession(job.id);
-    if (existing) return existing.brain;
-    if (action.brains.includes('model') && app.agentModel.enabled()) {
+    if (existing) return { brain: existing.brain, provider: existing.provider || (existing.brain === 'model' ? 'anthropic' : '') };
+    const adapter = app.providers.forAgent(agent.id);
+    if (action.brains.includes('model') && adapter) {
       try {
-        app.budget.assertAi({ model: app.config.ai.model, inputChars: 30000, maxOutputTokens: 8000, projectId: job.project_id });
-        return 'model';
+        app.budget.assertAi({ model: adapter.model(), inputChars: 30000, maxOutputTokens: 8000, projectId: job.project_id });
+        return { brain: 'model', provider: adapter.id };
       } catch (err) {
         if (err.kind !== 'budget') throw err;
-        db.insert('agent_runs', { job_id: job.id, workflow_id: job.workflow_id, project_id: job.project_id, agent: agent.id, agent_version: agent.version, task: `${agent.id}.${action.id}`, provider: app.agentModel.provider(), model_requested: app.config.ai.model, status: 'budget_blocked', detail: err.message, created_at: now() });
+        db.insert('agent_runs', { job_id: job.id, workflow_id: job.workflow_id, project_id: job.project_id, agent: agent.id, agent_version: agent.version, task: `${agent.id}.${action.id}`, provider: adapter.recordAs(), model_requested: adapter.model(), status: 'budget_blocked', detail: err.message, created_at: now() });
         if (!action.brains.includes('rules')) throw err;
       }
     }
-    if (action.brains.includes('rules')) return 'rules';
-    throw new FatalError('No model is configured and this action has no rules fallback.');
+    if (action.brains.includes('rules')) return { brain: 'rules', provider: '' };
+    throw new FatalError('No model provider is available for this agent and this action has no rules fallback.');
   }
 
   // ── rules brain ─────────────────────────────────────────────────────
@@ -76,41 +79,12 @@ function createRuntime(app) {
   }
 
   // ── model brain ─────────────────────────────────────────────────────
-  function firstMessage(agent, action, job) {
-    return {
-      role: 'user',
-      content: [{ type: 'text', text: `${action.instruction}\n\n<task_input>\n${JSON.stringify(job.input, null, 2)}\n</task_input>\n\nToday is ${new Date(app.orchestrator.clock()).toISOString().slice(0, 10)}.` }],
-    };
+  function firstText(action, job) {
+    return `${action.instruction}\n\n<task_input>\n${JSON.stringify(job.input, null, 2)}\n</task_input>\n\nToday is ${new Date(app.orchestrator.clock()).toISOString().slice(0, 10)}.`;
   }
 
   /** Stored transcripts keep file references; the bytes are attached only when calling the model. */
-  function expand(transcript) {
-    return transcript.map((m) => {
-      if (m.role !== 'user' || !Array.isArray(m.content)) return m;
-      return {
-        role: 'user',
-        content: m.content.map((b) => {
-          if (b.type !== 'tool_result' || !Array.isArray(b.content)) return b;
-          return {
-            ...b,
-            content: b.content.map((c) => {
-              if (!c._file_id) return c;
-              const file = app.files.get(c._file_id);
-              const data = fs.readFileSync(app.files.pathOf(file)).toString('base64');
-              return { type: c.type, source: { type: 'base64', media_type: c.media_type, data } };
-            }),
-          };
-        }),
-      };
-    });
-  }
-
-  /** After a mid-output fallback, blocks from the declined partial before the boundary are not echoed. */
-  function forReplay(content) {
-    const boundary = content.map((b) => b.type).lastIndexOf('fallback');
-    if (boundary < 0) return content;
-    return content.filter((b, i) => i >= boundary || b.type === 'text');
-  }
+  const readFile = (fileId) => fs.readFileSync(app.files.pathOf(app.files.get(fileId))).toString('base64');
 
   function resultContent(result) {
     if (result && result.__attachment) {
@@ -120,90 +94,90 @@ function createRuntime(app) {
     return truncate(typeof result === 'string' ? result : JSON.stringify(result ?? null), RESULT_LIMIT);
   }
 
-  async function executeTools(content, ctx) {
+  async function executeTools(calls, ctx) {
     const { action, tools } = ctx;
     const results = [];
     let final = null;
     let denied = 0;
-    const uses = content.filter((b) => b.type === 'tool_use');
-    for (const use of uses) {
-      if (use.name === 'submit_result') {
-        const errors = validate(action.output, use.input);
-        if (errors.length) results.push({ type: 'tool_result', tool_use_id: use.id, is_error: true, content: `The result does not match the required fields: ${errors.slice(0, 6).join('; ')}` });
-        else { final = use.input; results.push({ type: 'tool_result', tool_use_id: use.id, content: 'Result recorded.' }); }
+    for (const call of calls) {
+      if (call.name === 'submit_result') {
+        const errors = validate(action.output, call.input);
+        if (errors.length) results.push({ id: call.id, isError: true, content: `The result does not match the required fields: ${errors.slice(0, 6).join('; ')}` });
+        else { final = call.input; results.push({ id: call.id, content: 'Result recorded.' }); }
         continue;
       }
       try {
-        const out = await tools.call(use.name, use.input, { effectKey: `${use.name}:${use.id}` });
-        results.push({ type: 'tool_result', tool_use_id: use.id, content: resultContent(out) });
+        const out = await tools.call(call.name, call.input, { effectKey: `${call.name}:${call.id}` });
+        results.push({ id: call.id, content: resultContent(out) });
       } catch (err) {
         const kind = err instanceof HttpError ? (err.status >= 500 ? 'retryable' : 'refused') : classify(err);
         if (kind === 'budget' || kind === 'retryable') throw err; // stop here; a retry resumes this turn and replays any effects
         if (kind === 'permission') denied += 1;
-        results.push({ type: 'tool_result', tool_use_id: use.id, is_error: true, content: `${kind === 'permission' ? 'Not permitted' : 'Refused'}: ${err.message}` });
+        results.push({ id: call.id, isError: true, content: `${kind === 'permission' ? 'Not permitted' : 'Refused'}: ${err.message}` });
       }
     }
-    return { results, final, denied, count: uses.length };
+    return { results, final, denied, count: calls.length };
   }
 
-  async function runModel(ctx) {
+  async function runModel(ctx, providerId) {
     const { job, agent, action } = ctx;
-    const session = getSession(job.id) || startSession(job, agent, action, 'model', [firstMessage(agent, action, job)]);
+    const adapter = app.providers.get(providerId);
+    if (!adapter || !adapter.configured()) throw new FatalError(`This task started on ${providerId}, which is no longer configured. Cancel it to hand the step to a person, or restore the provider and retry.`);
+    const session = getSession(job.id) || startSession(job, agent, action, 'model', [adapter.userMessage(firstText(action, job))], providerId);
     const transcript = JSON.parse(session.transcript);
     let { turns, denied_calls: denied, tool_calls: toolCalls } = session;
-    const tools = apiTools(action);
+    const tools = neutralTools(action);
     const promptVersion = sha256(agent.systemPrompt + action.instruction + JSON.stringify(tools)).slice(0, 12);
-    const provider = app.agentModel.provider();
+    const maxTurns = action.maxTurns * adapter.turnAllowance;
 
     for (;;) {
       const last = transcript[transcript.length - 1];
-      if (last.role === 'assistant') {
-        const { results, final, denied: d, count } = await executeTools(last.content, ctx);
+      if (adapter.isAssistant(last)) {
+        const calls = adapter.callsOf(last, tools);
+        const { results, final, denied: d, count } = await executeTools(calls, ctx);
         denied += d; toolCalls += count;
-        transcript.push({ role: 'user', content: results.length ? results : [{ type: 'text', text: NUDGE }] });
+        transcript.push(...(results.length ? adapter.toolResults(results) : [adapter.userMessage(NUDGE)]));
         saveSession(job.id, { transcript: JSON.stringify(transcript), denied_calls: denied, tool_calls: toolCalls, ...(final ? { status: 'done', result: JSON.stringify(final) } : {}) });
         if (final) return final;
         if (denied >= MAX_DENIED) throw new PermissionDeniedError(`Stopped after ${denied} refused tool requests.`);
-        if (transcript.filter((m) => m.role === 'user' && Array.isArray(m.content) && m.content[0] && m.content[0].text === NUDGE).length > MAX_NUDGES) {
+        if (transcript.filter((m) => adapter.userText(m) === NUDGE).length > MAX_NUDGES) {
           throw new FatalError('The agent stopped without submitting a result.');
         }
         continue;
       }
 
-      if (turns >= action.maxTurns) throw new FatalError(`Turn limit (${action.maxTurns}) reached without a result.`);
-      app.budget.assertAi({ model: app.config.ai.model, inputChars: agent.systemPrompt.length + JSON.stringify(transcript).length, maxOutputTokens: 4000, projectId: job.project_id });
+      if (turns >= maxTurns) throw new FatalError(`Turn limit (${maxTurns}) reached without a result.`);
+      app.budget.assertAi({ model: adapter.model(), inputChars: agent.systemPrompt.length + JSON.stringify(transcript).length, maxOutputTokens: 4000, projectId: job.project_id });
       const started = Date.now();
-      const run = { job_id: job.id, workflow_id: job.workflow_id, project_id: job.project_id, agent: agent.id, agent_version: agent.version, task: `${agent.id}.${action.id}#${turns + 1}`, provider, model_requested: app.config.ai.model, prompt_version: promptVersion, created_at: now() };
+      const run = { job_id: job.id, workflow_id: job.workflow_id, project_id: job.project_id, agent: agent.id, agent_version: agent.version, task: `${agent.id}.${action.id}#${turns + 1}`, provider: adapter.recordAs(), model_requested: adapter.model(), prompt_version: promptVersion, created_at: now() };
       let response;
       try {
-        response = await app.agentModel.call({ system: agent.systemPrompt, tools, messages: expand(transcript), maxTokens: MAX_OUTPUT_TOKENS });
+        response = await adapter.turn({ system: agent.systemPrompt, tools, messages: transcript, maxTokens: MAX_OUTPUT_TOKENS, readFile });
       } catch (err) {
         db.insert('agent_runs', { ...run, status: 'error', detail: String(err.message).slice(0, 300), latency_ms: Date.now() - started });
-        if (err.status === 429 || err.status === 408 || err.status === 409 || err.status === 529 || err.status >= 500) throw Object.assign(new Error(`Model temporarily unavailable: ${err.message}`), { kind: 'retryable' });
+        if (isTransient(err)) throw Object.assign(new Error(`Model temporarily unavailable: ${err.message}`), { kind: 'retryable' });
         throw err;
       }
-      const u = response.usage || {};
-      const usage = { input: u.input_tokens || 0, output: u.output_tokens || 0, cacheRead: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0 };
-      const cost = app.budget.tokenCostMicros(response.model || app.config.ai.model, usage.input, usage.output, usage);
-      const refused = response.stop_reason === 'refusal';
-      db.insert('agent_runs', { ...run, model_served: response.model || '', input_tokens: usage.input, output_tokens: usage.output, cache_read_tokens: usage.cacheRead, cache_write_tokens: usage.cacheWrite, cost_micros: cost, latency_ms: Date.now() - started, status: refused ? 'refused' : 'ok', detail: response.stop_reason || '' });
+      const { usage } = response;
+      const cost = app.budget.tokenCostMicros(response.model, usage.input, usage.output, usage);
+      const refused = response.stop === 'refusal';
+      db.insert('agent_runs', { ...run, model_served: response.model || '', input_tokens: usage.input, output_tokens: usage.output, cache_read_tokens: usage.cacheRead, cache_write_tokens: usage.cacheWrite, cost_micros: cost, latency_ms: Date.now() - started, status: refused ? 'refused' : 'ok', detail: response.stop || '' });
       turns += 1;
-      const content = forReplay(response.content || []);
-      transcript.push({ role: 'assistant', content });
+      transcript.push(response.message);
       db.run('UPDATE agent_sessions SET transcript = ?, turns = ?, input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, cost_micros = cost_micros + ?, updated_at = ? WHERE job_id = ?',
         JSON.stringify(transcript), turns, usage.input + usage.cacheRead + usage.cacheWrite, usage.output, cost, now(), job.id);
       if (refused) throw new FatalError('The model declined this task; a person needs to handle it.');
-      if (response.stop_reason === 'max_tokens' && !content.some((b) => b.type === 'tool_use')) throw new FatalError('The model response was cut off.');
+      if (response.stop === 'max_tokens' && !adapter.callsOf(response.message, tools).length) throw new FatalError('The model response was cut off.');
     }
   }
 
   return {
     chooseBrain,
     async run(ctx) {
-      const brain = chooseBrain(ctx.job, ctx.agent, ctx.action);
-      ctx.scope.brain = brain === 'rules' ? 'rules' : app.agentModel.provider();
+      const { brain, provider } = chooseBrain(ctx.job, ctx.agent, ctx.action);
+      ctx.scope.brain = brain === 'rules' ? 'rules' : (app.providers.get(provider) || { recordAs: () => provider }).recordAs();
       try {
-        return brain === 'model' ? await runModel(ctx) : await runRules(ctx);
+        return brain === 'model' ? await runModel(ctx, provider) : await runRules(ctx);
       } catch (err) {
         if (getSession(ctx.job.id)) saveSession(ctx.job.id, { status: classify(err) === 'retryable' ? 'waiting_retry' : 'failed' });
         throw err;
@@ -213,6 +187,12 @@ function createRuntime(app) {
   };
 }
 
+/** Overloaded, rate-limited, timed-out or server-side failures are worth retrying. */
+function isTransient(err) {
+  const st = err.status;
+  return st === 429 || st === 408 || st === 409 || st === 529 || st >= 500 || err.name === 'TimeoutError' || /fetch failed|ECONNRESET|ETIMEDOUT/.test(String(err.message));
+}
+
 function truncate(s, n) { return s.length > n ? `${s.slice(0, n)}… [truncated]` : s; }
 
-module.exports = { createRuntime, NUDGE };
+module.exports = { createRuntime, NUDGE, isTransient };

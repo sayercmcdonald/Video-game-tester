@@ -45,14 +45,17 @@ function createQueue(app, clock) {
     /** Atomically take up to `limit` runnable jobs and lease them. */
     claim(limit, leaseMs) {
       const t = iso(clock());
+      // Agents the founder paused (Settings → Agent permissions) keep their jobs queued.
+      const paused = app.settings.pausedAgents ? app.settings.pausedAgents() : [];
       return db.tx(() => {
         const rows = db.all(`
           SELECT j.id FROM jobs j
           LEFT JOIN workflows w ON w.id = j.workflow_id
           WHERE j.status = 'queued' AND j.run_at <= ? AND COALESCE(w.paused, 0) = 0
+            AND j.agent NOT IN (${paused.map(() => '?').join(',') || "''"})
             AND NOT EXISTS (SELECT 1 FROM job_dependencies d JOIN jobs p ON p.id = d.depends_on
                             WHERE d.job_id = j.id AND p.status NOT IN ('succeeded','cancelled'))
-          ORDER BY j.priority DESC, j.run_at, j.id LIMIT ?`, t, limit);
+          ORDER BY j.priority DESC, j.run_at, j.id LIMIT ?`, t, ...paused, limit);
         return rows.map(({ id }) => {
           db.run("UPDATE jobs SET status = 'running', attempts = attempts + 1, lease_until = ?, started_at = ? WHERE id = ? AND status = 'queued'",
             iso(clock() + leaseMs), t, id);

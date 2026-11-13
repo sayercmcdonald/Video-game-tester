@@ -71,6 +71,7 @@ function backLink(ctx) {
 }
 
 function errorPage(ctx, status, message) {
+  if (ctx.url.pathname.startsWith('/command')) return require('./command').errorPage(ctx, status, message);
   const titles = { 400: 'That did not go through', 404: 'Page not found', 403: 'Not allowed', 409: 'Not possible right now', 413: 'Upload too large', 429: 'Too many attempts' };
   const [href, label] = backLink(ctx);
   if (ctx.user && ctx.url.pathname.startsWith('/admin')) {

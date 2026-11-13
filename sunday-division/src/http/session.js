@@ -2,9 +2,12 @@
 const { token, sha256, safeEqual } = require('../lib/crypto');
 const { now } = require('../lib/util');
 
-const COOKIE = { admin: 'sd_admin', portal: 'sd_portal', contractor: 'sd_contractor' };
-const TTL_MS = { admin: 12 * 3600e3, portal: 7 * 24 * 3600e3, contractor: 7 * 24 * 3600e3 };
-const SUBJECT = { admin: 'user_id', portal: 'client_id', contractor: 'contractor_id' };
+const COOKIE = { admin: 'sd_admin', portal: 'sd_portal', contractor: 'sd_contractor', founder: 'sd_command' };
+// Founder sessions live on the founder's own phone for 30 days; high-risk confirmations
+// additionally need a password entered within VERIFY_MS (see command/actions).
+const TTL_MS = { admin: 12 * 3600e3, portal: 7 * 24 * 3600e3, contractor: 7 * 24 * 3600e3, founder: 30 * 24 * 3600e3 };
+const SUBJECT = { admin: 'user_id', portal: 'client_id', contractor: 'contractor_id', founder: 'user_id' };
+const PATH = { founder: '/command' };
 
 function parseCookies(header) {
   const out = Object.create(null);
@@ -15,8 +18,8 @@ function parseCookies(header) {
   return out;
 }
 
-function cookieString(name, value, { maxAgeMs, secure }) {
-  const attrs = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
+function cookieString(name, value, { maxAgeMs, secure, path = '/' }) {
+  const attrs = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`, 'HttpOnly', 'SameSite=Lax'];
   if (maxAgeMs !== undefined) attrs.push(`Max-Age=${Math.floor(maxAgeMs / 1000)}`);
   if (secure) attrs.push('Secure');
   return attrs.join('; ');
@@ -32,14 +35,15 @@ function createSessions({ db, config }) {
       db.insert('sessions', {
         token_hash: sha256(value),
         kind,
-        user_id: kind === 'admin' ? subjectId : null,
+        user_id: kind === 'admin' || kind === 'founder' ? subjectId : null,
         client_id: kind === 'portal' ? subjectId : null,
         contractor_id: kind === 'contractor' ? subjectId : null,
         csrf: token(24),
         created_at: now(),
         expires_at: new Date(Date.now() + TTL_MS[kind]).toISOString(),
+        verified_at: now(),
       });
-      return cookieString(COOKIE[kind], value, { maxAgeMs: TTL_MS[kind], secure });
+      return cookieString(COOKIE[kind], value, { maxAgeMs: TTL_MS[kind], secure, path: PATH[kind] });
     },
     load(kind, cookies) {
       const value = cookies[COOKIE[kind]];
@@ -51,11 +55,13 @@ function createSessions({ db, config }) {
     end(kind, cookies) {
       const value = cookies[COOKIE[kind]];
       if (value) db.run('DELETE FROM sessions WHERE token_hash = ?', sha256(value));
-      return cookieString(COOKIE[kind], '', { maxAgeMs: 0, secure });
+      return cookieString(COOKIE[kind], '', { maxAgeMs: 0, secure, path: PATH[kind] });
     },
     endAllFor(kind, subjectId) {
       db.run(`DELETE FROM sessions WHERE kind = ? AND ${SUBJECT[kind]} = ?`, kind, subjectId);
     },
+    /** Record a fresh password check on this session (step-up for high-risk founder actions). */
+    markVerified: (session) => db.run('UPDATE sessions SET verified_at = ? WHERE token_hash = ?', now(), session.token_hash),
     checkCsrf: (session, submitted) => Boolean(session && submitted && safeEqual(session.csrf, submitted)),
     purgeExpired: () => db.run('DELETE FROM sessions WHERE expires_at < ?', now()),
     flashCookie: (message) => cookieString('sd_flash', message, { maxAgeMs: message ? 60e3 : 0, secure }),

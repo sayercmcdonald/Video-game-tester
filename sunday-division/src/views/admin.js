@@ -12,7 +12,7 @@ const SETTLED = new Set(['done', 'paid', 'released', 'closed', 'won', 'published
 
 const csrf = (ctx) => html`<input type="hidden" name="_csrf" value="${ctx.session ? ctx.session.csrf : ''}">`;
 const badge = (status, label) => html`<span class="badge ${ATTENTION.has(status) ? 'badge--on' : SETTLED.has(status) ? 'badge--off' : ''}">${label || titleCase(status)}</span>`;
-const sourceTag = (source) => (source && source !== 'manual' ? html`<span class="badge badge--ai" title="Drafted by automation — review before approving">${source === 'claude' ? 'AI draft' : source === 'rules' ? 'Auto draft' : titleCase(source)}</span>` : '');
+const sourceTag = (source) => (source && source !== 'manual' ? html`<span class="badge badge--ai" title="Drafted by automation — review before approving">${source === 'claude' || source === 'openai' ? 'AI draft' : source === 'rules' ? 'Auto draft' : titleCase(source)}</span>` : '');
 function action(ctx, url, label, { cls = 'btn-a', fields = {}, confirm = '' } = {}) {
   return html`<form class="inline" method="post" action="${url}" data-confirm="${confirm}">${csrf(ctx)}${Object.entries(fields).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}">`)}<button class="${cls}" type="submit">${label}</button></form>`;
 }

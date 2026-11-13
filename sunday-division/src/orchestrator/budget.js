@@ -24,7 +24,16 @@ function tokenCostMicros(model, inputTokens, outputTokens, { cacheRead = 0, cach
   return Math.round(inputTokens * p.input + outputTokens * p.output + cacheRead * p.cacheRead + cacheWrite * p.input * CACHE_WRITE_MULTIPLIER);
 }
 
-function createBudget({ db, settings, clock }) {
+function createBudget({ db, settings, clock, config }) {
+  // OpenAI prices come from configuration (the application does not guess them).
+  const extra = {};
+  const oa = config && config.ai.openai;
+  if (oa && oa.model && oa.prices) extra[oa.model] = oa.prices;
+  const cost = (model, inputTokens, outputTokens, cache = {}) => {
+    const p = extra[model] || priceFor(model);
+    const { cacheRead = 0, cacheWrite = 0 } = cache;
+    return Math.round(inputTokens * p.input + outputTokens * p.output + cacheRead * p.cacheRead + (extra[model] ? 0 : cacheWrite * p.input * CACHE_WRITE_MULTIPLIER));
+  };
   const monthStart = () => {
     const d = new Date(clock());
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
@@ -32,9 +41,9 @@ function createBudget({ db, settings, clock }) {
   const spent = (where, ...params) => db.get(`SELECT COALESCE(SUM(cost_micros), 0) AS n FROM agent_runs WHERE ${where}`, ...params).n;
 
   return {
-    MODEL_PRICES, tokenCostMicros,
-    aiSpentThisMonth: () => spent("provider IN ('claude','simulated') AND created_at >= ?", monthStart()),
-    aiSpentForProject: (projectId) => spent("provider IN ('claude','simulated') AND project_id = ?", projectId),
+    MODEL_PRICES, tokenCostMicros: cost,
+    aiSpentThisMonth: () => spent("provider IN ('claude','openai','simulated') AND created_at >= ?", monthStart()),
+    aiSpentForProject: (projectId) => spent("provider IN ('claude','openai','simulated') AND project_id = ?", projectId),
     externalSpentForProject: (projectId) => spent("provider = 'integration' AND project_id = ?", projectId),
     /**
      * Refuse a model call whose worst-case cost would take spending over a limit.
@@ -42,7 +51,7 @@ function createBudget({ db, settings, clock }) {
      * the difference between estimate and actual on a single call.
      */
     assertAi({ model, inputChars, maxOutputTokens, projectId }) {
-      const estimate = tokenCostMicros(model, Math.ceil(inputChars / 3), maxOutputTokens);
+      const estimate = cost(model, Math.ceil(inputChars / 3), maxOutputTokens);
       const monthly = toMicros(settings.get('ai_monthly_budget_usd'));
       if (this.aiSpentThisMonth() + estimate > monthly) throw new BudgetExceededError('Monthly AI budget reached.');
       if (projectId) {
