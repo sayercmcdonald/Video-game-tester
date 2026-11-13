@@ -1,0 +1,17 @@
+{
+  "name": "sunday-division",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sunday Division — studio website, client intake, operating dashboard and payments.",
+  "main": "server.js",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "NODE_ENV=development node --disable-warning=ExperimentalWarning --watch server.js",
+    "create-admin": "node --disable-warning=ExperimentalWarning scripts/create-admin.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/*.test.js\""
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0"
+  }
+}

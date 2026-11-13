@@ -1,0 +1,91 @@
+# Sunday Division
+
+The studio's website, client intake, client portal, internal operating dashboard and payments — one small Node.js application.
+
+- **Public site** — Home, Services, Portfolio (concept studies, labelled as such), About, Start a Project, Client Portal, Contact, Privacy.
+- **Intake** — validated project form with reference-image upload, stored privately.
+- **Dashboard** (`/admin`) — leads, quotes and scopes, projects, tasks and milestones, files, deliverables and revisions, contractors, invoices and payments, profitability, approvals queue, audit history.
+- **Client portal** (`/portal`) — quote acceptance, secure payment, progress updates, released files, revision requests.
+- **Payments** — Stripe Checkout (hosted). Deposit first, balance before final files.
+- **Automation** — drafts triage notes, briefs, quotes, task lists and status updates. A person approves everything client-facing.
+- **INDEX V3 / FORM** — adapter and API contract ready; manual (human) mode until they are connected.
+
+## Run it
+
+Requires Node.js 22.13 or newer.
+
+```bash
+npm install
+cp .env.example .env            # optional for local use
+npm run create-admin -- you@example.com "Your Name"
+npm start                       # http://localhost:3000  ·  dashboard at /admin
+npm test                        # 26 tests, including the full inquiry-to-payment workflow
+```
+
+With no Stripe keys in development, payments use a built-in **simulated checkout** so the whole flow can be exercised without real money. It is refused when `NODE_ENV=production`.
+
+## The workflow, and who approves what
+
+| Step | Who | Gate |
+|---|---|---|
+| Inquiry submitted | Visitor | Validated, files checked by content, stored privately |
+| Inquiry organised (triage notes) | Automation | Internal only |
+| Project created from lead | Staff | — |
+| Brief drafted | Automation or staff | **Staff approve** before the client can see it |
+| Quote drafted | Automation or staff | **Staff approve & send** before the client can see it |
+| Quote accepted | Client, in portal | Typed name + confirmation; raises the deposit invoice the quote describes |
+| Deposit paid | Client, on Stripe's page | Confirmed by signed webhook; **only this unlocks work** |
+| Tasks proposed | Automation | **Staff accept** the list |
+| Deliverable uploaded / generated | Staff, INDEX V3 or FORM | Lands "in review"; **a reviewer approves**, then **staff release** |
+| Final invoice | Staff draft | **Staff approve** before it is payable; final files are held until it is paid |
+| Status update drafted | Automation or staff | **Staff publish** |
+
+Staff cannot move a project to "active" by hand: the only path is a recorded deposit payment (Stripe webhook, or a bank transfer recorded with a reference by a named user). Every approval and payment is written to an audit log.
+
+## Configuration
+
+All settings are environment variables — see [`.env.example`](.env.example). The important ones for launch:
+
+| Variable | Purpose |
+|---|---|
+| `BASE_URL` | Public https URL of the site |
+| `DATA_DIR` | Persistent directory for the database and uploads |
+| `TRUST_PROXY=1` | Required behind a reverse proxy so rate limits see real client IPs |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Creates the first admin on first start |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Enables live payments |
+| `ANTHROPIC_API_KEY` | Enables Claude drafting (otherwise rules-based drafting) |
+
+### Stripe setup
+
+1. In the Stripe dashboard, create a webhook endpoint at `{BASE_URL}/webhooks/stripe` subscribed to `checkout.session.completed`, `checkout.session.async_payment_succeeded` and `checkout.session.expired`.
+2. Set `STRIPE_SECRET_KEY` and the endpoint's signing secret as `STRIPE_WEBHOOK_SECRET`.
+3. **Before taking real payments**, run one full deposit with Stripe *test* keys (`stripe listen --forward-to localhost:3000/webhooks/stripe`, card `4242 4242 4242 4242`) and confirm the invoice flips to paid and the project unlocks. The Stripe request and webhook code is covered by tests against Stripe-shaped signed events, but it has not been run against Stripe's live API from this repository.
+
+## Deploy
+
+The app is a single process with a SQLite database and an uploads folder, both under `DATA_DIR`.
+
+- Any host that runs a container or Node 22 with a **persistent volume** works (Fly.io, Render, Railway, a VPS). A `Dockerfile` is included; mount the volume at `/data`.
+- Run **one instance**. Sessions and data are local to the process and disk.
+- Terminate TLS at the host's proxy and set `BASE_URL=https://…` and `TRUST_PROXY=1`.
+- **Back up `DATA_DIR`** (database + uploads) on a schedule; use an encrypted volume.
+- Health check: `GET /healthz`.
+
+## Security and client data
+
+- Card details never touch this system: payment happens on Stripe's hosted page; we store only session ids and outcomes.
+- Passwords are hashed with scrypt; sessions are server-side, cookies `HttpOnly` + `SameSite=Lax` (+ `Secure` over https); every authenticated form carries a CSRF token; cross-site posts are refused.
+- Uploads are verified by file signature (JPG/PNG/WebP/PDF for clients), stored under random names outside the web root, and served only through authenticated, per-client-authorised routes as downloads.
+- Portal access keys are stored hashed and shown to staff once; issuing a new key revokes the old one and open sessions.
+- Strict Content-Security-Policy (no inline scripts or styles, no third-party origins), HSTS over https, rate limits on sign-in, portal access and public forms.
+- AI drafting receives the project details but not the client's contact details, and its output is only ever a draft.
+
+## Known gaps before and after launch
+
+- **Email is manual.** The app does not send email. Staff email the client their portal link and key, and reply to inquiries from their own mailbox. `NOTIFY_WEBHOOK_URL` can ping Slack on new inquiries. Transactional email is the first thing to add.
+- **One staff role.** Every admin user has full access; contractors do not sign in.
+- **Privacy notice and quote terms are plain-language drafts** and need legal review for your jurisdiction.
+- **Portfolio shows studio concept studies only**, drawn as SVG in `src/views/flats.js`. Replace or extend with real work as clients give permission.
+- **Not verified in this environment:** live Stripe API calls, live Claude API calls and the Docker image build (see the notes above).
+
+More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)
