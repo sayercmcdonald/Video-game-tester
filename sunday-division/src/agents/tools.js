@@ -358,9 +358,13 @@ const TOOLS = {
       const estimate = app.budget.externalJobEstimateMicros();
       app.budget.assertExternal({ projectId: p.id, estimateMicros: estimate });
       const started = Date.now();
+      const idempotencyKey = `wf${scope.workflowId}:task${t.id}`;
+      const alreadySubmitted = app.db.get("SELECT 1 FROM integration_jobs WHERE idempotency_key = ? AND status != 'failed'", idempotencyKey);
       const jobType = { technical_flats: 'technical_flats', tech_pack: 'tech_pack', measurement_spec: 'measurement_spec', garment_3d: 'garment_3d', product_imagery: 'product_imagery', campaign_assets: 'campaign_assets' }[t.job_type];
-      const id = await app.integrations.request(p, product, jobType, t.brief.slice(0, 2000), actorOf(scope), { mode: 'api', idempotencyKey: `wf${scope.workflowId}:task${t.id}`, taskId: t.id });
+      const id = await app.integrations.request(p, product, jobType, t.brief.slice(0, 2000), actorOf(scope), { mode: 'api', idempotencyKey, taskId: t.id });
       const job = app.db.get('SELECT * FROM integration_jobs WHERE id = ?', id);
+      // A repeated request returns the existing job: nothing new was submitted or spent.
+      if (alreadySubmitted) return { integration_job_id: id, status: job.status, already_submitted: true };
       app.db.insert('agent_runs', {
         job_id: scope.jobId, workflow_id: scope.workflowId, project_id: p.id, agent: scope.agent, agent_version: scope.agentVersion,
         task: `${product}.${jobType}`, provider: 'integration', model_requested: product, model_served: job.service_version || product,

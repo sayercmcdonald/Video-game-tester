@@ -68,9 +68,9 @@ function createQueue(app, clock) {
 
     /** Record a failure; returns 'retry' or 'failed'. */
     fail(job, err, kind) {
-      const { action: def } = getAction(job.agent, job.action);
       const retry = kind === 'retryable' && job.attempts < job.max_attempts;
       if (retry) {
+        const { action: def } = getAction(job.agent, job.action);
         db.run("UPDATE jobs SET status = 'queued', run_at = ?, error = ?, error_kind = ?, lease_until = NULL WHERE id = ? AND status = 'running'",
           iso(clock() + backoffMs(def.retry, job.attempts)), String(err.message).slice(0, 1000), kind, job.id);
         return 'retry';

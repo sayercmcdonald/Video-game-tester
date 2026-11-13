@@ -107,7 +107,10 @@ async function payInvoice(app, invoiceId) {
  * 'quote_approval' | 'deposit' | 'production'. Returns ids for assertions.
  */
 async function driveWorkflow(app, base, stage, inquiry = INQUIRY) {
-  await new Browser(base).upload('/start', inquiry, [{ field: 'references', name: 'ref.png', data: PNG, type: 'image/png' }]);
+  // Tests submit many inquiries from one address; the intake rate limit is tested elsewhere.
+  for (const ip of ['127.0.0.1', '::ffff:127.0.0.1', '::1']) app.rateLimit.reset(`intake:${ip}`);
+  const res = await new Browser(base).upload('/start', inquiry, [{ field: 'references', name: 'ref.png', data: PNG, type: 'image/png' }]);
+  if (res.status !== 303) throw new Error(`intake refused the test inquiry (${res.status})`);
   await app.orchestrator.drain();
   const wf = app.db.get('SELECT * FROM workflows ORDER BY id DESC');
   const out = { wfId: wf.id, inquiryId: wf.inquiry_id, projectId: wf.project_id, user: app.db.get('SELECT * FROM users') };

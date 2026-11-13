@@ -1,5 +1,7 @@
 # Agent orchestration
 
+> Updated for v3: the agents are now Claude tool-calling agents with a rules fallback — see [AGENTS.md](AGENTS.md) for the agents themselves, their prompts and tools. This document covers the orchestration layer underneath them.
+
 How Sunday Division runs routine operations with agents while every money movement, approval and client commitment stays under deterministic code and human control.
 
 ## Plan in one page
@@ -60,39 +62,24 @@ No new infrastructure: still one Node process and one SQLite file.
 
 | State | Exits when | Agents | Human gate |
 |---|---|---|---|
-| Triage | triage job done | Sales & Intake: triage | — |
+| Triage | qualify job done | Sales: qualify | — |
 | Needs review | staff choose "Pursue" or mark the lead lost | — | yes |
-| Scoping | draft quote saved (project created deterministically) | Sales & Intake: brief + quote | — |
+| Scoping | draft quote saved (project created deterministically) | Sales: draft brief + quote | — |
 | Quote approval | a quote has status `sent` | — | **staff approve & send** |
-| Client decision | quote accepted (or declined → Quote declined) | Client Success: hand-off task | client |
-| Deposit | `billing.depositVerified()` | Finance: deposit invoice check | client pays; webhook verifies |
-| Project setup | plan + both routings + kickoff draft done | PM, INDEX & FORM coordinators, Client Success | — |
-| Production | all final deliverables approved, no open production/revisions | QA agents per upload; PM deadline checks; coordinators poll | **staff approve deliverables** |
-| Final payment | `billing.finalPaymentVerified()` | Finance: drafts final invoice | **staff issue invoice**; client pays |
+| Client decision | quote accepted (or declined → Quote declined) | Client Success: quote message (draft) | **staff approve message**; client |
+| Deposit | `billing.depositVerified()` | Orchestrator: deposit invoice check | client pays; webhook verifies |
+| Project setup | plan, briefs/routing and kickoff draft done | Project Manager, Production, Client Success | — |
+| Production | every production task signed off, nothing open | Talent per contractor task; QA per uploaded version; Production polls; PM deadlines | **staff approve assignments**; contractor accepts/submits; **technical reviewer signs off** |
+| Final payment | `billing.finalPaymentVerified()` | Orchestrator: drafts final invoice | **staff issue invoice**; client pays |
 | Ready for release | all final files released | — | **staff release** |
-| Completing | summary + performance recorded | PM, Finance | — |
+| Completing | summary + performance recorded | Project Manager, Orchestrator | — |
 | Completed / Cancelled / Lost | — | — | — |
 
 A failed job (after its retries) marks the workflow **blocked** and opens an escalation task. Staff can retry it, or cancel it to say "handled by hand", which lets the workflow continue.
 
 ## Agents
 
-| Agent | Uses a model | Can write | Never |
-|---|---|---|---|
-| Sales & Intake | triage, brief, quote | triage notes, draft brief, draft quote, tasks for staff | send a quote, overwrite a human's brief or quote |
-| Project Management | task plan | internal tasks (after deposit), tasks for staff | set the client-visible delivery date (proposes it) |
-| INDEX Production Coordinator | — | production requests (human queue or INDEX V3) | submit while autonomy is off, unconnected or over budget |
-| FORM Creative Coordinator | — | production requests (human queue or FORM) | same |
-| Technical QA | — | QA reports, review tasks | approve or release |
-| Creative QA | — | QA reports, review tasks | approve or release |
-| Finance Operations | **no** | draft final invoice for the exact balance, escalations | issue invoices, mark anything paid, calculate with a model |
-| Client Success | status update | draft portal updates, tasks for staff to send | contact clients directly |
-
-Full contracts — tools per action, input and output schemas, retry policy, timeout and escalation rules — are in `src/agents/definitions.js` and shown on **Operations → Agents**.
-
-### Tool effects
-
-`read` (the bound subject only) · `model` (budgeted drafting) · `internal` (notes, tasks, QA reports) · `draft` (invisible to the client until a person approves) · `external` (INDEX V3 / FORM; budgeted, policy-gated). There is no tool that sends, approves, settles, releases, publishes, changes settings or permissions, purchases, or runs commands. A test enforces this.
+Six business agents (Sales, Talent, Production, Project Manager, QA, Client Success) and the deterministic Operations Orchestrator. Their prompts, tools, schemas and escalation rules are documented in [AGENTS.md](AGENTS.md) and shown on **Operations → Agents**.
 
 ## Safety controls, mapped to the brief
 
@@ -136,7 +123,7 @@ Full contracts — tools per action, input and output schemas, retry policy, tim
 
 ## Tests
 
-`npm test` — 58 tests. The orchestration-specific ones:
+`npm test` — 61 tests. The orchestration-specific ones:
 
 * `tests/orchestration.test.js` — the full lifecycle through real routes: inquiry → triage → draft quote → staff approval → client acceptance → verified deposit → setup → production routing → QA → final invoice → final payment → release → completion; plus duplicate events, webhook replays, sweeps.
 * `tests/agent-safety.test.js` — policy shape and immutability; no shell execution; denied and cross-client tool calls; forged job input; malicious and prompt-injected model output; cost and version recording; AI and external budgets; retries with backoff, retry limits, permanent failures, staff retry; crash recovery with effect replay; forged payment events and underpayment; global and per-workflow pause; autonomous production against a mock INDEX V3 (idempotent submission, polling, review-gated import).

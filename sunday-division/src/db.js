@@ -513,6 +513,9 @@ ALTER TABLE agent_runs_v3 RENAME TO agent_runs;
 CREATE INDEX idx_runs_created ON agent_runs(created_at);
 CREATE INDEX idx_runs_project ON agent_runs(project_id);
 CREATE INDEX idx_runs_job ON agent_runs(job_id);
+-- Agents retired in this release: their unfinished jobs are cancelled (finished history is kept).
+UPDATE jobs SET status = 'cancelled', error = 'Agent retired in v3; replaced by the business agents.', finished_at = datetime('now')
+  WHERE status IN ('queued','running','failed') AND agent IN ('sales_intake','index_coordinator','form_coordinator','technical_qa','creative_qa','finance_ops');
 `];
 
 function openDb(config) {

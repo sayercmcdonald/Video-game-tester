@@ -9,7 +9,9 @@ The studio's website, client intake, client portal, internal operating dashboard
 - **Payments** — Stripe Checkout (hosted). Deposit first, balance before final files.
 - **Automation** — drafts triage notes, briefs, quotes, task lists and status updates. A person approves everything client-facing.
 - **INDEX V3 / FORM** — adapter and API contract ready; manual (human) mode until they are connected.
-- **Agent orchestration** — eight agents run routine operations on a durable job queue, from triage to completion summary, behind every existing human gate. See [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) and **Operations** in the dashboard.
+- **Business agents** — six Claude tool-calling agents (Sales, Talent, Production, Project Manager, QA, Client Success) and a deterministic Operations Orchestrator run on a durable job queue inside the app, behind every human gate. See [`docs/AGENTS.md`](docs/AGENTS.md).
+- **Contractors** — approved roster, assignments recommended by the Talent Agent and approved by staff, and a contractor portal (`/contractor`) for briefs, offers and submissions.
+- **Message outbox** — every message to a client or contractor is approved by staff before it is sent.
 
 ## Run it
 
@@ -20,7 +22,7 @@ npm install
 cp .env.example .env            # optional for local use
 npm run create-admin -- you@example.com "Your Name"
 npm start                       # http://localhost:3000  ·  dashboard at /admin
-npm test                        # 58 tests: workflows, agent safety, payments, approvals
+npm test                        # 61 tests: agent workflow, agent safety, payments, approvals
 ```
 
 With no Stripe keys in development, payments use a built-in **simulated checkout** so the whole flow can be exercised without real money. It is refused when `NODE_ENV=production`.
@@ -36,7 +38,10 @@ With no Stripe keys in development, payments use a built-in **simulated checkout
 | Quote drafted | Automation or staff | **Staff approve & send** before the client can see it |
 | Quote accepted | Client, in portal | Typed name + confirmation; raises the deposit invoice the quote describes |
 | Deposit paid | Client, on Stripe's page | Confirmed by signed webhook; **only this unlocks work** |
-| Tasks proposed | Automation | **Staff accept** the list |
+| Production tasks, briefs, routing | Project Manager and Production agents | Internal; client-facing delivery date is **proposed to staff** |
+| Contractor recommended | Talent Agent (approved roster only) | **Staff approve** the assignment, fee and offer message |
+| Offer accepted / work submitted | The contractor, in the contractor portal | — |
+| Contractor work reviewed | QA Agent reads the file | **Technical reviewer signs off** |
 | Deliverable uploaded / generated | Staff, INDEX V3 or FORM | Lands "in review"; **a reviewer approves**, then **staff release** |
 | Final invoice | Staff draft | **Staff approve** before it is payable; final files are held until it is paid |
 | Status update drafted | Automation or staff | **Staff publish** |
@@ -57,6 +62,8 @@ All settings are environment variables — see [`.env.example`](.env.example). T
 | `ANTHROPIC_API_KEY` | Enables Claude drafting (otherwise rules-based drafting) |
 | `AI_MONTHLY_BUDGET_USD`, `AI_PROJECT_BUDGET_USD` | Starting AI spend limits (then editable in Operations → Controls) |
 | `ORCHESTRATOR_POLL_MS` | How often the agent worker runs (default 2000; `0` disables) |
+| `AI_MODEL`, `AI_AGENT_EFFORT` | Model and effort for the agents (`claude-opus-5-5`, `medium`) |
+| `MESSAGING_PROVIDER` | `manual` (production default: staff send approved messages) or `simulated` (development only) |
 
 ### Stripe setup
 
@@ -85,10 +92,10 @@ The app is a single process with a SQLite database and an uploads folder, both u
 
 ## Known gaps before and after launch
 
-- **Email is manual.** The app does not send email. Staff email the client their portal link and key, and reply to inquiries from their own mailbox. `NOTIFY_WEBHOOK_URL` can ping Slack on new inquiries. Transactional email is the first thing to add.
+- **Email is manual.** The app does not send email: approved messages wait in the outbox for staff to send. Staff email the client their portal link and key, and reply to inquiries from their own mailbox. `NOTIFY_WEBHOOK_URL` can ping Slack on new inquiries. Transactional email is the first thing to add.
 - **One staff role.** Every admin user has full access; contractors do not sign in.
 - **Privacy notice and quote terms are plain-language drafts** and need legal review for your jurisdiction.
 - **Portfolio shows studio concept studies only**, drawn as SVG in `src/views/flats.js`. Replace or extend with real work as clients give permission.
 - **Not verified in this environment:** live Stripe API calls, live Claude API calls and the Docker image build (see the notes above).
 
-More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)
+More detail: [`docs/AGENTS.md`](docs/AGENTS.md) · [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)

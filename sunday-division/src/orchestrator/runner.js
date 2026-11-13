@@ -18,7 +18,13 @@ function withTimeout(promise, ms) {
  * success, a retry or a failure.
  */
 async function runJob(app, queue, job, clock) {
-  const { agent, action } = getAction(job.agent, job.action);
+  let agent; let action;
+  try {
+    ({ agent, action } = getAction(job.agent, job.action));
+  } catch (err) {
+    queue.fail(job, new FatalError(`Unknown agent action ${job.agent}.${job.action}`), 'fatal');
+    return 'failed';
+  }
   const scope = { agent: agent.id, agentVersion: agent.version, jobId: job.id, workflowId: job.workflow_id, projectId: job.project_id, inquiryId: job.inquiry_id, brain: 'rules' };
   try {
     const inputErrors = validate(action.input, job.input);
