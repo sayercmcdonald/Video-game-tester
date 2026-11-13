@@ -3,6 +3,7 @@ const { html, raw, esc, money } = require('../lib/util');
 const { fmtLocal, ago, localHour } = require('../command/time');
 const { REGISTRY } = require('../agents/definitions');
 const { TOOLS } = require('../agents/tools');
+const ui = require('./command-ui');
 
 // ── Icons (24px line icons, currentColor) ─────────────────────────────
 const I = {
@@ -22,12 +23,13 @@ const I = {
 };
 const icon = (name, cls = 'i') => raw(`<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${I[name]}</svg>`);
 
+// The five destinations (bottom tab bar on phones); the rail on wide screens adds the rest.
 const NAV = [
-  ['overview', '/command', 'Overview', true], ['projects', '/command/projects', 'Projects', true], ['approvals', '/command/approvals', 'Approvals', true],
-  ['chat', '/command/chat', 'Chat', true], ['brief', '/command/brief', 'Morning Brief'], ['agents', '/command/agents', 'Agent Studio'],
-  ['performance', '/command/performance', 'Performance'], ['settings', '/command/settings', 'Settings'],
+  ['overview', '/command', 'Overview', true], ['projects', '/command/projects', 'Projects', true], ['agents', '/command/agents', 'Agents', true],
+  ['approvals', '/command/approvals', 'Approvals', true], ['command', '/command/chat', 'Command', true],
+  ['brief', '/command/brief', 'Morning Brief'], ['performance', '/command/performance', 'Performance'], ['settings', '/command/settings', 'Settings'],
 ];
-const MORE_TABS = ['brief', 'agents', 'performance', 'settings', 'notifications', 'more'];
+const TAB_ALIAS = { chat: 'command', more: 'overview', notifications: 'overview', brief: 'overview', performance: 'overview', settings: 'overview' };
 
 const tzOf = (ctx) => ctx.app.settings.get('timezone');
 const dot = (status, label) => html`<span class="dot dot--${status}" ${label ? raw(`role="img" aria-label="${esc(label)}"`) : raw('aria-hidden="true"')}></span>`;
@@ -54,21 +56,23 @@ function richText(text) {
 
 function sampleBanner(ctx) {
   const row = ctx.app.db.get("SELECT value FROM ops_settings WHERE key = 'sample_data'");
-  return row && row.value === 'true' ? html`<p class="c-sample" role="note"><strong>Sample data</strong> — development records created by the seed script. Not real business activity.</p>` : '';
+  return row && row.value === 'true' ? html`<span class="ui-sample" role="note" title="Development records created by the seed script. Not real business activity.">Sample data<span class="c-sr"> — development records created by the seed script, not real business activity</span></span>` : '';
 }
 
 // ── Shell ─────────────────────────────────────────────────────────────
 function shell(ctx, { title, tab, body, back, wide = false }) {
   const approvals = ctx.app.command.metrics.approvalsCount();
   const unread = ctx.app.command.notifications.unreadCount();
-  const current = (id) => (tab === id || (id === 'more' && MORE_TABS.includes(tab)) ? raw('aria-current="page"') : '');
+  // Exactly one item is the current page; on phones a secondary page also lights its section tab.
+  const section = TAB_ALIAS[tab] || tab;
+  const state = (id, primary) => (id === tab ? raw('aria-current="page"') : primary && id === section ? raw('data-section') : '');
   return html`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${title} · Command</title>
-<meta name="theme-color" content="#0b0b0a">
+<meta name="theme-color" content="#111111">
 <meta name="color-scheme" content="dark">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -79,28 +83,27 @@ function shell(ctx, { title, tab, body, back, wide = false }) {
 <link rel="manifest" href="/command/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/assets/command/apple-touch-icon.png">
 <link rel="icon" href="/assets/command/icon-192.png" type="image/png">
-<link rel="preload" href="/assets/fonts/instrument-serif-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="/assets/fonts/hanken-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/tokens.css">
 <link rel="stylesheet" href="/assets/css/command.css">
 <script src="/assets/js/command.js" defer></script>
 </head>
 <body class="c-body" data-tab="${tab}">
 <a class="c-skip" href="#main">Skip to content</a>
 <div class="c-app">
-<nav class="c-nav" aria-label="Command">
-  <p class="c-nav__brand">Sunday Division <span>Command</span></p>
-  ${NAV.map(([id, href, label, primary]) => html`<a class="c-nav__item ${primary ? '' : 'c-nav__item--secondary'}" href="${href}" ${current(id)}>${icon(id)}<span>${label}</span>${id === 'approvals' && approvals ? html`<span class="c-badge" aria-label="${approvals} waiting">${approvals > 99 ? '99+' : approvals}</span>` : ''}</a>`)}
-  <a class="c-nav__item c-nav__item--more" href="/command/more" ${current('more')}>${icon('more')}<span>More</span></a>
+<nav class="ui-nav" aria-label="Command">
+  <a class="ui-nav__brand" href="/command" aria-label="Sunday Division Command — Overview"><span>Sunday</span><span>Division</span></a>
+  ${NAV.map(([id, href, label, primary]) => html`<a class="ui-nav__item ${primary ? '' : 'ui-nav__item--secondary'}" href="${href}" ${state(id, primary)}>${ui.Icon(id)}<span class="ui-nav__label">${label}</span>${id === 'approvals' && approvals ? html`<span class="ui-badge" aria-label="${approvals} waiting">${approvals > 99 ? '99+' : approvals}</span>` : ''}</a>`)}
 </nav>
 <div class="c-page">
-<header class="c-top">
-  ${back ? html`<a class="c-top__back" href="${back}" aria-label="Back">${icon('back')}</a>` : html`<span class="c-top__mark" aria-hidden="true">SD</span>`}
-  <p class="c-top__title">${title}</p>
-  <a class="c-top__bell" href="/command/notifications" aria-label="Notifications${unread ? `, ${unread} unread` : ''}">${icon('bell')}${unread ? html`<span class="c-bell-dot" aria-hidden="true"></span>` : ''}</a>
+<header class="ui-appbar">
+  ${back ? html`<a class="ui-appbar__back" href="${back}">${ui.Icon('back')}<span>Back</span></a>` : html`<a class="ui-wordmark" href="/command" aria-label="Sunday Division — Overview"><span>Sunday</span><span>Division</span></a>`}
+  ${sampleBanner(ctx)}
+  <a class="ui-appbar__bell" href="/command/notifications" aria-label="Notifications${unread ? `, ${unread} unread` : ''}">${ui.Icon('bell')}${unread ? html`<span class="ui-appbar__unread" aria-hidden="true"></span>` : ''}</a>
 </header>
 <main id="main" class="c-main ${wide ? 'c-main--wide' : ''}" tabindex="-1">
 ${ctx.flash ? html`<p class="c-flash" role="status">${ctx.flash}</p>` : ''}
-${sampleBanner(ctx)}
 ${body}
 </main>
 </div>
@@ -112,10 +115,10 @@ ${body}
 function bare(ctx, { title, body }) {
   return html`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>${title} · Command</title><meta name="theme-color" content="#0b0b0a"><meta name="color-scheme" content="dark"><meta name="robots" content="noindex, nofollow">
+<title>${title} · Command</title><meta name="theme-color" content="#111111"><meta name="color-scheme" content="dark"><meta name="robots" content="noindex, nofollow">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Command">
 <link rel="manifest" href="/command/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/command/apple-touch-icon.png">
-<link rel="stylesheet" href="/assets/css/command.css"></head>
+<link rel="stylesheet" href="/assets/css/tokens.css"><link rel="stylesheet" href="/assets/css/command.css"></head>
 <body class="c-body c-body--bare"><main id="main" class="c-bare">${body}</main></body></html>`;
 }
 
@@ -146,46 +149,51 @@ function errorPage(ctx, status, message) {
 }
 
 // ── Overview ──────────────────────────────────────────────────────────
-function overview(ctx, { health, month, week, counts, urgent, brief, pendingBrief, approvals }) {
+function overview(ctx, { health, trailing, counts, focus, brief, pendingBrief, paused }) {
   const tz = tzOf(ctx);
   const h = localHour(Date.now(), tz);
   const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  // Said only when it is true: derived from the health checks.
+  const subtitle = paused ? 'Automation is paused. Here’s what matters today.'
+    : health.overall === 'ok' ? 'Everything is running normally. Here’s what matters today.'
+      : health.overall === 'watch' ? 'A few things to keep an eye on today.' : 'Some things need you today.';
+  const t = trailing;
+  const signed = (x, unit) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(unit === 'pp' ? 0 : 0)}${unit}`;
+  const revDelta = t.revenueDelta === null ? null : { text: signed(t.revenueDelta * 100, '%'), tone: t.revenueDelta >= 0 ? 'up' : 'down' };
+  const marginDelta = t.marginDeltaPp === null ? null : { text: `${signed(t.marginDeltaPp, ' pp')}`, tone: t.marginDeltaPp >= 0 ? 'up' : 'down' };
   return shell(ctx, {
     title: 'Overview', tab: 'overview',
-    body: html`<section class="c-hero">
-  <p class="c-eyebrow">${new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())}</p>
-  <h1 class="c-serif c-h1">${greeting}, ${firstName(ctx)}.</h1>
-</section>
+    body: html`${ui.Hero({ image: '/assets/command/hero-drape.jpg', eyebrow: 'Command', title: `${greeting}, ${firstName(ctx)}.`, subtitle })}
 
-<section class="c-card c-health c-health--${health.overall}" aria-labelledby="health-h">
-  <div class="c-card__head"><h2 id="health-h" class="c-label">Company health</h2>${dot(health.overall)}</div>
-  <p class="c-serif c-health__state">${health.label}</p>
-  <ul class="c-checks">${health.checks.map((c) => html`<li><a href="${c.link}">${dot(c.status, c.status === 'ok' ? 'OK' : c.status === 'watch' ? 'Watch' : 'Needs you')}<span class="c-checks__label">${c.label}</span><span class="c-checks__detail">${c.detail}</span></a></li>`)}</ul>
-</section>
+<div class="ui-overview">
+<div class="ui-overview__figures">
+${ui.StatCard({
+    label: `Revenue (${t.days}d)`, value: whole(t.cur.revenue), delta: revDelta,
+    chart: ui.Sparkline(t.series, { label: `Cumulative verified payments over the last ${t.days} days` }),
+    sub: t.cur.revenue ? html`${t.cur.payments} verified payment${t.cur.payments === 1 ? '' : 's'}${t.prev.revenue ? html` · vs ${whole(t.prev.revenue)} the ${t.days} days before` : ''}${t.cur.simulatedRevenue ? html` · <span class="ui-sim">${whole(t.cur.simulatedRevenue)} simulated</span>` : ''}` : `No verified payments in the last ${t.days} days`,
+    href: '/command/performance', cls: 'ui-stat--wide',
+  })}
+<div class="ui-pair">
+${ui.StatCard({ label: 'Active projects', value: String(counts.active), sub: counts.active ? [[counts.inProduction, 'in production'], [counts.awaitingDeposit, 'awaiting deposit'], [counts.scoping, 'scoping']].filter(([k]) => k).map(([k, l]) => `${k} ${l}`).join(' · ') : 'None yet', href: '/command/projects' })}
+${ui.StatCard({ label: `Margin (${t.days}d)`, value: t.cur.margin === null ? '—' : pct(t.cur.margin), delta: marginDelta, sub: t.cur.margin === null ? 'Needs revenue in the period' : `${whole(t.cur.expenses)} costs`, href: '/command/performance' })}
+</div>
+</div>
 
-<a class="c-card c-card--link c-brief-teaser" href="/command/brief">
-  <p class="c-label">Morning Brief${brief ? html` · ${fmtLocal(brief.ready_at, tz)}` : ''}</p>
-  ${brief ? html`<p class="c-serif c-brief-teaser__headline">${brief.content.headline.text}</p>` : pendingBrief ? html`<p class="c-muted">Your brief is being written…</p>` : html`<p class="c-muted">No brief yet. It arrives each morning at ${ctx.app.settings.get('brief_hour')}:00, or generate one now.</p>`}
-  <span class="c-card__go">${icon('arrow')}</span>
-</a>
+${ui.Section({ title: 'Today’s focus', id: 'focus', body: focus.length ? ui.List(focus.map((f) => ({ icon: f.icon, tone: f.tone, title: f.title, href: f.href })), { cls: 'ui-list--card' }) : ui.EmptyState({ title: 'Nothing needs you right now.', body: 'Approvals, risks and failures will appear here as they happen.' }) })}
 
-<section aria-labelledby="money-h">
-  <h2 id="money-h" class="c-section-title">${month.label}</h2>
-  <div class="c-kpis">
-    <div class="c-kpi"><p class="c-kpi__label">Revenue</p><p class="c-kpi__value">${whole(month.revenue)}</p><p class="c-kpi__sub">${month.payments} verified payment(s)${month.simulatedRevenue ? html`<br><span class="c-sim">incl. ${whole(month.simulatedRevenue)} simulated</span>` : ''}</p></div>
-    <div class="c-kpi"><p class="c-kpi__label">Profit</p><p class="c-kpi__value">${whole(month.profit)}</p><p class="c-kpi__sub">${month.margin === null ? 'No revenue yet' : `${pct(month.margin)} margin`}</p></div>
-    <div class="c-kpi"><p class="c-kpi__label">Booked</p><p class="c-kpi__value">${whole(month.booked)}</p><p class="c-kpi__sub">Quotes accepted</p></div>
-    <div class="c-kpi"><p class="c-kpi__label">Active projects</p><p class="c-kpi__value">${counts.active}</p><p class="c-kpi__sub">${counts.inProduction} in production · ${counts.awaitingDeposit} deposit · ${counts.scoping} scoping</p></div>
-  </div>
-  <p class="c-note">Cash basis: verified payments minus recorded costs. This week: ${whole(week.revenue)} in, ${whole(week.expenses)} out.</p>
-</section>
+${ui.Section({ title: 'Company health', id: 'health', body: html`<details class="ui-card ui-health">
+  <summary class="ui-health__summary">${ui.StatusDot(health.overall === 'ok' ? 'success' : health.overall === 'watch' ? 'attention' : 'danger')}<span class="ui-health__state">${health.label}</span><span class="ui-health__hint">${health.checks.filter((c) => c.status !== 'ok').length ? `${health.checks.filter((c) => c.status !== 'ok').length} of ${health.checks.length} checks need a look` : `All ${health.checks.length} checks clear`}</span>${ui.Icon('chevron', 'ui-health__chev')}</summary>
+  ${ui.List(health.checks.map((c) => ({ dot: c.status === 'ok' ? 'success' : c.status === 'watch' ? 'attention' : 'danger', title: c.label, meta: c.detail, href: c.link })))}
+</details>` })}
 
-<section aria-labelledby="urgent-h">
-  <h2 id="urgent-h" class="c-section-title">Urgent</h2>
-  ${urgent.length ? html`<ul class="c-list">${urgent.map((u) => html`<li><a class="c-list__row" href="${u.link}">${dot('act')}<span><strong>${u.title}</strong>${u.detail ? html`<span class="c-muted c-small">${u.detail}</span>` : ''}</span>${icon('arrow', 'i i--end')}</a></li>`)}</ul>` : empty('Nothing urgent.')}
-</section>
+${ui.Section({ title: 'Morning Brief', id: 'brief', body: ui.Card({ href: '/command/brief', cls: 'ui-brief-card', body: brief ? html`<p class="ui-brief-card__headline">${brief.content.headline.text}</p><p class="ui-brief-card__meta">${fmtLocal(brief.ready_at, tz)} · from ${brief.facts.length} verified facts</p>` : pendingBrief ? html`<p class="ui-brief-card__meta">Your brief is being written…</p>` : html`<p class="ui-brief-card__meta">No brief yet. It arrives each morning at ${ctx.app.settings.get('brief_hour')}:00, or generate one now.</p>` }) })}
 
-<a class="c-card c-card--link c-cta" href="/command/approvals"><span><span class="c-label">Approvals</span><span class="c-serif c-cta__n">${approvals}</span> waiting for you</span>${icon('arrow')}</a>`,
+${ui.Section({ title: 'Studio', id: 'studio', body: ui.List([
+    { icon: 'performance', title: 'Performance', meta: 'Revenue, profit, turnaround, efficiency', href: '/command/performance' },
+    { icon: 'bell', title: 'Notifications', href: '/command/notifications' },
+    { icon: 'settings', title: 'Settings', meta: 'Notifications, agent permissions, providers, budgets', href: '/command/settings' },
+  ], { cls: 'ui-list--card' }) })}
+</div>`,
   });
 }
 
@@ -214,18 +222,29 @@ ${history.length > 1 ? html`<section class="c-section"><h2 class="c-section-titl
 }
 
 // ── Projects ──────────────────────────────────────────────────────────
-function projects(ctx, { rows, filter }) {
-  const chips = [['active', 'Active'], ['attention', 'Needs attention'], ['done', 'Done'], ['all', 'All']];
+const PROJECT_TABS = [['active', 'Active'], ['production', 'Production'], ['review', 'Review'], ['attention', 'Attention'], ['done', 'Done']];
+const PROJECT_EMPTY = {
+  active: ['No active projects', 'New inquiries become projects once the Sales Agent has scoped them.'],
+  production: ['Nothing in production', 'Projects move here when the deposit is verified.'],
+  review: ['Nothing waiting for your review', 'Quotes, offers and deliverables that need you will show here.'],
+  attention: ['Nothing needs attention', 'Blocked, overdue or waiting projects will show here.'],
+  done: ['No finished projects yet', ''],
+};
+function projects(ctx, { rows, counts, tab }) {
   return shell(ctx, {
     title: 'Projects', tab: 'projects',
-    body: html`<h1 class="c-serif c-h1 c-h1--page">Projects</h1>
-<nav class="c-chips" aria-label="Filter projects">${chips.map(([f, l]) => html`<a class="c-chip" href="/command/projects?filter=${f}" ${filter === f ? raw('aria-current="true"') : ''}>${l}</a>`)}</nav>
-${rows.length ? html`<ul class="c-cards">${rows.map((p) => html`<li><a class="c-card c-card--link c-project" href="/command/projects/${p.id}">
-  <div class="c-project__top"><span class="c-mono">${p.code}</span><span class="c-pill">${p.stage}</span>${p.attention ? dot('watch', 'Needs attention') : ''}</div>
-  <p class="c-serif c-project__name">${p.name}</p>
-  <p class="c-muted c-small">${p.brand_name}${p.due_date ? ` · due ${p.due_date}` : ''}${p.blocked_reason ? ' · blocked' : ''}${p.overdue ? ` · ${p.overdue} overdue` : ''}</p>
-  ${p.prod_total ? html`<label class="c-progress"><span class="c-small c-muted">Production ${p.prod_done}/${p.prod_total}</span><progress max="${p.prod_total}" value="${p.prod_done}">${p.prod_done} of ${p.prod_total}</progress></label>` : ''}
-</a></li>`)}</ul>` : empty('No projects here.')}`,
+    body: html`${ui.PageHeader({ title: 'Projects' })}
+${ui.SegmentedTabs(PROJECT_TABS.map(([id, label]) => ({ label, count: counts[id], href: `/command/projects?tab=${id}`, current: tab === id })), { label: 'Filter projects' })}
+${rows.length ? html`<ul class="ui-projects">${rows.map((p) => html`<li><a class="ui-card ui-card--link ui-project" href="/command/projects/${p.id}">
+  ${ui.Thumb({ src: p.thumbFileId ? `/command/projects/${p.id}/thumb` : null, alt: p.thumbFileId ? `Client reference for ${p.name}` : `${p.category || 'Garment'} — studio drawing`, garment: p.garment })}
+  <span class="ui-project__body">
+    <span class="ui-project__top"><span class="ui-project__code">${p.code}</span>${ui.StatusPill({ tone: p.status_.tone, label: p.status_.label })}</span>
+    <span class="ui-project__name">${p.name}</span>
+    <span class="ui-project__meta">${p.packageLabel}${p.due_date ? ` · due ${p.due_date}` : ''}</span>
+    ${p.prod_total ? ui.ProgressBar({ value: p.prod_done, max: p.prod_total, label: `Production tasks done for ${p.code}` }) : html`<span class="ui-project__stage">${p.stage}</span>`}
+  </span>
+  ${ui.Icon('chevron', 'ui-project__chev')}
+</a></li>`)}</ul>` : ui.EmptyState({ title: PROJECT_EMPTY[tab][0], body: PROJECT_EMPTY[tab][1] })}`,
   });
 }
 
@@ -385,29 +404,42 @@ ${runs.length ? html`<ul class="c-list">${runs.map((r) => html`<li class="c-list
 const SUGGESTIONS = ['What happened overnight?', 'Which projects need my attention?', 'What did we earn this week?', 'Which agents are blocked?', 'Find an approved technical designer for this project', 'Prepare a quote for this customer'];
 function actionCard(ctx, a) {
   if (!a) return '';
-  return html`<a class="c-action-card c-action-card--${a.status}" href="/command/actions/${a.id}"><span class="c-label">${a.risk === 'high' ? 'Needs your confirmation · high impact' : 'Needs your confirmation'}</span><strong>${a.preview.title}</strong><span class="c-small">${a.status === 'proposed' ? 'Review & confirm' : `${a.status[0].toUpperCase()}${a.status.slice(1)}`}</span></a>`;
+  const open = a.status === 'proposed';
+  return html`<a class="ui-action ui-action--${a.risk} ui-action--${a.status}" href="/command/actions/${a.id}">
+  <span class="ui-action__text"><span class="ui-overline">${open ? (a.risk === 'high' ? 'High impact · needs you' : 'Needs your confirmation') : a.status}</span><span class="ui-action__title">${a.preview.title}</span></span>
+  <span class="ui-action__go">${open ? 'Review' : 'View'}${ui.Icon('chevron')}</span></a>`;
 }
 function chatMessage(ctx, msg) {
   const data = msg.data || {};
+  if (msg.role === 'user') return html`<li class="ui-msg ui-msg--user"><div class="ui-msg__bubble">${msg.content}</div>${ui.Avatar(ctx.user.name)}</li>`;
   const acts = (data.actions || []).map((id) => ctx.app.command.actions.get(id)).filter(Boolean);
-  const by = msg.role === 'assistant' ? ({ rules: 'Rules', simulated: 'Simulated model', anthropic: 'Claude', openai: 'OpenAI' }[data.brain] || '') : '';
-  return html`<li class="c-msg c-msg--${msg.role}"><div class="c-msg__bubble">${msg.role === 'assistant' ? richText(msg.content) : msg.content}</div>${acts.map((a) => actionCard(ctx, a))}${by ? html`<p class="c-msg__meta">${by}${data.tools && data.tools.length ? ` · read ${data.tools.filter((t) => t !== 'propose_action').join(', ')}` : ''}</p>` : ''}</li>`;
+  const by = { rules: 'Answered from the records (rules)', simulated: 'Simulated test model', anthropic: 'Claude', openai: 'OpenAI' }[data.brain] || '';
+  const read = (data.tools || []).filter((t) => t !== 'propose_action');
+  return html`<li class="ui-msg ui-msg--assistant"><div class="ui-reply">
+  <p class="ui-reply__head">${ui.Icon('spark')}<span>Command</span></p>
+  <div class="ui-reply__body">${richText(msg.content)}</div>
+  ${acts.length ? html`<div class="ui-reply__actions">${acts.map((a) => actionCard(ctx, a))}</div>` : ''}
+</div>${by ? html`<p class="ui-msg__meta">${by}${read.length ? ` · read ${read.join(', ').replace(/_/g, ' ')}` : ''}</p>` : ''}</li>`;
 }
 function chat(ctx, { conversation, messages, conversations, projectId, mode }) {
   return shell(ctx, {
-    title: 'Command Chat', tab: 'chat',
-    body: html`<div class="c-chat" data-chat>
-<div class="c-chat__head"><h1 class="c-serif c-h1 c-h1--page">Chat</h1>${conversation ? html`<a class="c-btn c-btn--small c-btn--ghost" href="/command/chat">New</a>` : ''}</div>
-<p class="c-chat__mode c-small c-muted">${dot(mode.model ? 'ok' : 'neutral')}${mode.label}. Questions run read-only. Anything that changes something becomes a preview you confirm.</p>
-<ol class="c-chat__log" aria-live="polite" aria-label="Conversation" data-chat-log>${messages.map((m) => chatMessage(ctx, m))}</ol>
-${!messages.length ? html`<div class="c-chat__suggest" data-suggest>${SUGGESTIONS.map((s) => html`<button type="button" class="c-chip" data-fill="${s}">${s}</button>`)}</div>` : ''}
-<form class="c-chat__composer" method="post" action="/command/chat" data-chat-form>
+    title: 'Command', tab: 'command',
+    body: html`<div class="ui-chat" data-chat>
+${ui.PageHeader({ title: 'Command', subtitle: 'Ask about the business. Anything that would change something comes back to you to confirm.', actions: conversation ? ui.Button({ label: 'New', href: '/command/chat', variant: 'secondary', small: true }) : '' })}
+<p class="ui-chat__mode">${ui.StatusDot(mode.model ? 'success' : 'neutral')}<span>${mode.label}</span></p>
+<ol class="ui-chat__log" aria-live="polite" aria-label="Conversation" data-chat-log>${messages.map((m) => chatMessage(ctx, m))}</ol>
+<div class="ui-prompts" id="prompts" data-suggest ${messages.length ? raw('hidden') : ''}>
+  <p class="ui-overline">Try asking</p>
+  <ul class="ui-list ui-list--card">${SUGGESTIONS.map((s) => html`<li><button type="button" class="ui-row ui-row--button" data-fill="${s}"><span class="ui-row__text"><span class="ui-row__title">${s}</span></span>${ui.Icon('chevron', 'ui-row__chevron')}</button></li>`)}</ul>
+</div>
+<form class="ui-composer" method="post" action="/command/chat" data-chat-form>
   ${csrf(ctx)}<input type="hidden" name="conversation_id" value="${conversation ? conversation.id : ''}"><input type="hidden" name="project_id" value="${projectId || ''}">
-  <label for="q" class="c-sr">Ask Command</label>
-  <textarea id="q" name="text" rows="1" maxlength="2000" required placeholder="${projectId ? 'Ask about this project…' : 'Ask about the business…'}" enterkeyhint="send"></textarea>
-  <button class="c-btn c-btn--primary c-btn--icon" type="submit" aria-label="Send">${icon('send')}</button>
+  <button type="button" class="ui-iconbtn ui-composer__more" aria-label="Suggested questions" aria-controls="prompts" aria-expanded="${messages.length ? 'false' : 'true'}" data-prompts-toggle>${ui.Icon('plus')}</button>
+  <label for="q" class="c-sr">Message Command</label>
+  <textarea id="q" name="text" rows="1" maxlength="2000" required placeholder="${projectId ? 'Ask about this project…' : 'Message Command…'}" enterkeyhint="send"></textarea>
+  <button class="ui-iconbtn ui-composer__send" type="submit" aria-label="Send">${ui.Icon('send')}</button>
 </form>
-${conversations.length && !conversation ? html`<section class="c-section"><h2 class="c-section-title">Recent conversations</h2><ul class="c-list">${conversations.map((c) => html`<li><a class="c-list__row" href="/command/chat/${c.id}"><span>${c.title}</span>${icon('arrow', 'i i--end')}</a></li>`)}</ul></section>` : ''}
+${conversations.length && !conversation ? ui.Section({ title: 'Recent conversations', id: 'recent', body: ui.List(conversations.map((c) => ({ title: c.title, meta: fmtLocal(c.updated_at, tzOf(ctx)), href: `/command/chat/${c.id}` })), { cls: 'ui-list--card' }) }) : ''}
 </div>`,
   });
 }

@@ -288,9 +288,9 @@ const command = {
     const approvals = facts.find((f) => f.ref === 'state:approvals');
     const parts = [];
     const cited = [];
-    if (payments.length) { parts.push(`${payments.length} payment(s) received`); cited.push(...payments.map((f) => f.id)); }
+    if (payments.length) { parts.push(`${payments.length} payment${payments.length === 1 ? '' : 's'} received`); cited.push(...payments.map((f) => f.id)); }
     if (approvals) { parts.push(approvals.text.replace(/ for your approval$/, '')); cited.push(approvals.id); }
-    if (urgent.length) { parts.push(`${urgent.length} urgent item(s)`); cited.push(...urgent.map((f) => f.id)); }
+    if (urgent.length) { parts.push(`${urgent.length} urgent item${urgent.length === 1 ? '' : 's'}`); cited.push(...urgent.map((f) => f.id)); }
     const headline = parts.length ? { text: `${parts.join(' · ')}.`, fact_ids: cited.slice(0, 10) } : { text: 'A quiet period: nothing new since the last brief.', fact_ids: facts.length ? [facts[facts.length - 1].id] : [] };
     const actions = [];
     if (approvals && approvals.severity !== 'info') actions.push({ text: 'Review the items waiting in Approvals.', fact_ids: [approvals.id], action_type: null, target_id: null });

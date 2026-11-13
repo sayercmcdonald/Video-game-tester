@@ -1,5 +1,31 @@
 'use strict';
+const fs = require('node:fs');
 const { period, localDate, addDays, midnight } = require('./time');
+const catalog = require('../services/catalog');
+
+const GARMENT_FOR = { Outerwear: 'coat', Tailoring: 'coat', Shirting: 'overshirt', 'Trousers & denim': 'trouser', 'Jersey & tees': 'tee', Activewear: 'tee', Knitwear: 'tee' };
+
+/** Width/height of a PNG, JPEG or WebP from its first bytes (null if unknown). */
+function imageSize(buf) {
+  if (buf.length > 24 && buf.readUInt32BE(0) === 0x89504e47) return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  if (buf[0] === 0xff && buf[1] === 0xd8) {
+    for (let i = 2; i + 9 < buf.length;) {
+      if (buf[i] !== 0xff) { i += 1; continue; }
+      const marker = buf[i + 1];
+      const len = buf.readUInt16BE(i + 2);
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+      i += 2 + len;
+    }
+    return null;
+  }
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+    const kind = buf.toString('ascii', 12, 16);
+    if (kind === 'VP8X') return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) };
+    if (kind === 'VP8L') { const b = buf.readUInt32LE(21); return { w: 1 + (b & 0x3fff), h: 1 + ((b >> 14) & 0x3fff) }; }
+    if (kind === 'VP8 ') return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff };
+  }
+  return null;
+}
 
 /**
  * Read-only business numbers for the founder app. Every figure is computed from the
@@ -195,6 +221,106 @@ function createCommandMetrics(app) {
 
   const approvalsCount = () => app.command.approvals().length;
 
+  /** Last N days against the N days before, plus a cumulative daily series of verified payments. */
+  function trailing(days = 30) {
+    const end = nowMs();
+    const iso = (ms) => new Date(ms).toISOString();
+    const from = end - days * 864e5;
+    const cur = money(iso(from), iso(end));
+    const prev = money(iso(from - days * 864e5), iso(from));
+    const series = new Array(days + 1).fill(0);
+    for (const r of db.all("SELECT received_at, amount_cents FROM payments WHERE status = 'succeeded' AND received_at >= ? AND received_at < ?", iso(from), iso(end))) {
+      series[Math.min(days, Math.floor((Date.parse(r.received_at) - from) / 864e5) + 1)] += r.amount_cents;
+    }
+    for (let i = 1; i < series.length; i++) series[i] += series[i - 1];
+    return {
+      days, cur, prev, series,
+      revenueDelta: prev.revenue > 0 ? (cur.revenue - prev.revenue) / prev.revenue : null,
+      marginDeltaPp: cur.margin !== null && prev.margin !== null ? (cur.margin - prev.margin) * 100 : null,
+    };
+  }
+
+  /** What needs the founder today; only non-zero items. */
+  function focus() {
+    const t = today();
+    const items = [];
+    const approvals = approvalsCount();
+    if (approvals) items.push({ icon: 'approvals', title: `${approvals} approval${approvals === 1 ? '' : 's'} waiting`, href: '/command/approvals', tone: 'review' });
+    const attention = projects('attention').length;
+    if (attention) items.push({ icon: 'update', title: `${attention} project${attention === 1 ? '' : 's'} need attention`, href: '/command/projects?filter=attention' });
+    const risks = atRiskProjects().length
+      + n("SELECT COUNT(*) AS n FROM assignments WHERE status IN ('offered','accepted','changes_requested') AND due_date IS NOT NULL AND due_date < ?", t)
+      + n("SELECT COUNT(*) AS n FROM deliverable_qa q JOIN deliverables d ON d.id = q.deliverable_id WHERE q.result = 'fail' AND q.version = d.version AND d.status = 'in_review'");
+    if (risks) items.push({ icon: 'alert', title: `${risks} production risk${risks === 1 ? '' : 's'}`, href: '/command/projects?filter=attention', tone: 'attention' });
+    const failed = n("SELECT COUNT(*) AS n FROM jobs WHERE status = 'failed'");
+    if (failed) items.push({ icon: 'agents', title: `${failed} agent task${failed === 1 ? '' : 's'} failed`, href: '/command/agents', tone: 'danger' });
+    const brief = db.get("SELECT id, ready_at FROM briefs WHERE status = 'ready' ORDER BY id DESC LIMIT 1");
+    if (brief && localDate(Date.parse(brief.ready_at), tz()) === t) items.push({ icon: 'brief', title: 'Morning Brief is ready', href: '/command/brief' });
+    return items;
+  }
+
+  // ── Project cards ──────────────────────────────────────────────────
+  const sizes = new Map();
+  /** The client's first reference image, if it is a real picture (not a placeholder pixel). */
+  function thumbFor(p) {
+    const files = db.all("SELECT * FROM files WHERE kind = 'reference' AND mime LIKE 'image/%' AND (project_id = ? OR (inquiry_id IS NOT NULL AND inquiry_id = ?)) ORDER BY id LIMIT 4", p.id, p.inquiry_id || -1);
+    for (const f of files) {
+      if (!sizes.has(f.id)) {
+        let size = null;
+        try {
+          const fd = fs.openSync(app.files.pathOf(f), 'r');
+          const buf = Buffer.alloc(Math.min(f.size, 256 * 1024));
+          fs.readSync(fd, buf, 0, buf.length, 0);
+          fs.closeSync(fd);
+          size = imageSize(buf);
+        } catch { /* unreadable: skip */ }
+        sizes.set(f.id, size);
+      }
+      const size = sizes.get(f.id);
+      if (size && size.w >= 64 && size.h >= 64) return f;
+    }
+    return null;
+  }
+  function statusOf(p, reviews) {
+    if (p.blocked_reason) return { tone: 'danger', label: 'Blocked' };
+    if (p.workflow_paused) return { tone: 'attention', label: 'Paused' };
+    if (reviews) return { tone: 'review', label: 'In review' };
+    const byState = {
+      triage: ['neutral', 'New lead'], needs_review: ['neutral', 'New lead'], scoping: ['neutral', 'Scoping'], awaiting_quote_approval: ['neutral', 'Scoping'],
+      awaiting_client_acceptance: ['neutral', 'With client'], quote_declined: ['attention', 'Quote declined'], awaiting_deposit: ['neutral', 'Awaiting deposit'],
+      setup: ['success', 'In production'], in_production: ['success', 'In production'], awaiting_final_payment: ['neutral', 'Final payment'],
+      ready_for_release: ['review', 'Ready to release'], completing: ['neutral', 'Delivered'], completed: ['neutral', 'Delivered'], cancelled: ['neutral', 'Cancelled'], lost: ['neutral', 'Closed'],
+    };
+    const byStatus = { scoping: ['neutral', 'Scoping'], awaiting_deposit: ['neutral', 'Awaiting deposit'], active: ['success', 'In production'], delivered: ['neutral', 'Delivered'], closed: ['neutral', 'Closed'], cancelled: ['neutral', 'Cancelled'] };
+    const [tone, label] = byState[p.workflow_state] || byStatus[p.status] || ['neutral', p.status];
+    return { tone, label };
+  }
+  /** Cards for the Projects screen, with tab counts. */
+  function projectCards(tab = 'active') {
+    const reviews = {};
+    for (const a of app.command.approvals()) if (a.projectId) reviews[a.projectId] = (reviews[a.projectId] || 0) + 1;
+    const all = projects('all').map((p) => {
+      const inquiry = p.inquiry_id ? db.get('SELECT garment_category FROM inquiries WHERE id = ?', p.inquiry_id) : null;
+      const category = inquiry ? inquiry.garment_category : '';
+      const pkg = catalog.PACKAGES.find((k) => k.id === p.package);
+      const thumb = thumbFor(p);
+      return {
+        ...p, reviews: reviews[p.id] || 0, category, garment: GARMENT_FOR[category] || null, thumbFileId: thumb ? thumb.id : null,
+        packageLabel: pkg ? `${pkg.name} package` : category || 'Project', status_: statusOf(p, reviews[p.id] || 0),
+      };
+    });
+    const tabs = {
+      active: (p) => ['scoping', 'awaiting_deposit', 'active'].includes(p.status),
+      production: (p) => p.status === 'active',
+      review: (p) => p.reviews > 0,
+      attention: (p) => p.attention && !['closed', 'cancelled'].includes(p.status),
+      done: (p) => ['delivered', 'closed', 'cancelled'].includes(p.status),
+    };
+    const counts = Object.fromEntries(Object.entries(tabs).map(([k, f]) => [k, all.filter(f).length]));
+    return { rows: all.filter(tabs[tab] || tabs.active), counts };
+  }
+  const thumbFile = (projectId) => { const p = db.get('SELECT * FROM projects WHERE id = ?', projectId); return p ? thumbFor(p) : null; };
+
   function agents() {
     const stats = require('../orchestrator/metrics').createMetrics(app).agentStats();
     const ids = ['sales', 'project_manager', 'talent', 'production', 'qa', 'client_success', 'command', 'orchestrator'];
@@ -212,7 +338,7 @@ function createCommandMetrics(app) {
     });
   }
 
-  return { money, forPeriod, projectCounts, health, urgent, projects, project, weeklyRevenue, monthly, efficiency, approvalsCount, agents, atRiskProjects, today };
+  return { money, forPeriod, projectCounts, health, urgent, projects, project, weeklyRevenue, monthly, efficiency, approvalsCount, agents, atRiskProjects, today, trailing, focus, projectCards, thumbFile };
 }
 
-module.exports = { createCommandMetrics };
+module.exports = { createCommandMetrics, imageSize };

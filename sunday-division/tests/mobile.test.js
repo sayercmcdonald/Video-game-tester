@@ -32,7 +32,7 @@ function audit() {
     const r = target.getBoundingClientRect();
     if (r.height < 24 || r.width < 24) problems.push(`small target (${Math.round(r.width)}×${Math.round(r.height)}): ${el.tagName} ${(el.textContent || el.name || '').trim().slice(0, 30)}`);
   }
-  for (const el of document.querySelectorAll('.c-nav__item, .c-btn:not(.c-btn--small), .c-top__bell, .c-top__back, .c-list__row')) {
+  for (const el of document.querySelectorAll('.ui-nav__item, .ui-appbar__bell, .ui-appbar__back, .ui-row, .ui-btn:not(.ui-btn--small), .ui-iconbtn, .ui-tabs__item, .c-btn:not(.c-btn--small), .c-list__row')) {
     if (!visible(el)) continue;
     if (el.getBoundingClientRect().height < 44) problems.push(`primary control under 44px: ${(el.textContent || '').trim().slice(0, 30)}`);
   }
@@ -86,12 +86,19 @@ test('Command is usable on a phone and on a desktop', { skip: playwright ? false
       await page.goto(`${base}/command/chat`);
       await page.fill('#q', 'What did we earn this week?');
       await page.click('button[aria-label="Send"]');
-      await page.waitForSelector('.c-msg--assistant:not(.c-msg--typing)');
+      await page.waitForSelector('.ui-msg--assistant:not(.ui-msg--typing)');
       assert.match(page.url(), /\/command\/chat\/\d+$/);
       if (label === 'iPhone 13') {
         // The tab bar sits above the home indicator and every tab is reachable.
-        const tabs = await page.$$eval('.c-nav__item', (els) => els.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.textContent.trim()));
-        assert.deepEqual(tabs.map((x) => x.replace(/\d+$/, '')), ['Overview', 'Projects', 'Approvals', 'Chat', 'More']);
+        const tabs = await page.$$eval('.ui-nav__item', (els) => els.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.querySelector('.ui-nav__label').textContent.trim()));
+        assert.deepEqual(tabs, ['Overview', 'Projects', 'Agents', 'Approvals', 'Command']);
+        // The tab bar never covers the composer or the last row of content.
+        const overlap = await page.evaluate(() => {
+          const bar = document.querySelector('.ui-nav').getBoundingClientRect();
+          const composer = document.querySelector('.ui-composer').getBoundingClientRect();
+          return composer.bottom > bar.top + 1;
+        });
+        assert.equal(overlap, false);
       }
       assert.deepEqual(errors, []);
       await ctx.close();

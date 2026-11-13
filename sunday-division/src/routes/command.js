@@ -25,7 +25,7 @@ function register(router, app) {
   // ── Public pieces of the PWA (no data) ─────────────────────────────
   router.get('/command/manifest.webmanifest', (ctx) => ctx.send(200, JSON.stringify({
     name: 'Sunday Division Command', short_name: 'Command', id: '/command', start_url: '/command', scope: '/command/', display: 'standalone',
-    orientation: 'portrait', background_color: '#0b0b0a', theme_color: '#0b0b0a', description: 'Private founder app for Sunday Division.',
+    orientation: 'portrait', background_color: '#111111', theme_color: '#111111', description: 'Private founder app for Sunday Division.',
     icons: [
       { src: '/assets/command/icon-192.png', sizes: '192x192', type: 'image/png' },
       { src: '/assets/command/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -72,8 +72,8 @@ function register(router, app) {
   // ── Screens ─────────────────────────────────────────────────────────
   const m = () => app.command.metrics;
   router.get('/command', F, (ctx) => ctx.html(views.overview(ctx, {
-    health: m().health(), month: m().forPeriod('this_month'), week: m().forPeriod('this_week'), counts: m().projectCounts(),
-    urgent: m().urgent(), brief: app.command.brief.latest(), pendingBrief: app.command.brief.pending(), approvals: m().approvalsCount(),
+    health: m().health(), trailing: m().trailing(30), counts: m().projectCounts(), focus: m().focus(),
+    brief: app.command.brief.latest(), pendingBrief: app.command.brief.pending(), paused: app.settings.get('orchestrator_paused'),
   })));
   router.get('/command/more', F, (ctx) => ctx.html(views.more(ctx)));
 
@@ -85,8 +85,16 @@ function register(router, app) {
   });
 
   router.get('/command/projects', F, (ctx) => {
-    const filter = ['active', 'attention', 'done', 'all'].includes(ctx.query.get('filter')) ? ctx.query.get('filter') : 'active';
-    ctx.html(views.projects(ctx, { rows: m().projects(filter), filter }));
+    const asked = ctx.query.get('tab') || ctx.query.get('filter');
+    const tab = ['active', 'production', 'review', 'attention', 'done'].includes(asked) ? asked : 'active';
+    const { rows, counts } = m().projectCards(tab);
+    ctx.html(views.projects(ctx, { rows, counts, tab }));
+  });
+  // The client's reference image for a project card: founder-only, never cached on the device.
+  router.get('/command/projects/:id/thumb', F, (ctx) => {
+    const f = m().thumbFile(int(ctx.params.id));
+    if (!f || !/^image\/(jpeg|png|webp)$/.test(f.mime)) throw new HttpError(404, 'No image.');
+    ctx.send(200, fs.readFileSync(app.files.pathOf(f)), { 'Content-Type': f.mime, 'Cache-Control': 'private, no-store', 'Content-Disposition': 'inline' });
   });
   router.get('/command/projects/:id', F, (ctx) => {
     const p = m().project(int(ctx.params.id));

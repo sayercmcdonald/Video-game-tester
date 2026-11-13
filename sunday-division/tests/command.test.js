@@ -254,7 +254,7 @@ test('Command Chat: read-only answers, proposals only, never direct changes', as
     assert.equal(app.quotes.get(quote.id).status, 'draft', 'still a draft');
     const proposal = app.command.actions.get(res.data.actions[0]);
     assert.equal(proposal.proposed_by, 'model:simulated');
-    assert.match(res.data.html, /Needs your confirmation/);
+    assert.match(res.data.html, /High impact · needs you/);
     const runs = app.db.all("SELECT * FROM agent_runs WHERE agent = 'command' AND task LIKE 'command.chat#%'");
     assert.equal(runs.length, 3);
     assert.ok(runs.every((r) => r.provider === 'simulated' && r.job_id === null));
@@ -486,4 +486,58 @@ test('Overview, projects, performance and Agent Studio show recorded figures', a
   assert.doesNotMatch(overview.text, /Sample data/);
   app.db.run("INSERT INTO ops_settings (key, value, updated_by, updated_at) VALUES ('sample_data', 'true', 'test', 'now')");
   assert.match((await b.get('/command')).text, /Sample data/);
+});
+
+// ── Design system: honest figures and real imagery ────────────────────
+test('Overview and Projects show only real figures and real imagery', async (t) => {
+  const { app, base, close } = await startApp(founderEnv);
+  t.after(close);
+  const b = await signInFounder(base);
+
+  await t.test('an empty studio shows empty states, no invented comparisons or charts', async () => {
+    const page = (await b.get('/command')).text;
+    assert.doesNotMatch(page, /ui-delta/);
+    assert.doesNotMatch(page, /ui-spark/);
+    assert.match(page, /No verified payments in the last 30 days/);
+    assert.match(page, /Nothing needs you right now/);
+    assert.match((await b.get('/command/projects')).text, /No active projects/);
+  });
+
+  const { projectId } = await driveWorkflow(app, base, 'production');
+
+  await t.test('a comparison appears only when the previous period had revenue', async () => {
+    let page = (await b.get('/command')).text;
+    assert.doesNotMatch(page, /ui-delta--/, 'no previous 30 days of revenue, so no percentage');
+    assert.match(page, /ui-spark/, 'the cumulative series has data');
+    // Move one payment into the previous window: now there is something real to compare with.
+    app.db.run("UPDATE payments SET received_at = ? WHERE id = (SELECT MIN(id) FROM payments)", new Date(Date.now() - 40 * 864e5).toISOString());
+    const tr = app.command.metrics.trailing(30);
+    page = (await b.get('/command')).text;
+    if (tr.prev.revenue > 0) assert.match(page, /ui-delta--(up|down)/);
+    assert.equal(tr.revenueDelta, tr.prev.revenue > 0 ? (tr.cur.revenue - tr.prev.revenue) / tr.prev.revenue : null);
+  });
+
+  await t.test('project cards: tab counts from the records, studio drawings instead of placeholder images', async () => {
+    const page = (await b.get('/command/projects?tab=production')).text;
+    const code = app.projects.get(projectId).code;
+    assert.match(page, new RegExp(code));
+    assert.match(page, /In production|In review/);
+    assert.doesNotMatch(page, /\/thumb"/, 'the 1×1 test reference image is not used as a thumbnail');
+    assert.match(page, /studio drawing/);
+    const { counts } = app.command.metrics.projectCards('active');
+    assert.equal(counts.production, app.db.get("SELECT COUNT(*) AS n FROM projects WHERE status = 'active'").n);
+    // A real reference image is used, served only to the founder and never cached.
+    const fs = require('node:fs');
+    const png = fs.readFileSync(require('node:path').join(__dirname, '..', 'public', 'command', 'icon-192.png'));
+    const fileId = app.db.insert('files', { project_id: projectId, kind: 'reference', storage_name: 'test-ref-192.png', original_name: 'ref.png', mime: 'image/png', size: png.length, sha256: 'x', uploaded_by: 'test', created_at: new Date().toISOString() });
+    fs.writeFileSync(app.files.pathOf(app.files.get(fileId)), png);
+    const fresh = await signInFounder(base);
+    const withThumb = (await fresh.get('/command/projects?tab=production')).text;
+    assert.match(withThumb, new RegExp(`/command/projects/${projectId}/thumb`));
+    const img = await fresh.get(`/command/projects/${projectId}/thumb`);
+    assert.equal(img.status, 200);
+    assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.match(img.headers.get('cache-control'), /no-store/);
+    assert.equal((await new Browser(base).get(`/command/projects/${projectId}/thumb`)).status, 303);
+  });
 });

@@ -1,0 +1,94 @@
+/* Sunday Division — design tokens.
+   One source for colour, type, space, shape and motion. Product stylesheets use the
+   semantic tokens (--color-*, --text-*, --space-*), never raw values.
+
+   Display type: Canela is the reference face. It is a commercial typeface (Commercial Type)
+   and is not shipped here. Newsreader Display (SIL OFL), instanced at its display optical
+   size, stands in. When a Canela web licence is held, add its @font-face as "SD Display"
+   (or put "Canela" first in --font-display) — nothing else changes. */
+
+@font-face { font-family: "SD Display"; src: url("../fonts/newsreader-display-latin-300-500.woff2") format("woff2"); font-weight: 300 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "SD Sans"; src: url("../fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+
+:root {
+  /* ── Brand palette ── */
+  --sd-obsidian: #111111;     /* primary background */
+  --sd-charcoal: #191919;     /* elevated surfaces */
+  --sd-graphite: #252525;     /* secondary surfaces */
+  --sd-bone: #E8E0D4;         /* primary accent */
+  --sd-warm-white: #F4EFE7;   /* text and controls */
+  --sd-sage: #71977B;         /* meaningful success / operating states only */
+
+  /* Supporting neutrals, derived from the palette (contrast checked against obsidian and charcoal). */
+  --sd-mist: #B3AB9F;         /* secondary text · 8.3:1 on obsidian, 6.8:1 on graphite */
+  --sd-stone: #8F887D;        /* tertiary text · 5.4:1 on obsidian, 5.0:1 on charcoal — not for text on graphite (4.4:1) */
+  --sd-ash: #615C55;          /* disabled, decorative strokes */
+  --sd-line: #2C2A27;         /* hairlines on obsidian */
+  --sd-line-strong: #3B3834;  /* control borders */
+  --sd-amber: #C9A46A;        /* attention (sparingly) */
+  --sd-clay: #C98476;         /* problems (sparingly) */
+
+  /* ── Semantic colour ── */
+  --color-bg: var(--sd-obsidian);
+  --color-surface: var(--sd-charcoal);
+  --color-surface-2: var(--sd-graphite);
+  --color-text: var(--sd-warm-white);
+  --color-text-2: var(--sd-mist);
+  --color-text-3: var(--sd-stone);
+  --color-accent: var(--sd-bone);
+  --color-on-accent: var(--sd-obsidian);
+  --color-line: var(--sd-line);
+  --color-line-strong: var(--sd-line-strong);
+  --color-success: var(--sd-sage);
+  --color-success-soft: rgba(113, 151, 123, .14);
+  --color-attention: var(--sd-amber);
+  --color-attention-soft: rgba(201, 164, 106, .12);
+  --color-danger: var(--sd-clay);
+  --color-danger-soft: rgba(201, 132, 118, .12);
+  --color-focus: var(--sd-warm-white);
+  --color-scrim: rgba(17, 17, 17, .86);
+
+  /* ── Type ── */
+  --font-display: "SD Display", "Canela", "Newsreader", Georgia, serif;
+  --font-sans: "SD Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Display scale (serif, light) */
+  --text-display-xl: 300 clamp(40px, 11vw, 52px)/1.02 var(--font-display);
+  --text-display-l: 300 clamp(34px, 9vw, 42px)/1.04 var(--font-display);
+  --text-display-m: 300 28px/1.1 var(--font-display);
+  --text-display-s: 400 22px/1.15 var(--font-display);
+  --text-figure-l: 300 34px/1 var(--font-display);
+  --text-figure-m: 300 28px/1 var(--font-display);
+  /* Interface scale (sans) */
+  --text-title: 600 17px/1.3 var(--font-sans);
+  --text-body: 400 16px/1.5 var(--font-sans);
+  --text-callout: 400 15px/1.45 var(--font-sans);
+  --text-label: 500 14px/1.3 var(--font-sans);
+  --text-footnote: 400 13px/1.4 var(--font-sans);
+  --text-caption: 500 11.5px/1.3 var(--font-sans);
+  --text-overline: 600 10.5px/1.3 var(--font-sans);
+  --tracking-overline: .2em;
+  --tracking-wordmark: .32em;
+
+  /* ── Space (4-point grid) ── */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-7: 32px; --space-8: 40px; --space-9: 56px;
+  --gutter: var(--space-5);
+
+  /* ── Shape ── */
+  --radius-s: 8px; --radius-m: 14px; --radius-l: 20px; --radius-xl: 28px; --radius-pill: 999px;
+  --hairline: 1px solid var(--color-line);
+  --border: 1px solid var(--color-line-strong);
+  --shadow-float: 0 18px 40px rgba(0, 0, 0, .45);
+
+  /* ── Touch ── */
+  --target: 44px;          /* minimum for primary controls */
+  --tabbar-h: 58px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* ── Motion ── */
+  --ease-out: cubic-bezier(.2, .7, .2, 1);
+  --ease-in-out: cubic-bezier(.6, 0, .2, 1);
+  --dur-fast: 140ms; --dur: 240ms; --dur-slow: 420ms;
+
+  color-scheme: dark;
+}

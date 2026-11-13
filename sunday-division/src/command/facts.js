@@ -79,10 +79,10 @@ function createFacts(app) {
     const st = (text, opts) => state.push({ kind: 'state', at: to, text, link: '', severity: 'info', ref: '', projectId: null, ...opts });
     const metrics = app.command.metrics;
     const approvals = metrics.approvalsCount();
-    st(approvals ? `${approvals} item(s) waiting for your approval` : 'Nothing is waiting for your approval', { link: '/command/approvals', severity: approvals ? 'attention' : 'info', ref: 'state:approvals' });
+    st(approvals ? `${approvals} item${approvals === 1 ? '' : 's'} waiting for your approval` : 'Nothing is waiting for your approval', { link: '/command/approvals', severity: approvals ? 'attention' : 'info', ref: 'state:approvals' });
     for (const c of metrics.health().checks.filter((c) => c.status !== 'ok' && c.id !== 'approvals')) st(`${c.label}: ${c.detail}`, { link: c.link, severity: c.status === 'act' ? 'urgent' : 'attention', ref: `state:${c.id}` });
     const counts = metrics.projectCounts();
-    st(`${counts.inProduction} project(s) in production, ${counts.awaitingDeposit} awaiting deposit, ${counts.scoping} in scoping`, { link: '/command/projects', ref: 'state:projects' });
+    st(`Projects: ${counts.inProduction} in production, ${counts.awaitingDeposit} awaiting deposit, ${counts.scoping} in scoping`, { link: '/command/projects', ref: 'state:projects' });
 
     return [...windowFacts, ...state].map((f, i) => ({ id: `F${i + 1}`, ...f }));
   }

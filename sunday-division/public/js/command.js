@@ -50,22 +50,30 @@
       if (!b) return;
       input.value = b.getAttribute('data-fill');
       grow();
+      setPrompts(false);
       input.focus();
     });
     var scrollEnd = function () { window.scrollTo({ top: document.body.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
+    var toggle = form.querySelector('[data-prompts-toggle]');
+    var setPrompts = function (open) {
+      if (!suggest) return;
+      suggest.hidden = !open;
+      if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    if (toggle) toggle.addEventListener('click', function () { setPrompts(suggest && suggest.hidden); });
     var addUser = function (text) {
       var li = document.createElement('li');
-      li.className = 'c-msg c-msg--user';
+      li.className = 'ui-msg ui-msg--user';
       var b = document.createElement('div');
-      b.className = 'c-msg__bubble';
+      b.className = 'ui-msg__bubble';
       b.textContent = text;
       li.appendChild(b);
       log.appendChild(li);
     };
     var addTyping = function () {
       var li = document.createElement('li');
-      li.className = 'c-msg c-msg--assistant c-msg--typing';
-      li.innerHTML = '<div class="c-msg__bubble"><span class="c-typing" aria-label="Command is working"><i></i><i></i><i></i></span></div>';
+      li.className = 'ui-msg ui-msg--assistant ui-msg--typing';
+      li.innerHTML = '<div class="ui-reply"><span class="ui-typing" role="status" aria-label="Command is working"><i></i><i></i><i></i></span></div>';
       log.appendChild(li);
       return li;
     };
@@ -75,7 +83,9 @@
       if (!text || busy) return;
       busy = true;
       button.disabled = true;
-      if (suggest) suggest.remove();
+      setPrompts(false);
+      var recent = document.getElementById('recent');
+      if (recent) recent.remove();
       addUser(text);
       input.value = '';
       grow();
@@ -94,9 +104,9 @@
         .catch(function (err) {
           typing.remove();
           var li = document.createElement('li');
-          li.className = 'c-msg c-msg--assistant c-msg--error';
+          li.className = 'ui-msg ui-msg--assistant ui-msg--error';
           var b = document.createElement('div');
-          b.className = 'c-msg__bubble';
+          b.className = 'ui-reply';
           b.textContent = err.message;
           li.appendChild(b);
           log.appendChild(li);
