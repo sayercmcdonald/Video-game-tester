@@ -12,7 +12,7 @@ const ATTN = new Set(['failed', 'open', 'queued', 'needs_review', 'awaiting_quot
 const MUTED = new Set(['succeeded', 'completed', 'done', 'cancelled', 'dismissed', 'ok', 'executed', 'replayed', 'lost']);
 const badge = (s, label) => html`<span class="badge ${ATTN.has(s) ? 'badge--on' : MUTED.has(s) ? 'badge--off' : ''}">${label || titleCase(s)}</span>`;
 const btn = (ctx, url, label, { solid = false, confirm = '' } = {}) => html`<form class="inline" method="post" action="${url}" data-confirm="${confirm}">${csrf(ctx)}<button class="btn-a ${solid ? 'btn-a--solid' : ''}" type="submit">${label}</button></form>`;
-const tabs = (path) => html`<nav class="tabs">${[['/admin/ops', 'Overview'], ['/admin/ops/agents', 'Agents'], ['/admin/ops/settings', 'Controls & budgets']].map(([href, label]) => html`<a href="${href}" ${path === href ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
+const tabs = (path) => html`<nav class="tabs">${[['/admin/ops', 'Overview'], ['/admin/ops/tasks', 'Agent tasks'], ['/admin/ops/agents', 'Agents'], ['/admin/ops/settings', 'Controls & budgets']].map(([href, label]) => html`<a href="${href}" ${path === href ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
 const empty = (t) => html`<p class="empty">${t}</p>`;
 const json = (v) => html`<pre class="json">${JSON.stringify(v, null, 2)}</pre>`;
 
@@ -107,7 +107,7 @@ ${wf.summary ? html`<section class="card"><h2>Completion summary</h2><pre class=
     <td><strong>${j.agent}.${j.action}</strong>${j.deps.length ? html`<br><span class="muted small">after #${j.deps.join(', #')}</span>` : ''}
       <details><summary class="small">input / output</summary>${json({ input: j.input, output: j.output })}</details>
       ${j.error ? html`<span class="small muted">${j.error_kind}: ${j.error}</span>` : ''}</td>
-    <td>${badge(j.status)}</td><td class="r">${j.attempts}/${j.max_attempts}${j.reschedules ? ` · ${j.reschedules} waits` : ''}</td>
+    <td>${badge(j.status)}<br><a class="small" href="/admin/ops/tasks/${j.id}">History</a></td><td class="r">${j.attempts}/${j.max_attempts}${j.reschedules ? ` · ${j.reschedules} waits` : ''}</td>
     <td class="small">${j.status === 'queued' ? fmtDate(j.run_at, true) : fmtDate(j.finished_at, true)}</td>
     <td>${['failed', 'cancelled'].includes(j.status) ? btn(ctx, `/admin/ops/jobs/${j.id}/retry`, 'Retry', { solid: true }) : ''}${j.status === 'failed' || j.status === 'queued' ? btn(ctx, `/admin/ops/jobs/${j.id}/cancel`, 'Handle by hand', { confirm: 'Cancel this job? The workflow treats the step as handled by a person.' }) : ''}</td>
   </tr>`)}</tbody></table>` : empty('No jobs yet.')}
@@ -140,10 +140,10 @@ ${wf.summary ? html`<section class="card"><h2>Completion summary</h2><pre class=
 }
 
 function agents(ctx, { stats }) {
-  const effectNote = { read: 'reads the bound project only', model: 'budgeted model call', internal: 'internal record', draft: 'draft — needs human approval', external: 'outside service — budgeted, policy-gated' };
+  const effectNote = { read: 'reads the bound project only', internal: 'internal record', draft: 'draft — needs human approval', external: 'outside service — budgeted, policy-gated' };
   return shell(ctx, {
     title: 'Agents', path: '/admin/ops',
-    body: html`<header class="a-head"><div><h1 class="display display--m">Agents</h1><p class="muted">Each agent can call only the tools listed for each action. Policies are fixed in code and no agent has a tool that changes them, approves anything, or touches payment status.</p></div></header>
+    body: html`<header class="a-head"><div><h1 class="display display--m">Agents</h1><p class="muted">Each agent can call only the tools listed for each action. Policies are fixed in code and no agent has a tool that changes them, approves anything, sends anything, or touches payment status. Model: ${ctx.app.agentModel.describe()}.</p></div></header>
 ${tabs('/admin/ops/agents')}
 ${Object.values(REGISTRY).map((a) => {
   const j = stats.jobs[a.id] || {}; const r = stats.runs[a.id] || {}; const e = stats.escalations[a.id] || {}; const dn = stats.denied[a.id] || {};
@@ -161,9 +161,11 @@ ${Object.values(REGISTRY).map((a) => {
   </div>
   ${r.models ? html`<p class="small muted">Models served: <span class="mono">${r.models}</span> · prompt versions: <span class="mono">${r.prompts}</span> · ${r.rules || 0} rules fallback(s)</p>` : ''}
   <h3>Escalation rules</h3><ul class="bullets">${a.escalation.map((x) => html`<li>${x}</li>`)}</ul>
-  ${Object.values(a.actions).map((act) => html`<details class="agent-action"><summary><strong>${act.id}</strong> — ${act.description} <span class="muted small">· retries ${act.retry.maxAttempts} · timeout ${act.timeoutMs / 1000}s</span></summary>
+  ${a.systemPrompt ? html`<details class="agent-action"><summary><strong>System prompt</strong></summary><pre class="json">${a.systemPrompt}</pre></details>` : html`<p class="small muted">Deterministic application code — no model, no prompt.</p>`}
+  ${Object.values(a.actions).map((act) => html`<details class="agent-action"><summary><strong>${act.id}</strong> — ${act.description} <span class="muted small">· ${act.brains.join(' + ')} · up to ${act.maxTurns} turn(s) · retries ${act.retry.maxAttempts} · timeout ${act.timeoutMs / 1000}s</span></summary>
+    ${act.instruction ? html`<p class="small">${act.instruction}</p>` : ''}
     <table class="a-table a-table--tight"><thead><tr><th>Tool</th><th>Effect</th><th>What it does</th></tr></thead><tbody>
-    ${act.tools.map((t) => html`<tr><td class="mono small">${t}</td><td>${TOOLS[t].effect}<br><span class="muted small">${effectNote[TOOLS[t].effect]}</span></td><td class="small">${TOOLS[t].description}</td></tr>`)}</tbody></table>
+    ${act.tools.map((t) => (t === 'submit_result' ? html`<tr><td class="mono small">submit_result</td><td>result</td><td class="small">Ends the task; validated against the output schema.</td></tr>` : html`<tr><td class="mono small">${t}</td><td>${TOOLS[t].effect}<br><span class="muted small">${effectNote[TOOLS[t].effect]}</span></td><td class="small">${TOOLS[t].description}</td></tr>`))}</tbody></table>
     <div class="a-cols"><div><h3>Input schema</h3>${json(act.input)}</div><div><h3>Output schema</h3>${json(act.output)}</div></div>
   </details>`)}
 </section>`;
@@ -204,4 +206,73 @@ ${tabs('/admin/ops/settings')}
   });
 }
 
-module.exports = { overview, workflow, agents, settings };
+function agentTasks(ctx, { rows, filter, counts }) {
+  const filters = [['active', 'Active'], ['completed', 'Completed'], ['failed', 'Failed'], ['all', 'All']];
+  return shell(ctx, {
+    title: 'Agent tasks', path: '/admin/ops',
+    body: html`<header class="a-head"><div><h1 class="display display--m">Agent tasks</h1><p class="muted">Every job an agent or the orchestrator has run, with its brain, turns, tokens and cost. Model: ${ctx.app.agentModel.describe()}.</p></div></header>
+${tabs('/admin/ops/tasks')}
+<nav class="tabs">${filters.map(([f, label]) => html`<a href="/admin/ops/tasks?status=${f}" ${filter === f ? raw('aria-current="page"') : ''}>${label} ${counts[f] !== undefined ? `(${counts[f]})` : ''}</a>`)}</nav>
+${rows.length ? html`<table class="a-table"><thead><tr><th>#</th><th>Agent · action</th><th>Project</th><th>Status</th><th>Brain</th><th class="r">Turns</th><th class="r">Tool calls</th><th class="r">Tokens in / out</th><th class="r">Cost</th><th>When</th></tr></thead><tbody>
+${rows.map((r) => html`<tr>
+  <td><a class="mono" href="/admin/ops/tasks/${r.id}">${r.id}</a></td>
+  <td><a href="/admin/ops/tasks/${r.id}">${r.agent}.${r.action}</a>${r.error ? html`<br><span class="small muted">${r.error_kind}: ${r.error}</span>` : ''}</td>
+  <td>${r.project_code || r.inquiry_ref || '—'}</td>
+  <td>${badge(r.status)}${r.attempts > 1 ? html` <span class="small muted">${r.attempts} attempts</span>` : ''}</td>
+  <td>${r.brain ? (r.brain === 'model' ? (r.simulated ? badge('queued', 'Simulated model') : badge('queued', 'Claude')) : badge('ok', 'Rules')) : '—'}</td>
+  <td class="r">${r.turns ?? '—'}</td><td class="r">${r.tool_calls ?? '—'}${r.denied_calls ? html` <span class="badge badge--on">${r.denied_calls} denied</span>` : ''}</td>
+  <td class="r small">${r.input_tokens ?? 0} / ${r.output_tokens ?? 0}</td><td class="r">${usd(r.cost_micros || 0)}</td>
+  <td class="small">${fmtDate(r.finished_at || r.started_at || r.created_at, true)}</td>
+</tr>`)}</tbody></table>` : empty('Nothing here.')}`,
+  });
+}
+
+function blockView(b) {
+  if (b.type === 'text') return html`<div class="pre small">${b.text}</div>`;
+  if (b.type === 'thinking' || b.type === 'redacted_thinking') return html`<span class="muted small">Reasoning${b.thinking ? html`: ${b.thinking}` : ' (not returned by the API)'}</span>`;
+  if (b.type === 'tool_use') return html`<div class="call"><span class="call__name">→ ${b.name}</span>${json(b.input)}</div>`;
+  if (b.type === 'tool_result') {
+    const content = Array.isArray(b.content) ? b.content.map((c) => (c.type === 'text' ? c.text : `[${c.type} attached: ${c.media_type}]`)).join('\n') : String(b.content);
+    return html`<div class="call ${b.is_error ? 'call--error' : ''}"><span class="call__name">← result${b.is_error ? ' (error)' : ''}</span><pre class="json">${content}</pre></div>`;
+  }
+  if (b.type === 'fallback') return html`<span class="badge">Model fallback</span>`;
+  return html`<span class="muted small">${b.type}</span>`;
+}
+
+function agentTask(ctx, { job, session, runs, calls, workflow }) {
+  const transcript = session ? JSON.parse(session.transcript) : [];
+  const simulated = runs.some((r) => r.provider === 'simulated');
+  return shell(ctx, {
+    title: `Agent task ${job.id}`, path: '/admin/ops',
+    body: html`<header class="a-head"><div><p class="label"><a href="/admin/ops/tasks">Agent tasks</a> / #${job.id}</p>
+    <h1 class="display display--m">${job.agent}.${job.action}</h1>
+    <p class="muted">${badge(job.status)} ${session ? (session.brain === 'model' ? (simulated ? badge('queued', 'Simulated model') : badge('queued', 'Claude')) : badge('ok', 'Rules')) : ''} ${job.attempts}/${job.max_attempts} attempt(s)${workflow ? html` · <a href="/admin/ops/workflows/${workflow.id}">workflow ${workflow.id}</a>` : ''}</p></div>
+  <div class="a-head__actions">${['failed', 'cancelled'].includes(job.status) ? btn(ctx, `/admin/ops/jobs/${job.id}/retry`, 'Retry', { solid: true }) : ''}</div></header>
+${simulated ? html`<div class="a-flash"><strong>Simulated model.</strong> These turns came from a scripted test model, not from Claude.</div>` : ''}
+${job.error ? html`<div class="a-flash a-flash--error">${job.error_kind}: ${job.error}</div>` : ''}
+<div class="a-cols a-cols--wide">
+<div>
+  <section class="card"><h2>Execution history</h2>
+  ${!session ? empty('This task has not started yet.') : session.brain === 'rules' ? html`<div class="transcript">${transcript.map((e, i) => html`<div class="turn"><div class="turn__head">Step ${i + 1} · rules</div><div class="call"><span class="call__name">→ ${e.tool}</span>${json(e.input)}</div><div class="call"><span class="call__name">← result</span><pre class="json">${e.result}</pre></div></div>`)}</div>`
+    : html`<div class="transcript">${transcript.map((m, i) => html`<div class="turn turn--${m.role}"><div class="turn__head">${i === 0 ? 'Task given to the agent' : m.role === 'assistant' ? `Agent turn` : 'Tool results returned'}</div>${Array.isArray(m.content) ? m.content.map(blockView) : html`<div class="pre small">${m.content}</div>`}</div>`)}</div>`}
+  </section>
+</div>
+<div>
+  <section class="card"><h2>Summary</h2><dl class="kv">
+    <dt>Brain</dt><dd>${session ? session.brain : '—'}</dd><dt>Turns</dt><dd>${session ? session.turns : 0}</dd>
+    <dt>Tool calls</dt><dd>${session ? session.tool_calls : 0}${session && session.denied_calls ? ` (${session.denied_calls} refused)` : ''}</dd>
+    <dt>Tokens</dt><dd>${session ? `${session.input_tokens} in · ${session.output_tokens} out` : '—'}</dd><dt>Cost</dt><dd>${usd(session ? session.cost_micros : 0)}</dd>
+  </dl>
+  <h3>Input</h3>${json(job.input)}<h3>Result</h3>${json(job.output)}</section>
+  <section class="card"><h2>Model calls</h2>
+  ${runs.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Turn</th><th>Provider · model</th><th class="r">Tokens</th><th class="r">Cost</th><th>Status</th></tr></thead><tbody>${runs.map((r) => html`<tr><td class="small">${r.task.split('#')[1] || '—'}</td><td class="small">${r.provider} · <span class="mono">${r.model_served || r.model_requested || '—'}</span><br><span class="muted">prompt ${r.prompt_version || '—'} · ${r.latency_ms} ms</span></td><td class="r small">${r.input_tokens}/${r.output_tokens}${r.cache_read_tokens ? html`<br>cache ${r.cache_read_tokens}` : ''}</td><td class="r">${usd(r.cost_micros)}</td><td>${badge(r.status)}${r.detail ? html`<br><span class="small muted">${r.detail}</span>` : ''}</td></tr>`)}</tbody></table>` : empty('No model calls.')}
+  </section>
+  <section class="card"><h2>State changes</h2>
+  ${calls.length ? html`<ul class="log log--stack">${calls.map((c) => html`<li><span>${badge(c.decision)} <span class="mono small">${c.tool}</span> <span class="muted small">${c.effect}</span></span>${c.detail ? html`<span class="small muted">${c.detail}</span>` : ''}</li>`)}</ul>` : empty('No state-changing tool calls.')}
+  </section>
+</div>
+</div>`,
+  });
+}
+
+module.exports = { overview, workflow, agents, settings, agentTasks, agentTask };

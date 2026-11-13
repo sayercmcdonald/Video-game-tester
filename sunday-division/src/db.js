@@ -385,6 +385,134 @@ CREATE INDEX idx_events_pending ON events(processed_at, id);
 CREATE INDEX idx_runs_created ON agent_runs(created_at);
 CREATE INDEX idx_runs_project ON agent_runs(project_id);
 CREATE INDEX idx_human_open ON human_tasks(status, created_at);
+`, `
+-- ── Business agents, contractors and messaging (v3) ──────────────────────
+ALTER TABLE contractors ADD COLUMN status TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE contractors ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE contractors ADD COLUMN categories TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE contractors ADD COLUMN capacity INTEGER NOT NULL DEFAULT 2;
+ALTER TABLE contractors ADD COLUMN portfolio_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE contractors ADD COLUMN portal_key_hash TEXT;
+ALTER TABLE contractors ADD COLUMN portal_key_issued_at TEXT;
+ALTER TABLE contractors ADD COLUMN approved_by INTEGER REFERENCES users(id);
+ALTER TABLE contractors ADD COLUMN approved_at TEXT;
+ALTER TABLE users ADD COLUMN technical_reviewer INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'general';
+ALTER TABLE tasks ADD COLUMN job_type TEXT;
+ALTER TABLE tasks ADD COLUMN route TEXT;
+ALTER TABLE tasks ADD COLUMN brief TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN checklist TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE deliverables ADD COLUMN task_id INTEGER REFERENCES tasks(id);
+ALTER TABLE deliverables ADD COLUMN assignment_id INTEGER;
+ALTER TABLE integration_jobs ADD COLUMN task_id INTEGER REFERENCES tasks(id);
+CREATE TABLE assignments (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  task_id INTEGER NOT NULL REFERENCES tasks(id),
+  contractor_id INTEGER NOT NULL REFERENCES contractors(id),
+  status TEXT NOT NULL DEFAULT 'recommended' CHECK (status IN
+    ('recommended','rejected','offered','accepted','declined','submitted','changes_requested','signed_off','cancelled')),
+  estimated_hours REAL NOT NULL,
+  fee_cents INTEGER NOT NULL,
+  due_date TEXT,
+  rationale TEXT NOT NULL DEFAULT '',
+  recommended_by TEXT NOT NULL,
+  decided_by INTEGER REFERENCES users(id),
+  decided_at TEXT,
+  decision_note TEXT NOT NULL DEFAULT '',
+  offered_at TEXT,
+  responded_at TEXT,
+  response_note TEXT NOT NULL DEFAULT '',
+  submitted_at TEXT,
+  submission_note TEXT NOT NULL DEFAULT '',
+  signed_off_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_assignments_task ON assignments(task_id, status);
+CREATE INDEX idx_assignments_contractor ON assignments(contractor_id, status);
+CREATE TABLE messages (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id),
+  assignment_id INTEGER REFERENCES assignments(id),
+  recipient_type TEXT NOT NULL CHECK (recipient_type IN ('client','contractor')),
+  recipient_id INTEGER NOT NULL,
+  to_address TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','sent','failed','discarded')),
+  channel TEXT,
+  provider_ref TEXT,
+  prepared_by TEXT NOT NULL,
+  approved_by INTEGER REFERENCES users(id),
+  approved_at TEXT,
+  sent_at TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_messages_status ON messages(status, id);
+CREATE TABLE agent_sessions (
+  job_id INTEGER PRIMARY KEY REFERENCES jobs(id),
+  agent TEXT NOT NULL,
+  action TEXT NOT NULL,
+  brain TEXT NOT NULL CHECK (brain IN ('model','rules')),
+  transcript TEXT NOT NULL DEFAULT '[]',
+  turns INTEGER NOT NULL DEFAULT 0,
+  tool_calls INTEGER NOT NULL DEFAULT 0,
+  denied_calls INTEGER NOT NULL DEFAULT 0,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_micros INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'running',
+  result TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+-- Contractor sessions: rebuild the sessions table (signs everyone out once).
+DROP TABLE sessions;
+CREATE TABLE sessions (
+  token_hash TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('admin','portal','contractor')),
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+  contractor_id INTEGER REFERENCES contractors(id) ON DELETE CASCADE,
+  csrf TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX idx_sessions_expiry ON sessions(expires_at);
+-- Model runs can now be marked as simulated.
+CREATE TABLE agent_runs_v3 (
+  id INTEGER PRIMARY KEY,
+  job_id INTEGER REFERENCES jobs(id),
+  workflow_id INTEGER,
+  project_id INTEGER,
+  agent TEXT NOT NULL,
+  agent_version TEXT NOT NULL DEFAULT '',
+  task TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('claude','simulated','rules','integration','system')),
+  model_requested TEXT NOT NULL DEFAULT '',
+  model_served TEXT NOT NULL DEFAULT '',
+  prompt_version TEXT NOT NULL DEFAULT '',
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_micros INTEGER NOT NULL DEFAULT 0,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('ok','fallback','error','budget_blocked','invalid_output','refused')),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+INSERT INTO agent_runs_v3 (id, job_id, workflow_id, project_id, agent, agent_version, task, provider, model_requested, model_served,
+  prompt_version, input_tokens, output_tokens, cost_micros, latency_ms, status, detail, created_at)
+  SELECT id, job_id, workflow_id, project_id, agent, agent_version, task, provider, model_requested, model_served,
+  prompt_version, input_tokens, output_tokens, cost_micros, latency_ms, status, detail, created_at FROM agent_runs;
+DROP TABLE agent_runs;
+ALTER TABLE agent_runs_v3 RENAME TO agent_runs;
+CREATE INDEX idx_runs_created ON agent_runs(created_at);
+CREATE INDEX idx_runs_project ON agent_runs(project_id);
+CREATE INDEX idx_runs_job ON agent_runs(job_id);
 `];
 
 function openDb(config) {

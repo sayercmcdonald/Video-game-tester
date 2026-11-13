@@ -73,6 +73,21 @@ const TIMELINE_OPTIONS = ['Within 2 weeks', '2–4 weeks', '1–2 months', '2+ m
 
 const DELIVERABLE_TYPES = ['design', 'flats', 'techpack', '3d', 'imagery', 'campaign', 'other'];
 
+/**
+ * Production job types: what a production task produces, which deliverable it becomes,
+ * which integration could do it, and the minimum checklist QA holds the result to.
+ */
+const JOB_TYPES = {
+  design: { label: 'Design development', deliverable: 'design', product: null, checklist: ['Front and back sketches', 'Colour and fabric callouts', 'Design options as agreed in the brief'] },
+  technical_flats: { label: 'Technical flats', deliverable: 'flats', product: 'index_v3', checklist: ['Front view', 'Back view', 'Construction details and callouts', 'Stitch and trim annotations'] },
+  tech_pack: { label: 'Tech pack', deliverable: 'techpack', product: 'index_v3', checklist: ['Points of measure table for the base size', 'Grading rules or size range', 'Bill of materials', 'Construction notes', 'Labelling and packaging notes'] },
+  measurement_spec: { label: 'Measurement specification', deliverable: 'techpack', product: 'index_v3', checklist: ['Points of measure with definitions', 'Base size measurements', 'Tolerances'] },
+  garment_3d: { label: '3D garment', deliverable: '3d', product: 'index_v3', checklist: ['Model built to the base-size measurements', 'Agreed colourways', 'Front, back and side renders'] },
+  product_imagery: { label: 'Product imagery', deliverable: 'imagery', product: 'form', checklist: ['Front, back and detail shots', 'Long edge at least 2000 px', 'Consistent background and lighting'] },
+  campaign_assets: { label: 'Campaign assets', deliverable: 'campaign', product: 'form', checklist: ['Formats and crops as agreed', 'Usage notes', 'Source files'] },
+};
+const REQUESTED_TO_JOB = { design: 'design', flats: 'technical_flats', techpack: 'tech_pack', '3d': 'garment_3d', imagery: 'product_imagery', campaign: 'campaign_assets' };
+
 const DEFAULT_TERMS = [
   'Work begins once the deposit is received.',
   'The balance is due before final files are released.',
@@ -84,5 +99,5 @@ const packageById = (id) => PACKAGES.find((p) => p.id === id) || null;
 
 module.exports = {
   PACKAGES, SERVICES, GARMENT_CATEGORIES, DELIVERABLE_OPTIONS, BUDGET_OPTIONS, TIMELINE_OPTIONS,
-  DELIVERABLE_TYPES, DEFAULT_TERMS, packageById,
+  DELIVERABLE_TYPES, DEFAULT_TERMS, packageById, JOB_TYPES, REQUESTED_TO_JOB,
 };

@@ -2,8 +2,9 @@
 const { token, sha256, safeEqual } = require('../lib/crypto');
 const { now } = require('../lib/util');
 
-const COOKIE = { admin: 'sd_admin', portal: 'sd_portal' };
-const TTL_MS = { admin: 12 * 3600e3, portal: 7 * 24 * 3600e3 };
+const COOKIE = { admin: 'sd_admin', portal: 'sd_portal', contractor: 'sd_contractor' };
+const TTL_MS = { admin: 12 * 3600e3, portal: 7 * 24 * 3600e3, contractor: 7 * 24 * 3600e3 };
+const SUBJECT = { admin: 'user_id', portal: 'client_id', contractor: 'contractor_id' };
 
 function parseCookies(header) {
   const out = Object.create(null);
@@ -33,6 +34,7 @@ function createSessions({ db, config }) {
         kind,
         user_id: kind === 'admin' ? subjectId : null,
         client_id: kind === 'portal' ? subjectId : null,
+        contractor_id: kind === 'contractor' ? subjectId : null,
         csrf: token(24),
         created_at: now(),
         expires_at: new Date(Date.now() + TTL_MS[kind]).toISOString(),
@@ -52,7 +54,7 @@ function createSessions({ db, config }) {
       return cookieString(COOKIE[kind], '', { maxAgeMs: 0, secure });
     },
     endAllFor(kind, subjectId) {
-      db.run(`DELETE FROM sessions WHERE kind = ? AND ${kind === 'admin' ? 'user_id' : 'client_id'} = ?`, kind, subjectId);
+      db.run(`DELETE FROM sessions WHERE kind = ? AND ${SUBJECT[kind]} = ?`, kind, subjectId);
     },
     checkCsrf: (session, submitted) => Boolean(session && submitted && safeEqual(session.csrf, submitted)),
     purgeExpired: () => db.run('DELETE FROM sessions WHERE expires_at < ?', now()),

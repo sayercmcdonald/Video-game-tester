@@ -70,6 +70,25 @@ function register(router, app) {
   }
 
   router.get('/admin/ops/agents', A, (ctx) => ctx.html(views.agents(ctx, { stats: metrics.agentStats() })));
+  const TASK_FILTERS = { active: "j.status IN ('queued','running')", completed: "j.status = 'succeeded'", failed: "j.status IN ('failed','cancelled')", all: '1 = 1' };
+  router.get('/admin/ops/tasks', A, (ctx) => {
+    const filter = TASK_FILTERS[ctx.query.get('status')] ? ctx.query.get('status') : 'active';
+    const rows = app.db.all(`SELECT j.*, s.brain, s.turns, s.tool_calls, s.denied_calls, s.input_tokens, s.output_tokens, s.cost_micros,
+        (SELECT 1 FROM agent_runs r WHERE r.job_id = j.id AND r.provider = 'simulated' LIMIT 1) AS simulated, p.code AS project_code, i.ref AS inquiry_ref
+      FROM jobs j LEFT JOIN agent_sessions s ON s.job_id = j.id LEFT JOIN projects p ON p.id = j.project_id LEFT JOIN inquiries i ON i.id = j.inquiry_id
+      WHERE ${TASK_FILTERS[filter]} ORDER BY j.id DESC LIMIT 200`);
+    const counts = Object.fromEntries(Object.entries(TASK_FILTERS).map(([k, w]) => [k, app.db.get(`SELECT COUNT(*) AS n FROM jobs j WHERE ${w}`).n]));
+    ctx.html(views.agentTasks(ctx, { rows, filter, counts }));
+  });
+  router.get('/admin/ops/tasks/:id', A, (ctx) => {
+    const job = app.orchestrator.queue.get(int(ctx.params.id));
+    if (!job) throw new HttpError(404, 'Task not found.');
+    ctx.html(views.agentTask(ctx, {
+      job, session: app.agentRuntime.session(job.id), workflow: job.workflow_id ? app.orchestrator.engine.get(job.workflow_id) : null,
+      runs: app.db.all('SELECT * FROM agent_runs WHERE job_id = ? ORDER BY id', job.id),
+      calls: app.db.all("SELECT * FROM agent_tool_calls WHERE job_id = ? ORDER BY id", job.id),
+    }));
+  });
   router.get('/admin/ops/settings', A, (ctx) => ctx.html(views.settings(ctx, {
     values: app.settings.all(), defs: app.settings.DEFINITIONS, integrations: app.integrations.status(), paymentsProvider: app.billing.providerName,
   })));

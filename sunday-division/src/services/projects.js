@@ -121,10 +121,13 @@ function createProjects(app) {
       const title = str(body.title, 200);
       if (!title) throw new HttpError(400, 'A task needs a title.');
       const sort = db.get('SELECT COALESCE(MAX(sort), 0) + 1 AS n FROM tasks WHERE project_id = ?', projectId).n;
+      const production = body.kind === 'production' && catalog.JOB_TYPES[body.job_type];
       const id = db.insert('tasks', {
         project_id: projectId, title, milestone: str(body.milestone, 80), status,
         contractor_id: body.contractor_id ? Number(body.contractor_id) || null : null,
         due_date: isDate(body.due_date) ? body.due_date : null, sort, source, created_at: now(),
+        kind: production ? 'production' : 'general', job_type: production ? body.job_type : null,
+        checklist: JSON.stringify(production ? catalog.JOB_TYPES[body.job_type].checklist : []),
       });
       if (actor) app.audit.log(actor, 'task.created', { entity: 'task', entityId: id, projectId, detail: title });
       return id;
@@ -143,6 +146,27 @@ function createProjects(app) {
       });
       app.audit.log(actor, 'task.updated', { entity: 'task', entityId: taskId, projectId: project.id, detail: status });
       return task.project_id;
+    },
+    productionTasks: (projectId) => db.all("SELECT * FROM tasks WHERE project_id = ? AND kind = 'production' ORDER BY sort, id", projectId)
+      .map((t) => ({ ...t, checklist: JSON.parse(t.checklist || '[]') })),
+    /** Technical brief and QA checklist for a production task (internal until a contractor is offered the task). */
+    saveTaskBrief(taskId, { brief, checklist }, actor) {
+      const t = db.get("SELECT * FROM tasks WHERE id = ? AND kind = 'production'", taskId);
+      if (!t) throw new HttpError(404, 'Production task not found.');
+      if (db.get("SELECT 1 FROM assignments WHERE task_id = ? AND status IN ('offered','accepted','submitted','changes_requested','signed_off')", taskId)) {
+        throw new HttpError(409, 'The brief is locked once work has been offered to a contractor.');
+      }
+      const items = [...new Set([...(catalog.JOB_TYPES[t.job_type] || { checklist: [] }).checklist, ...(checklist || []).map((c) => str(c, 160)).filter(Boolean)])].slice(0, 20);
+      db.update('tasks', taskId, { brief: str(brief, 8000), checklist: JSON.stringify(items) });
+      app.audit.log(actor, 'task.brief_saved', { entity: 'task', entityId: taskId, projectId: t.project_id });
+    },
+    setTaskRoute(taskId, route, actor) {
+      const t = db.get("SELECT * FROM tasks WHERE id = ? AND kind = 'production'", taskId);
+      if (!t) throw new HttpError(404, 'Production task not found.');
+      if (!['contractor', 'studio', 'index_v3', 'form'].includes(route)) throw new HttpError(400, 'Unknown route.');
+      db.update('tasks', taskId, { route });
+      app.events.emit('task.routed', { projectId: t.project_id, taskId, route, key: `task.routed:${taskId}:${route}` });
+      app.audit.log(actor, 'task.routed', { entity: 'task', entityId: taskId, projectId: t.project_id, detail: route });
     },
     deleteTask(taskId, actor) {
       const task = db.get('SELECT * FROM tasks WHERE id = ?', taskId);
@@ -253,9 +277,13 @@ function createProjects(app) {
       if (!d) throw new HttpError(404, 'Deliverable not found.');
       if (!d.file_id) throw new HttpError(400, 'Upload a file before approving.');
       if (d.status !== 'in_review') throw new HttpError(409, 'Only deliverables in review can be approved.');
+      if (['flats', 'techpack', '3d'].includes(d.type) && !user.technical_reviewer) {
+        throw new HttpError(403, 'Technical sign-off needs a member of staff marked as a technical reviewer.');
+      }
       db.tx(() => {
         db.update('deliverables', deliverableId, { status: 'approved', approved_by: user.id, approved_at: now() });
         app.events.emit('deliverable.approved', { projectId: d.project_id, deliverableId, key: `deliverable.approved:${deliverableId}:${d.version}` });
+        app.assignments.onDeliverableApproved(d, user);
       });
       app.audit.log(`staff:${user.email}`, 'deliverable.approved', { entity: 'deliverable', entityId: deliverableId, projectId: d.project_id, detail: `v${d.version}` });
       return d.project_id;

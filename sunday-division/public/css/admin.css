@@ -129,3 +129,18 @@ a.stat:hover { background: var(--bone); }
 .a-table td.wrap { overflow-wrap: anywhere; min-width: 140px; }
 .a-table td.nowrap { white-space: nowrap; }
 .card { min-width: 0; overflow-x: auto; }
+
+/* ── Production, contractors, messages ────────────────────────────────── */
+.badge--sim { background: repeating-linear-gradient(135deg, var(--white) 0 6px, var(--bone) 6px 12px); border: 1px dashed var(--ink); color: var(--ink); }
+.chk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; border: 1px solid var(--line); padding: 10px 12px; margin: 0; }
+.chk-grid legend { padding: 0 6px; }
+.ptask { gap: 8px !important; }
+.ptask .panel p { margin: 0; }
+.transcript { display: grid; gap: 10px; }
+.turn { border: 1px solid var(--line); background: var(--white); padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+.turn--assistant { border-left: 3px solid var(--ink); }
+.turn--user { background: var(--paper); }
+.turn__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--stone); }
+.call { border: 1px solid var(--line); padding: 8px 10px; display: grid; gap: 4px; min-width: 0; }
+.call--error { border-color: var(--danger); }
+.call__name { font-family: var(--mono); font-size: 0.8rem; }

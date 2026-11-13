@@ -36,6 +36,11 @@ function createConfig(env = process.env) {
     problems.push('Stripe needs both STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.');
   }
   if (isProd && !/^https:\/\//.test(baseUrl)) problems.push('BASE_URL must be an https:// URL in production.');
+  // Outbound messages: 'simulated' records delivery without sending anything (development and
+  // tests only); 'manual' hands approved messages to staff to send themselves.
+  const messagingProvider = (env.MESSAGING_PROVIDER || (isProd ? 'manual' : 'simulated')).toLowerCase();
+  if (!['simulated', 'manual'].includes(messagingProvider)) problems.push(`Unknown MESSAGING_PROVIDER "${messagingProvider}".`);
+  if (isProd && messagingProvider === 'simulated') problems.push('MESSAGING_PROVIDER=simulated is refused in production.');
   if (problems.length) throw new Error('Configuration error:\n - ' + problems.join('\n - '));
 
   return {
@@ -64,11 +69,13 @@ function createConfig(env = process.env) {
       // auto: Claude when credentials are available, rules-based drafting otherwise.
       provider: (env.AI_PROVIDER || 'auto').toLowerCase(),
       model: env.AI_MODEL || 'claude-opus-5-5',
+      agentEffort: env.AI_AGENT_EFFORT || 'medium',
     },
     integrations: {
       index_v3: { baseUrl: (env.INDEX_V3_API_URL || '').replace(/\/+$/, ''), apiKey: env.INDEX_V3_API_KEY || '' },
       form: { baseUrl: (env.FORM_API_URL || '').replace(/\/+$/, ''), apiKey: env.FORM_API_KEY || '' },
     },
+    messaging: { provider: messagingProvider },
     orchestrator: {
       // How often the in-process worker looks for work; 0 disables the timer (tests drive it).
       pollMs: env.ORCHESTRATOR_POLL_MS === undefined ? 2000 : Number(env.ORCHESTRATOR_POLL_MS),

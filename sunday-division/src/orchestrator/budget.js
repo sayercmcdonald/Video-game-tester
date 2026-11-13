@@ -6,20 +6,22 @@ const { BudgetExceededError } = require('./errors');
  * rate, so a misconfigured model can only make the budget more conservative.
  */
 const MODEL_PRICES = {
-  'claude-opus-5-5': { input: 4, output: 20 },
-  'claude-sonnet-5-5': { input: 2, output: 10 },
-  'claude-haiku-5-5': { input: 0.1, output: 0.5 },
-  'claude-fable-5-2': { input: 8, output: 40 },
+  'claude-opus-5-5': { input: 4, output: 20, cacheRead: 0.2 },
+  'claude-sonnet-5-5': { input: 2, output: 10, cacheRead: 0.1 },
+  'claude-haiku-5-5': { input: 0.1, output: 0.5, cacheRead: 0.01 },
+  'claude-fable-5-2': { input: 8, output: 40, cacheRead: 0.2 },
 };
+const CACHE_WRITE_MULTIPLIER = 1.25; // 5-minute cache writes
 const FALLBACK_PRICE = Object.values(MODEL_PRICES).reduce((a, b) => (b.output > a.output ? b : a));
 
 const toMicros = (usd) => Math.round(usd * 1e6);
 const priceFor = (model) => MODEL_PRICES[model] || FALLBACK_PRICE;
 
 /** Cost of a call in micro-dollars (integer arithmetic downstream). */
-function tokenCostMicros(model, inputTokens, outputTokens) {
+function tokenCostMicros(model, inputTokens, outputTokens, { cacheRead = 0, cacheWrite = 0 } = {}) {
   const p = priceFor(model);
-  return Math.round(inputTokens * p.input + outputTokens * p.output); // $/MTok × tokens = micro-dollars
+  // $/MTok × tokens = micro-dollars
+  return Math.round(inputTokens * p.input + outputTokens * p.output + cacheRead * p.cacheRead + cacheWrite * p.input * CACHE_WRITE_MULTIPLIER);
 }
 
 function createBudget({ db, settings, clock }) {
@@ -31,8 +33,8 @@ function createBudget({ db, settings, clock }) {
 
   return {
     MODEL_PRICES, tokenCostMicros,
-    aiSpentThisMonth: () => spent("provider = 'claude' AND created_at >= ?", monthStart()),
-    aiSpentForProject: (projectId) => spent("provider = 'claude' AND project_id = ?", projectId),
+    aiSpentThisMonth: () => spent("provider IN ('claude','simulated') AND created_at >= ?", monthStart()),
+    aiSpentForProject: (projectId) => spent("provider IN ('claude','simulated') AND project_id = ?", projectId),
     externalSpentForProject: (projectId) => spent("provider = 'integration' AND project_id = ?", projectId),
     /**
      * Refuse a model call whose worst-case cost would take spending over a limit.

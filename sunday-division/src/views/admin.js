@@ -4,7 +4,7 @@ const catalog = require('../services/catalog');
 
 const NAV = [
   ['/admin', 'Overview'], ['/admin/leads', 'Leads'], ['/admin/projects', 'Projects'],
-  ['/admin/approvals', 'Approvals'], ['/admin/ops', 'Operations'], ['/admin/invoices', 'Invoices'], ['/admin/contractors', 'Contractors'],
+  ['/admin/approvals', 'Approvals'], ['/admin/messages', 'Messages'], ['/admin/ops', 'Operations'], ['/admin/invoices', 'Invoices'], ['/admin/contractors', 'Contractors'],
 ];
 /** Statuses that need someone's attention are filled; settled ones are muted. */
 const ATTENTION = new Set(['new', 'draft', 'proposed', 'in_review', 'awaiting_deposit', 'open', 'needs_human', 'mismatch', 'duplicate', 'failed', 'sent']);
@@ -330,7 +330,7 @@ function project(ctx, d) {
   <div class="a-head__actions">${badge(p.status)}${next.map(([s, label]) => action(ctx, `/admin/projects/${p.id}/status`, label, { fields: { status: s }, confirm: `${label}?` }))}</div>
 </header>
 ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal access key — copy it now, it is not shown again.</strong></p><p>Portal: <span class="mono">${ctx.app.config.baseUrl}/portal</span></p><p>Access key: <span class="mono" data-select>${d.portalKey}</span></p><p class="small">Send both to the client by email. Issuing a new key revokes this one.</p></div>` : ''}
-<nav class="tabs tabs--anchors"><a href="#brief">Brief</a><a href="#quote">Quote</a><a href="#tasks">Tasks</a><a href="#files">Files</a><a href="#deliverables">Deliverables</a><a href="#billing">Billing</a><a href="#updates">Updates</a><a href="#production">Production</a><a href="#history">History</a></nav>
+<nav class="tabs tabs--anchors"><a href="#brief">Brief</a><a href="#quote">Quote</a><a href="#tasks">Tasks</a><a href="#production">Production</a><a href="#files">Files</a><a href="#deliverables">Deliverables</a><a href="#billing">Billing</a><a href="#updates">Updates</a><a href="#production">Production</a><a href="#history">History</a></nav>
 
 <div class="a-cols a-cols--wide">
 <div>
@@ -345,6 +345,7 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
   </section>
   ${quoteSection(ctx, p, d.quotes)}
   ${tasksSection(ctx, p, d.tasks, d.contractors, unlocked)}
+  ${require('./production').productionSection(ctx, p, d.production)}
   ${deliverablesSection(ctx, p, d.deliverables, d.revisions, unlocked, d.balanceDue)}
   ${billingSection(ctx, p, d)}
 </div>
@@ -387,7 +388,7 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
     ${action(ctx, `/admin/projects/${p.id}/automate`, 'Organise file labels', { fields: { task: 'files' } })}
   </section>
 
-  <section class="card" id="production"><h2>Production tools</h2>
+  <section class="card" id="integrations"><h2>Production tools (INDEX V3 / FORM)</h2>
     ${d.integrations.map((i) => html`<div class="panel"><p><strong>${i.name}</strong> ${badge(i.connected ? 'completed' : 'idle', i.connected ? 'Connected' : 'Manual mode')}</p>
       ${unlocked ? html`<form method="post" action="/admin/projects/${p.id}/integrations" class="a-form a-form--row">${csrf(ctx)}<input type="hidden" name="product" value="${i.id}">
         <label>Request<select name="job_type">${options(Object.entries(i.jobTypes).map(([k, v]) => [k, v.label]))}</select></label>
@@ -417,6 +418,8 @@ function approvals(ctx, d) {
 <div class="a-cols">
   <div>
     ${group('Quotes to approve & send', d.quotes, (r) => html`<li>${link(r, 'quote', `Quote v${r.version} · ${money(r.total_cents)}`)} ${sourceTag(r.source)}</li>`, 'No draft quotes.')}
+    ${group('Contractor assignments to approve', d.assignments, (r) => html`<li>${link(r, 'production', `${r.contractor_name} for "${r.task_title}" · ${money(r.fee_cents)}`)}</li>`, 'No recommendations waiting.')}
+    ${group('Messages to approve', d.messages, (r) => html`<li><a href="/admin/messages#m${r.id}">${r.code || ''} · ${r.subject}</a> <span class="muted small">to ${r.recipient_type}</span></li>`, 'No draft messages.')}
     ${group('Invoices to approve', d.invoices, (r) => html`<li>${link(r, 'billing', `${r.number} · ${money(r.amount_cents)}`)}</li>`, 'No draft invoices.')}
     ${group('Deliverables to review or release', d.deliverables, (r) => html`<li>${link(r, 'deliverables', r.title)} ${badge(r.status)} ${sourceTag(r.source)}</li>`, 'Nothing in review.')}
     ${group('Payments needing review', d.payments, (r) => html`<li><a href="/admin/projects/${r.project_id}#billing">${r.number}</a> ${badge(r.status)} <span class="muted small">${r.note}</span></li>`, 'No payment exceptions.')}
@@ -440,23 +443,4 @@ ${rows.length ? html`<table class="a-table"><thead><tr><th>Invoice</th><th>Proje
   });
 }
 
-function contractors(ctx, { rows }) {
-  return shell(ctx, {
-    title: 'Contractors', path: '/admin/contractors',
-    body: html`<header class="a-head"><h1 class="display display--m">Contractors</h1></header>
-${rows.length ? html`<table class="a-table"><thead><tr><th>Name</th><th>Discipline</th><th>Email</th><th class="r">Rate / hour</th><th>Open tasks</th><th></th></tr></thead>
-<tbody>${rows.map((c) => html`<tr class="${c.active ? '' : 'is-done'}"><td>${c.name}</td><td>${c.discipline || '—'}</td><td>${c.email || '—'}</td><td class="r">${money(c.hourly_rate_cents)}</td><td>${c.open_tasks}</td>
-  <td class="r">${action(ctx, `/admin/contractors/${c.id}/active`, c.active ? 'Deactivate' : 'Reactivate', { cls: 'btn-link', fields: { active: c.active ? '0' : '1' } })}</td></tr>`)}</tbody></table>` : empty('No contractors yet. Add technical designers, 3D artists or retouchers you assign work to.')}
-<section class="card"><h2>Add contractor</h2>
-  <form method="post" action="/admin/contractors" class="a-form a-form--row">${csrf(ctx)}
-    <label>Name<input name="name" maxlength="120" required></label>
-    <label>Discipline<input name="discipline" maxlength="120" placeholder="Technical design"></label>
-    <label>Email<input type="email" name="email" maxlength="254"></label>
-    <label>Hourly rate (USD)<input name="rate" inputmode="decimal" size="7"></label>
-    <button class="btn-a" type="submit">Add</button>
-  </form>
-</section>`,
-  });
-}
-
-module.exports = { shell, login, overview, leads, lead, projects, project, approvals, invoices, contractors };
+module.exports = { shell, login, overview, leads, lead, projects, project, approvals, invoices };

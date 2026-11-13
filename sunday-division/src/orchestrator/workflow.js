@@ -1,5 +1,6 @@
 'use strict';
-const { TECHNICAL_TYPES } = require('../agents/handlers');
+const { TECHNICAL_TYPES } = require('../agents/policies');
+const catalog = require('../services/catalog');
 
 /**
  * Project lifecycle workflow: one per project inquiry, with explicit persisted states.
@@ -60,6 +61,7 @@ function createWorkflowEngine(app, { queue, clock }) {
     const finals = deliverables.filter((d) => d.stage === 'final');
     return {
       project, inquiry, quotes, deliverables, finals,
+      productionTasks: project ? app.projects.productionTasks(project.id) : [],
       latestQuote: quotes[0] || null,
       quoteSentOrBeyond: quotes.some((q) => ['sent', 'accepted'].includes(q.status)),
       quoteAccepted: quotes.some((q) => q.status === 'accepted'),
@@ -67,27 +69,77 @@ function createWorkflowEngine(app, { queue, clock }) {
       allFinalReleased: finals.length > 0 && finals.every((d) => d.status === 'released'),
     };
   }
-  function productionOpen(projectId, wfId) {
-    const ij = db.get("SELECT COUNT(*) AS n FROM integration_jobs WHERE project_id = ? AND status IN ('needs_human','queued','running')", projectId).n;
-    const revisions = db.get("SELECT COUNT(*) AS n FROM revisions WHERE project_id = ? AND status = 'open'", projectId).n;
-    const studio = db.get("SELECT COUNT(*) AS n FROM human_tasks WHERE workflow_id = ? AND kind = 'production' AND status = 'open'", wfId).n;
-    return ij + revisions + studio > 0;
+  const task = (wf, args) => app.humanTasks.create({ workflowId: wf.id, projectId: wf.project_id, inquiryId: wf.inquiry_id, createdBy: 'system:orchestrator', ...args });
+  const reviewers = () => db.all('SELECT name FROM users WHERE technical_reviewer = 1 ORDER BY name').map((u) => u.name);
+
+  /** Every production task has a signed-off or approved result, and nothing is still open. */
+  function productionComplete(wf, f) {
+    if (!f.allFinalApproved) return false;
+    const pid = wf.project_id;
+    const open = (sql, ...p) => db.get(sql, ...p).n > 0;
+    if (open("SELECT COUNT(*) AS n FROM integration_jobs WHERE project_id = ? AND status IN ('needs_human','queued','running')", pid)) return false;
+    if (open("SELECT COUNT(*) AS n FROM revisions WHERE project_id = ? AND status = 'open'", pid)) return false;
+    if (open("SELECT COUNT(*) AS n FROM human_tasks WHERE workflow_id = ? AND kind = 'production' AND status = 'open'", wf.id)) return false;
+    if (open(`SELECT COUNT(*) AS n FROM assignments WHERE project_id = ? AND status IN (${app.assignments.OPEN.map(() => '?').join(',')})`, pid, ...app.assignments.OPEN)) return false;
+    return f.productionTasks.every((t) => t.status === 'done' || f.deliverables.some((d) => d.task_id === t.id && ['approved', 'released'].includes(d.status)));
   }
 
-  function ensureProductionJobs(wf, f) {
+  function qaSummary(job) {
+    const o = job.output || {};
+    const missing = (o.missing_information || []).length ? `\nMissing: ${o.missing_information.join('; ')}` : '';
+    return `QA ${o.result || 'n/a'} — ${o.failed || 0} failed, ${o.warnings || 0} warning(s).${missing}`;
+  }
+
+  /** Jobs and human tasks that production needs, derived afresh from the records each time. */
+  function ensureProductionWork(wf, f) {
+    const pid = wf.project_id;
+    const input = { project_id: pid };
+    // Production tasks added after setup (by staff) get briefed and routed too.
+    const unrouted = f.productionTasks.filter((t) => !t.route);
+    if (unrouted.length) ensure(wf, 'production', 'prepare', input, { suffix: `t${Math.max(...unrouted.map((t) => t.id))}` });
+
+    for (const t of f.productionTasks) {
+      if (t.route === 'contractor' && t.status !== 'done') {
+        const openA = app.assignments.openForTask(t.id);
+        if (!openA && !app.assignments.signedOffForTask(t.id)) {
+          const closed = app.assignments.closedForTask(t.id).length;
+          if (closed >= 3) {
+            task(wf, { kind: 'production', key: `assign_manually:t${t.id}`, title: `Assign "${t.title}" by hand`, detail: 'Three recommendations were declined or rejected. Choose a contractor or route the task to the studio.', link: `/admin/projects/${pid}#production` });
+          } else {
+            ensure(wf, 'talent', 'recommend', { project_id: pid, task_id: t.id }, { suffix: `t${t.id}:a${closed + 1}` });
+          }
+        } else if (openA && openA.status === 'recommended') {
+          const c = app.contractors.get(openA.contractor_id);
+          task(wf, {
+            kind: 'approval', key: `approve_assignment:a${openA.id}`, link: `/admin/projects/${pid}#production`,
+            title: `Approve assignment: ${c ? c.name : 'contractor'} for "${t.title}" — $${(openA.fee_cents / 100).toFixed(2)}`,
+            detail: `${openA.estimated_hours} h at the contractor's approved rate. ${openA.rationale}\nApproving offers the work and sends the offer message.`,
+          });
+        }
+      }
+      if (t.route === 'studio' && t.status !== 'done') {
+        task(wf, { kind: 'production', key: `studio:t${t.id}`, title: `Produce "${t.title}" in the studio`, detail: 'Routed to the studio. Upload the result as this task\'s deliverable.', link: `/admin/projects/${pid}#production` });
+      }
+    }
+
     for (const d of f.deliverables) {
       if (!d.file_id || d.version < 1) continue;
-      const agent = TECHNICAL_TYPES.has(d.type) ? 'technical_qa' : 'creative_qa';
-      ensure(wf, agent, 'check', { project_id: wf.project_id, deliverable_id: d.id, version: d.version }, { suffix: `d${d.id}:v${d.version}`, priority: 5 });
+      const qa = ensure(wf, 'qa', 'check', { project_id: pid, deliverable_id: d.id, version: d.version }, { suffix: `d${d.id}:v${d.version}`, priority: 5 });
+      if (done(qa) && d.status === 'in_review') {
+        task(wf, {
+          kind: 'review', key: `review:d${d.id}:v${d.version}`, link: `/admin/projects/${pid}#deliverables`,
+          title: `${TECHNICAL_TYPES.has(d.type) ? 'Technical sign-off' : 'Review'}: ${d.title} v${d.version}${qa.output && qa.output.result === 'fail' ? ' — QA failed' : ''}`,
+          detail: `${qaSummary(qa)}\n${TECHNICAL_TYPES.has(d.type) ? `Qualified reviewers: ${reviewers().join(', ') || 'none — mark a member of staff as a technical reviewer'}.` : ''}`,
+        });
+      }
     }
-    for (const ij of db.all("SELECT * FROM integration_jobs WHERE project_id = ? AND mode = 'api' AND status IN ('queued','running')", wf.project_id)) {
-      const agent = ij.product === 'index_v3' ? 'index_coordinator' : 'form_coordinator';
-      ensure(wf, agent, 'poll', { project_id: wf.project_id, integration_job_id: ij.id }, { suffix: `ij${ij.id}` });
+    for (const ij of db.all("SELECT * FROM integration_jobs WHERE project_id = ? AND mode = 'api' AND status IN ('queued','running')", pid)) {
+      ensure(wf, 'production', 'poll', { project_id: pid, integration_job_id: ij.id }, { suffix: `ij${ij.id}` });
     }
-    ensure(wf, 'project_manager', 'check_deadlines', { project_id: wf.project_id, date: today(clock()) }, { suffix: today(clock()), priority: -1 });
+    ensure(wf, 'project_manager', 'check_deadlines', { project_id: pid, date: today(clock()) }, { suffix: today(clock()), priority: -1 });
   }
 
-  /** Decide the next state, or null to stay. Never performs a client-facing action. */
+  /** Decide the next state, or null to stay. Never performs a client- or contractor-facing action. */
   function step(wf) {
     const f = facts(wf);
     if (f.project && f.project.status === 'cancelled') return ['cancelled', 'Project cancelled by staff'];
@@ -95,41 +147,62 @@ function createWorkflowEngine(app, { queue, clock }) {
 
     switch (wf.state) {
       case 'triage': {
-        const job = ensure(wf, 'sales_intake', 'triage', { inquiry_id: wf.inquiry_id });
+        const job = ensure(wf, 'sales', 'qualify', { inquiry_id: wf.inquiry_id });
         if (!done(job)) return null;
         if (job.status === 'cancelled') return ['needs_review', 'Triage skipped by staff'];
-        return job.output.qualified ? ['scoping', 'Triage complete'] : ['needs_review', `Triage: ${job.output.qualification_note || 'not qualified'}`];
+        return job.output.qualified ? ['scoping', 'Lead qualified'] : ['needs_review', 'Sales Agent did not qualify the lead'];
       }
       case 'needs_review':
-        return null; // staff continue (→ scoping) or mark the lead lost
+        task(wf, { kind: 'review', key: 'review_lead', title: `Decide whether to pursue ${f.inquiry.ref}`, detail: 'The Sales Agent did not qualify this lead. Pursue it from the workflow page, or mark the lead lost.', link: `/admin/leads/${wf.inquiry_id}` });
+        return null;
       case 'scoping': {
         if (!f.project) {
           // Deterministic, internal: create the client and project records from the inquiry.
-          const project = app.projects.createFromInquiry(f.inquiry, 'agent:sales_intake');
+          const project = app.projects.createFromInquiry(f.inquiry, 'system:orchestrator');
           db.run('UPDATE workflows SET project_id = ?, updated_at = ? WHERE id = ?', project.id, iso(), wf.id);
           wf.project_id = project.id;
         }
         if (f.quoteSentOrBeyond) return ['awaiting_quote_approval', 'A quote was already sent by staff'];
-        const job = ensure(wf, 'sales_intake', 'draft_proposal', { project_id: wf.project_id });
-        return done(job) ? ['awaiting_quote_approval', 'Draft quote ready for staff review'] : null;
+        const job = ensure(wf, 'sales', 'draft_proposal', { project_id: wf.project_id });
+        return done(job) ? ['awaiting_quote_approval', 'Brief and quote drafted'] : null;
       }
-      case 'awaiting_quote_approval':
-        // The only way out is a person approving the quote (quotes.approveAndSend).
-        return f.quoteSentOrBeyond ? ['awaiting_client_acceptance', 'Quote approved and sent by staff'] : null;
+      case 'awaiting_quote_approval': {
+        if (f.quoteSentOrBeyond) return ['awaiting_client_acceptance', 'Quote approved and sent by staff'];
+        const draft = f.quotes.find((q) => q.status === 'draft');
+        if (draft) {
+          // Flags are worked out here, deterministically, as well as taken from the agent.
+          const pkg = catalog.packageById(f.project.package);
+          const job = queue.byKey(`wf${wf.id}:sales.draft_proposal`);
+          const flags = [
+            ...(pkg && draft.total_cents < pkg.fromCents ? [`Total $${draft.total_cents / 100} is below the ${pkg.name} starting price of $${pkg.fromCents / 100}.`] : []),
+            ...((f.inquiry && f.inquiry.triage && f.inquiry.triage.risk_flags) || []),
+            ...((job && job.output && job.output.flags) || []),
+          ];
+          task(wf, { kind: 'approval', key: 'approve_quote', link: `/admin/projects/${wf.project_id}#quote`, title: `Review and approve the quote for ${f.project.code}${flags.length ? ` — ${flags.length} flag${flags.length > 1 ? 's' : ''}` : ''}`, detail: flags.length ? flags.join('\n') : 'No flags raised. Check scope, pricing and terms before approving.' });
+        } else {
+          task(wf, { kind: 'approval', key: 'write_quote', link: `/admin/projects/${wf.project_id}#quote`, title: `Write the quote for ${f.project.code}`, detail: 'No draft quote exists.' });
+        }
+        return null;
+      }
       case 'awaiting_client_acceptance': {
         if (f.quoteAccepted) return ['awaiting_deposit', 'Client accepted the quote'];
         const sent = f.quotes.find((q) => q.status === 'sent');
-        if (sent) { ensure(wf, 'client_success', 'quote_notice', { project_id: wf.project_id }, { suffix: `q${sent.id}` }); return null; }
+        if (sent) {
+          ensure(wf, 'client_success', 'quote_notice', { project_id: wf.project_id }, { suffix: `q${sent.id}` });
+          const client = app.projects.getClient(f.project.client_id);
+          if (!client.portal_key_hash) task(wf, { kind: 'communication', key: `portal_key:c${client.id}`, title: `Issue portal access for ${client.brand_name}`, detail: 'The client needs a portal access key to read and accept the quote. Issue it on the project page and send it to them securely.', link: `/admin/projects/${wf.project_id}` });
+          return null;
+        }
         if (f.latestQuote && f.latestQuote.status === 'declined') return ['quote_declined', 'Client declined the quote'];
         return null;
       }
       case 'quote_declined':
         if (f.quoteAccepted) return ['awaiting_deposit', 'Client accepted a revised quote'];
         if (f.quotes.some((q) => q.status === 'sent')) return ['awaiting_client_acceptance', 'Revised quote sent by staff'];
-        app.humanTasks.create({ workflowId: wf.id, projectId: wf.project_id, kind: 'review', key: 'quote_declined', createdBy: 'system:workflow', title: `Quote declined for ${f.project.code}`, detail: 'Draft and send a revised quote, or mark the lead lost.', link: `/admin/projects/${wf.project_id}#quote` });
+        task(wf, { kind: 'review', key: 'quote_declined', title: `Quote declined for ${f.project.code}`, detail: 'Draft and send a revised quote, or mark the lead lost.', link: `/admin/projects/${wf.project_id}#quote` });
         return null;
       case 'awaiting_deposit': {
-        ensure(wf, 'finance_ops', 'verify_deposit_invoice', { project_id: wf.project_id });
+        ensure(wf, 'orchestrator', 'verify_deposit_invoice', { project_id: wf.project_id });
         // Verified = deposit invoice paid with a recorded successful payment of the exact amount,
         // and the project unlocked by the billing service. An event or agent claim is not enough.
         return app.billing.depositVerified(wf.project_id) ? ['setup', 'Deposit payment verified'] : null;
@@ -138,36 +211,34 @@ function createWorkflowEngine(app, { queue, clock }) {
         if (!app.billing.depositVerified(wf.project_id)) return null;
         const input = { project_id: wf.project_id };
         const plan = ensure(wf, 'project_manager', 'plan', input, { priority: 10 });
-        const after = { dependsOn: [plan.id] };
-        const jobs = [
-          plan,
-          ensure(wf, 'index_coordinator', 'route', input, after),
-          ensure(wf, 'form_coordinator', 'route', input, after),
-          ensure(wf, 'client_success', 'kickoff_update', input, after),
-        ];
-        return done(...jobs) ? ['in_production', 'Plan created and production routed'] : null;
+        const prep = ensure(wf, 'production', 'prepare', input, { dependsOn: [plan.id] });
+        const kick = ensure(wf, 'client_success', 'kickoff_update', input, { dependsOn: [plan.id] });
+        if (plan.status === 'succeeded' && plan.output.proposed_due_date && !f.project.due_date) {
+          task(wf, { kind: 'approval', key: 'confirm_due_date', title: `Confirm a target delivery date for ${f.project.code}`, detail: `The Project Manager Agent proposes ${plan.output.proposed_due_date}. Set it on the project if you agree; it becomes visible to the client.`, link: `/admin/projects/${wf.project_id}` });
+        }
+        return done(plan, prep, kick) ? ['in_production', 'Plan created, briefs written and production routed'] : null;
       }
       case 'in_production': {
-        ensureProductionJobs(wf, f);
-        if (!f.allFinalApproved || productionOpen(wf.project_id, wf.id)) return null;
-        const invoice = ensure(wf, 'finance_ops', 'prepare_final_invoice', { project_id: wf.project_id });
-        return done(invoice) ? ['awaiting_final_payment', 'All final deliverables approved; final invoice drafted'] : null;
+        ensureProductionWork(wf, f);
+        if (!productionComplete(wf, f)) return null;
+        const invoice = ensure(wf, 'orchestrator', 'prepare_final_invoice', { project_id: wf.project_id });
+        return done(invoice) ? ['awaiting_final_payment', 'All production signed off; final invoice drafted'] : null;
       }
       case 'awaiting_final_payment': {
-        ensureProductionJobs(wf, f);
+        ensureProductionWork(wf, f);
         if (!f.allFinalApproved || !app.billing.finalPaymentVerified(wf.project_id)) return null;
-        app.humanTasks.create({ workflowId: wf.id, projectId: wf.project_id, kind: 'approval', key: 'release', createdBy: 'system:workflow', title: `Release ${f.finals.filter((d) => d.status === 'approved').length} approved file(s) for ${f.project.code}`, detail: 'Final payment is verified. Releasing makes the files downloadable in the client portal.', link: `/admin/projects/${wf.project_id}#deliverables` });
+        task(wf, { kind: 'approval', key: 'release', title: `Release ${f.finals.filter((d) => d.status === 'approved').length} approved file(s) for ${f.project.code}`, detail: 'Final payment is verified. Releasing makes the files downloadable in the client portal.', link: `/admin/projects/${wf.project_id}#deliverables` });
         return ['ready_for_release', 'Final payment verified'];
       }
       case 'ready_for_release': {
         if (!f.allFinalReleased) return null;
-        if (f.project.status === 'active') app.projects.setStatus(f.project.id, 'delivered', 'system:workflow');
+        if (f.project.status === 'active') app.projects.setStatus(f.project.id, 'delivered', 'system:orchestrator');
         return ['completing', 'All final files released by staff'];
       }
       case 'completing': {
         const input = { project_id: wf.project_id };
         const summary = ensure(wf, 'project_manager', 'completion_summary', input);
-        const perf = ensure(wf, 'finance_ops', 'record_performance', input);
+        const perf = ensure(wf, 'orchestrator', 'record_performance', input);
         if (!done(summary, perf)) return null;
         db.run('UPDATE workflows SET summary = ? WHERE id = ?', JSON.stringify({ ...(summary.output || {}), performance: perf.output }), wf.id);
         return ['completed', 'Completion summary recorded'];
@@ -180,26 +251,32 @@ function createWorkflowEngine(app, { queue, clock }) {
   /** Close human tasks whose underlying work is visibly done. */
   function autoResolve(wf) {
     const f = facts(wf);
-    const prefix = `wf${wf.id}:`;
+    const terminal = STATES[wf.state].terminal;
+    const has = (sql, ...p) => Boolean(db.get(sql, ...p));
     for (const t of app.humanTasks.openForWorkflow(wf.id)) {
-      const k = t.dedupe_key.startsWith(prefix) ? t.dedupe_key.slice(prefix.length) : t.dedupe_key;
+      const k = t.dedupe_key;
       let m;
       let resolved = false;
-      if (STATES[wf.state].terminal) resolved = true;
-      else if (k === 'approve_quote') resolved = f.quotes.some((q) => q.status !== 'draft');
-      else if ((m = /^notify_quote:q(\d+)$/.exec(k))) resolved = (f.quotes.find((q) => q.id === Number(m[1])) || {}).status !== 'sent';
-      else if ((m = /^publish_update:u(\d+)$/.exec(k))) resolved = !db.get("SELECT 1 FROM status_updates WHERE id = ? AND status = 'draft'", Number(m[1]));
-      else if ((m = /^review:d(\d+):v(\d+)$/.exec(k))) { const d = f.deliverables.find((x) => x.id === Number(m[1])); resolved = !d || ['approved', 'released'].includes(d.status) || d.version > Number(m[2]); }
-      else if ((m = /^approve_invoice:i(\d+)$/.exec(k))) resolved = !db.get("SELECT 1 FROM invoices WHERE id = ? AND status = 'draft'", Number(m[1]));
-      else if ((m = /^production:ij(\d+)$/.exec(k))) resolved = !db.get("SELECT 1 FROM integration_jobs WHERE id = ? AND status IN ('needs_human','queued','running')", Number(m[1]));
-      else if ((m = /^job_failed:j(\d+)$/.exec(k))) resolved = !db.get("SELECT 1 FROM jobs WHERE id = ? AND status = 'failed'", Number(m[1]));
-      else if ((m = /^overdue:t(\d+):(.+)$/.exec(k))) resolved = !db.get("SELECT 1 FROM tasks WHERE id = ? AND status != 'done' AND due_date = ?", Number(m[1]), m[2]);
-      else if (k === 'review_lead') resolved = wf.state !== 'needs_review';
-      else if (k === 'quote_declined') resolved = wf.state !== 'quote_declined';
-      else if (k === 'release') resolved = f.allFinalReleased;
-      else if (k === 'confirm_due_date') resolved = Boolean(f.project && f.project.due_date);
-      else if (k === 'deposit_mismatch') resolved = Boolean(wf.project_id && app.billing.depositVerified(wf.project_id));
-      if (resolved) app.humanTasks.resolve(t.id, 'system:auto', STATES[wf.state].terminal && wf.state !== 'completed' ? 'dismissed' : 'done');
+      if (terminal) resolved = true;
+      else if (/:approve_quote$/.test(k)) resolved = f.quotes.some((q) => q.status !== 'draft');
+      else if (/:write_quote$/.test(k)) resolved = f.quotes.length > 0;
+      else if ((m = /approve_message:m(\d+)$/.exec(k))) resolved = !has("SELECT 1 FROM messages WHERE id = ? AND status = 'draft'", Number(m[1]));
+      else if ((m = /publish_update:u(\d+)$/.exec(k))) resolved = !has("SELECT 1 FROM status_updates WHERE id = ? AND status = 'draft'", Number(m[1]));
+      else if ((m = /review:d(\d+):v(\d+)$/.exec(k))) { const d = f.deliverables.find((x) => x.id === Number(m[1])); resolved = !d || ['approved', 'released'].includes(d.status) || d.version > Number(m[2]); }
+      else if ((m = /approve_invoice:i(\d+)$/.exec(k))) resolved = !has("SELECT 1 FROM invoices WHERE id = ? AND status = 'draft'", Number(m[1]));
+      else if ((m = /production:ij(\d+)$/.exec(k))) resolved = !has("SELECT 1 FROM integration_jobs WHERE id = ? AND status IN ('needs_human','queued','running')", Number(m[1]));
+      else if ((m = /job_failed:j(\d+)$/.exec(k))) resolved = !has("SELECT 1 FROM jobs WHERE id = ? AND status = 'failed'", Number(m[1]));
+      else if ((m = /overdue:t(\d+):(.+)$/.exec(k))) resolved = !has("SELECT 1 FROM tasks WHERE id = ? AND status != 'done' AND due_date = ?", Number(m[1]), m[2]);
+      else if ((m = /approve_assignment:a(\d+)$/.exec(k))) resolved = !has("SELECT 1 FROM assignments WHERE id = ? AND status = 'recommended'", Number(m[1]));
+      else if ((m = /studio:t(\d+)$/.exec(k))) resolved = has("SELECT 1 FROM tasks WHERE id = ? AND (status = 'done' OR route != 'studio')", Number(m[1]));
+      else if ((m = /(?:find_contractor|assign_manually):t(\d+)$/.exec(k))) resolved = has("SELECT 1 FROM tasks t WHERE t.id = ? AND (t.status = 'done' OR t.route != 'contractor' OR EXISTS (SELECT 1 FROM assignments a WHERE a.task_id = t.id AND a.status NOT IN ('rejected','declined','cancelled')))", Number(m[1]));
+      else if ((m = /portal_key:c(\d+)$/.exec(k))) resolved = has('SELECT 1 FROM clients WHERE id = ? AND portal_key_hash IS NOT NULL', Number(m[1]));
+      else if (/:review_lead$/.test(k)) resolved = wf.state !== 'needs_review';
+      else if (/:quote_declined$/.test(k)) resolved = wf.state !== 'quote_declined';
+      else if (/:release$/.test(k)) resolved = f.allFinalReleased;
+      else if (/:confirm_due_date$/.test(k)) resolved = Boolean(f.project && f.project.due_date);
+      else if (/deposit_mismatch$/.test(k)) resolved = Boolean(wf.project_id && app.billing.depositVerified(wf.project_id));
+      if (resolved) app.humanTasks.resolve(t.id, 'system:auto', terminal && wf.state !== 'completed' ? 'dismissed' : 'done');
     }
   }
 
@@ -207,7 +284,7 @@ function createWorkflowEngine(app, { queue, clock }) {
   function updateBlocked(wf) {
     const failed = db.all("SELECT * FROM jobs WHERE workflow_id = ? AND status = 'failed' ORDER BY id", wf.id);
     for (const j of failed) {
-      app.humanTasks.create({ workflowId: wf.id, projectId: wf.project_id, inquiryId: wf.inquiry_id, kind: 'escalation', key: `job_failed:j${j.id}`, createdBy: 'system:workflow', title: `${j.agent}.${j.action} failed — retry or handle by hand`, detail: j.error || '', link: `/admin/ops/workflows/${wf.id}` });
+      task(wf, { kind: 'escalation', key: `job_failed:j${j.id}`, title: `${j.agent}.${j.action} failed — retry or handle by hand`, detail: j.error || '', link: `/admin/ops/workflows/${wf.id}` });
     }
     const reason = failed.length ? `${failed[0].agent}.${failed[0].action} failed: ${failed[0].error}`.slice(0, 500) : null;
     if ((wf.blocked_reason || null) !== reason) db.run('UPDATE workflows SET blocked_reason = ?, updated_at = ? WHERE id = ?', reason, iso(), wf.id);

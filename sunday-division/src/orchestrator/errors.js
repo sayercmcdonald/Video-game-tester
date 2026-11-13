@@ -25,7 +25,7 @@ class Reschedule extends Error {
 function classify(err) {
   if (err && err.kind) return err.kind;
   if (err && (err.name === 'AbortError' || err.name === 'TimeoutError')) return 'retryable';
-  if (err && err.status >= 500) return 'retryable';
+  if (err && (err.status >= 500 || [408, 429].includes(err.status))) return 'retryable';
   if (err && err.status >= 400) return 'fatal';
   if (err && /ECONNRESET|ECONNREFUSED|ETIMEDOUT|fetch failed|socket/i.test(String(err.message || err.code))) return 'retryable';
   return 'retryable';

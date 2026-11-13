@@ -57,6 +57,7 @@ class Context {
     this.session = null;
     this.user = null;
     this.client = null;
+    this.contractor = null;
     this.flash = '';
     this.setCookies = [];
   }
@@ -67,6 +68,7 @@ class Context {
   get actor() {
     if (this.user) return `staff:${this.user.email}`;
     if (this.client) return `client:${this.client.id}`;
+    if (this.contractor) return `contractor:${this.contractor.id}`;
     return 'public';
   }
   send(status, body, headers = {}) {
@@ -152,11 +154,14 @@ function createServer(app, router, views) {
       // Sessions: both kinds are loaded so shared chrome can reflect sign-in state.
       const admin = app.sessions.load('admin', ctx.cookies);
       const portal = app.sessions.load('portal', ctx.cookies);
-      if (admin) ctx.user = app.db.get('SELECT id, email, name FROM users WHERE id = ?', admin.user_id) || null;
+      if (admin) ctx.user = app.db.get('SELECT id, email, name, technical_reviewer FROM users WHERE id = ?', admin.user_id) || null;
       if (portal) ctx.client = app.db.get('SELECT * FROM clients WHERE id = ?', portal.client_id) || null;
-      ctx.session = route.opts.auth === 'admin' ? admin : route.opts.auth === 'portal' ? portal : null;
+      const contractor = app.sessions.load('contractor', ctx.cookies);
+      if (contractor) ctx.contractor = app.db.get("SELECT * FROM contractors WHERE id = ? AND status = 'approved'", contractor.contractor_id) || null;
+      ctx.session = { admin, portal, contractor }[route.opts.auth] || null;
       if (route.opts.auth === 'admin' && !ctx.user) return ctx.redirect('/admin/login');
       if (route.opts.auth === 'portal' && !ctx.client) return ctx.redirect('/portal');
+      if (route.opts.auth === 'contractor' && !ctx.contractor) return ctx.redirect('/contractor');
 
       if (ctx.cookies.sd_flash) {
         ctx.flash = ctx.cookies.sd_flash;

@@ -46,6 +46,8 @@ function register(router, app) {
       updates: db.all(`SELECT x.*, p.code FROM status_updates x ${join} WHERE x.status = 'draft' ORDER BY x.id`),
       revisions: db.all(`SELECT x.*, p.code FROM revisions x ${join} WHERE x.status = 'open' ORDER BY x.id`),
       briefs: db.all("SELECT id AS project_id, code, name, brief_source FROM projects WHERE brief_status = 'draft' AND status != 'cancelled'"),
+      assignments: db.all("SELECT x.*, p.code, c.name AS contractor_name, t.title AS task_title FROM assignments x JOIN projects p ON p.id = x.project_id JOIN contractors c ON c.id = x.contractor_id JOIN tasks t ON t.id = x.task_id WHERE x.status = 'recommended' ORDER BY x.id"),
+      messages: db.all("SELECT x.*, p.code FROM messages x LEFT JOIN projects p ON p.id = x.project_id WHERE x.status = 'draft' ORDER BY x.id"),
       tasks: db.all(`SELECT x.project_id, p.code, COUNT(*) AS n FROM tasks x ${join} WHERE x.status = 'proposed' GROUP BY x.project_id`),
       payments: app.billing.paymentsNeedingReview(),
     };
@@ -139,6 +141,7 @@ function register(router, app) {
       jobs: app.integrations.jobs(project.id),
       history: app.audit.forProject(project.id),
       workflow: app.db.get('SELECT * FROM workflows WHERE project_id = ?', project.id),
+      production: { tasks: app.projects.productionTasks(project.id), assignments: app.assignments.forProject(project.id), messages: app.messaging.forProject(project.id) },
     }));
   });
   router.post('/admin/projects/:id/details', A, (ctx) => {
@@ -301,20 +304,55 @@ function register(router, app) {
   router.post('/admin/jobs/:id/complete', A, (ctx) => back(ctx, app.integrations.completeManual(int(ctx.params.id), actor(ctx)), 'production'));
 
   // ── Contractors ───────────────────────────────────────────────────────
+  const production = require('../views/production');
   router.get('/admin/contractors', A, (ctx) => {
-    const rows = app.projects.contractors().map((c) => ({
-      ...c, open_tasks: n("SELECT COUNT(*) AS n FROM tasks WHERE contractor_id = ? AND status IN ('todo','doing','review')", c.id),
-    }));
-    ctx.html(views.contractors(ctx, { rows }));
+    let newKey = null;
+    const m = /^contractor-key:(\d+):(.+)$/.exec(ctx.flash);
+    if (m) { const c = app.contractors.get(Number(m[1])); newKey = { name: c ? c.name : '', key: m[2] }; ctx.flash = ''; }
+    ctx.html(production.contractors(ctx, { rows: app.contractors.list(), newKey }));
   });
   router.post('/admin/contractors', A, (ctx) => {
-    app.projects.addContractor(ctx.body, ctx.body.rate ? parseMoney(ctx.body.rate) : 0, actor(ctx));
+    app.contractors.create({ ...ctx.body, skills: list(ctx.body.skills), categories: list(ctx.body.categories) }, ctx.body.rate ? parseMoney(ctx.body.rate) : 0, ctx.user);
     ctx.redirect('/admin/contractors', 'Contractor added.');
   });
-  router.post('/admin/contractors/:id/active', A, (ctx) => {
-    app.projects.setContractorActive(int(ctx.params.id), ctx.body.active === '1');
-    ctx.redirect('/admin/contractors');
+  router.post('/admin/contractors/:id/status', A, (ctx) => {
+    app.contractors.setStatus(int(ctx.params.id), str(ctx.body.status, 20), ctx.user);
+    ctx.redirect('/admin/contractors', 'Contractor updated.');
   });
+  router.post('/admin/contractors/:id/portal-key', A, (ctx) => {
+    const id = int(ctx.params.id);
+    const key = app.contractors.issuePortalKey(id, ctx.user);
+    ctx.redirect('/admin/contractors', `contractor-key:${id}:${key}`);
+  });
+
+  // ── Assignments (staff decisions) ─────────────────────────────────────
+  const assignmentBack = (ctx, id, flash) => back(ctx, app.assignments.mustGet(id).project_id, 'production', flash);
+  router.post('/admin/assignments/:id/approve', A, (ctx) => {
+    const id = int(ctx.params.id);
+    const r = app.assignments.approve(id, ctx.user, { feeCents: ctx.body.fee ? parseMoney(ctx.body.fee) : null, dueDate: ctx.body.due_date });
+    assignmentBack(ctx, id, r.delivery === 'simulated' ? 'Assignment approved. Offer recorded as sent (SIMULATED — nothing left the server).' : 'Assignment approved. Send the offer message from Messages.');
+  });
+  router.post('/admin/assignments/:id/reject', A, (ctx) => { const id = int(ctx.params.id); app.assignments.reject(id, ctx.user, ctx.body.note); assignmentBack(ctx, id, 'Recommendation rejected. The Talent Agent will suggest someone else.'); });
+  router.post('/admin/assignments/:id/changes', A, (ctx) => { const id = int(ctx.params.id); app.assignments.requestChanges(id, ctx.user, ctx.body.notes); assignmentBack(ctx, id, 'Changes requested from the contractor.'); });
+  router.post('/admin/assignments/:id/cancel', A, (ctx) => { const id = int(ctx.params.id); app.assignments.cancel(id, ctx.user); assignmentBack(ctx, id, 'Assignment cancelled.'); });
+  router.post('/admin/tasks/:id/route', A, (ctx) => {
+    const t = db.get('SELECT * FROM tasks WHERE id = ?', int(ctx.params.id));
+    if (!t) throw new HttpError(404, 'Task not found.');
+    app.projects.setTaskRoute(t.id, str(ctx.body.route, 20), actor(ctx));
+    back(ctx, t.project_id, 'production', 'Route changed.');
+  });
+
+  // ── Messages ──────────────────────────────────────────────────────────
+  router.get('/admin/messages', A, (ctx) => {
+    const status = str(ctx.query.get('status'), 20);
+    ctx.html(production.messagesPage(ctx, { rows: app.messaging.list(status), provider: app.messaging.provider, status }));
+  });
+  router.post('/admin/messages/:id/approve', A, (ctx) => {
+    const how = app.messaging.approveAndSend(int(ctx.params.id), ctx.user, { body: ctx.body.body });
+    ctx.redirect('/admin/messages', how === 'simulated' ? 'Approved. Recorded as sent (SIMULATED — nothing left the server).' : 'Approved. Send it yourself, then mark it sent.');
+  });
+  router.post('/admin/messages/:id/discard', A, (ctx) => { app.messaging.discard(int(ctx.params.id), ctx.user); ctx.redirect('/admin/messages', 'Message discarded.'); });
+  router.post('/admin/messages/:id/sent', A, (ctx) => { app.messaging.markSentManually(int(ctx.params.id), ctx.user); ctx.redirect('/admin/messages', 'Marked as sent.'); });
 }
 
 // Fixed scrypt hash of a random string, used only to equalise login timing.

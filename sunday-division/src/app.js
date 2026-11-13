@@ -23,11 +23,16 @@ function createApp(config) {
   app.files = require('./services/files').createFiles(app);
   app.notify = require('./services/notify').createNotify(app);
   app.projects = require('./services/projects').createProjects(app);
+  app.contractors = require('./services/contractors').createContractors(app);
+  app.assignments = require('./services/assignments').createAssignments(app);
+  app.messaging = require('./services/messaging').createMessaging(app);
   app.quotes = require('./services/quotes').createQuotes(app);
   app.billing = require('./services/billing').createBilling(app);
   app.intake = require('./services/intake').createIntake(app);
   app.automation = require('./services/automation').createAutomation(app);
   app.ai = require('./ai/gateway').createAiGateway(app);
+  app.agentModel = require('./agents/model').createAgentModel(app);
+  app.agentRuntime = require('./agents/runtime').createRuntime(app);
   app.integrations = require('./integrations').createIntegrations(app);
   app.orchestrator = require('./orchestrator').createOrchestrator(app);
   app.budget = require('./orchestrator/budget').createBudget({ db: app.db, settings: app.settings, clock: app.orchestrator.clock });
@@ -45,6 +50,7 @@ function createApp(config) {
   require('./routes/portal').register(router, app);
   require('./routes/admin').register(router, app);
   require('./routes/ops').register(router, app);
+  require('./routes/contractor').register(router, app);
   require('./routes/webhooks').register(router, app);
 
   app.server = createServer(app, router, layout);
