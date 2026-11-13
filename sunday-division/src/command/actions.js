@@ -72,7 +72,7 @@ const ACTIONS = {
     },
     preview: (s, app) => ({
       title: `Offer "${s.task.title}" to ${s.contractor.name}`,
-      rows: [['Project', `${s.project.code} — ${s.project.name}`], ['Contractor', `${s.contractor.name} (approved, ${money(s.contractor.rate_cents)}/h)`], ['Estimate', `${s.assignment.hours} h`], ['Fee', money(s.assignment.fee_cents)], ['Due', s.assignment.due_date || 'Not set'], ['Recommended by', s.assignment.recommended_by]],
+      rows: [['Project', `${s.project.code} — ${s.project.name}`], ['Contractor', `${s.contractor.name} (approved, ${money(s.contractor.rate_cents)}/h)`], ['Estimate', `${s.assignment.hours} h`], ['Fee', money(s.assignment.fee_cents)], ['Due', s.assignment.due_date || 'Not set'], ['Recommended by', who(s.assignment.recommended_by)]],
       text: s.assignment.rationale,
       effects: [`Commits the studio to a fee of ${money(s.assignment.fee_cents)} if the work is signed off.`, app.messaging.provider === 'simulated' ? 'Sends the offer message — SIMULATED in this environment: nothing leaves the server.' : 'Prepares the offer message for you to send (manual delivery).', 'The contractor accepts or declines in their portal.'],
     }),
@@ -249,6 +249,7 @@ const ACTIONS = {
     execute(app, p, user) { for (const [k, v] of Object.entries(p.changes)) app.settings.set(k, v, user); return { message: 'Settings changed.', link: '/command/settings' }; },
   },
 };
+const who = (by) => ({ 'agent:talent': 'Talent Agent', rules: 'Rules' }[by] || String(by).replace(/^(staff|agent):/, ''));
 const fmt = (v) => (v === true ? 'On' : v === false ? 'Off' : String(v));
 /** Some actions are low risk only when they touch nothing sensitive. */
 function riskOf(def, state) {

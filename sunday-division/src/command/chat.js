@@ -241,11 +241,13 @@ function createChat(app) {
       if (r.automation_paused) lines.push('• Automation is paused.');
     } else if (/(designer|contractor|freelancer|pattern|tech ?pack|flats?|3d|who can)/.test(q)) {
       const jobType = /tech ?pack/.test(q) ? 'tech_pack' : /3d/.test(q) ? 'garment_3d' : /imag|photo/.test(q) ? 'product_imagery' : /flat|technical/.test(q) ? 'technical_flats' : 'design';
+      // "Technical designer" covers flats and tech packs; otherwise the asked-for kind only.
+      const kinds = /technical (designer|design)/.test(q) ? ['technical_flats', 'tech_pack'] : [jobType];
       const r = tool('find_contractors', { job_type: jobType, project: projectId ? String(projectId) : null });
       lines.push(r.contractors.length ? `Approved for ${r.job_type}:` : `No approved contractor has ${r.job_type} as a skill yet.`);
       for (const c of r.contractors.slice(0, 5)) lines.push(`• ${c.name} — ${c.discipline}, ${c.rate}, ${c.available ? 'available' : 'at capacity'}${c.category_match ? ', category match' : ''}`);
       for (const t of r.project_tasks || []) {
-        if (t.route !== 'contractor') continue;
+        if (t.route !== 'contractor' || !kinds.includes(t.job_type)) continue;
         lines.push(`• Task "${t.title}": ${t.assignment ? `${t.assignment.contractor} — ${t.assignment.status}` : 'no recommendation yet'}`);
         if (t.assignment && t.assignment.status === 'recommended') tool('propose_action', { type: 'approve_assignment', target_id: t.assignment.id });
       }

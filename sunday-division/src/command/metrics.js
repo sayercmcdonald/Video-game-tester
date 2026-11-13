@@ -47,9 +47,11 @@ function createCommandMetrics(app) {
     const checks = [];
     const add = (id, label, status, detail, link) => checks.push({ id, label, status, detail, link });
 
-    const approvals = db.get("SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM human_tasks WHERE status = 'open' AND kind IN ('approval','review')");
-    add('approvals', 'Approvals', approvals.n === 0 ? 'ok' : approvals.oldest < hoursAgo(48) ? 'act' : 'watch',
-      approvals.n === 0 ? 'Nothing waiting for you' : `${approvals.n} waiting${approvals.oldest < hoursAgo(48) ? ', oldest over 2 days' : ''}`, '/command/approvals');
+    // The same items the Approvals screen lists, so the two numbers always agree.
+    const waiting = app.command.approvals();
+    const oldest = waiting.reduce((min, x) => (x.since && x.since < min ? x.since : min), '9999');
+    add('approvals', 'Approvals', !waiting.length ? 'ok' : oldest < hoursAgo(48) ? 'act' : 'watch',
+      !waiting.length ? 'Nothing waiting for you' : `${waiting.length} waiting${oldest < hoursAgo(48) ? ', oldest over 2 days' : ''}`, '/command/approvals');
 
     const failed = n("SELECT COUNT(*) AS n FROM jobs WHERE status = 'failed'");
     const blocked = n("SELECT COUNT(*) AS n FROM workflows WHERE blocked_reason IS NOT NULL AND state NOT IN ('completed','cancelled','lost')");
@@ -191,14 +193,7 @@ function createCommandMetrics(app) {
     };
   }
 
-  function approvalsCount() {
-    return n("SELECT COUNT(*) AS n FROM quotes q JOIN projects p ON p.id = q.project_id WHERE q.status = 'draft' AND p.status = 'scoping' AND q.total_cents > 0")
-      + n("SELECT COUNT(*) AS n FROM assignments WHERE status = 'recommended'")
-      + n("SELECT COUNT(*) AS n FROM messages WHERE status = 'draft'")
-      + n("SELECT COUNT(*) AS n FROM invoices WHERE status = 'draft'")
-      + n("SELECT COUNT(*) AS n FROM deliverables WHERE status = 'in_review' AND file_id IS NOT NULL")
-      + n("SELECT COUNT(*) AS n FROM human_tasks WHERE status = 'open' AND (dedupe_key LIKE '%payment_exception%' OR dedupe_key LIKE '%deposit_mismatch%')");
-  }
+  const approvalsCount = () => app.command.approvals().length;
 
   function agents() {
     const stats = require('../orchestrator/metrics').createMetrics(app).agentStats();

@@ -30,7 +30,7 @@ How Sunday Division runs routine operations with agents while every money moveme
 | `orchestrator/budget.js`, `settings.js` | AI and external-service budgets; admin-only operating controls. |
 | `orchestrator/humanTasks.js` | The human intervention queue. |
 | `orchestrator/metrics.js` | Queries behind the Operations dashboard. |
-| `agents/definitions.js` | The eight agent contracts (frozen). |
+| `agents/definitions.js` | The agent contracts (frozen). |
 | `agents/tools.js` | Every capability an agent can have, bound to the job's subject, with an effect ledger. |
 | `agents/handlers/` | What each agent does. |
 | `ai/gateway.js` | Single path for model calls: budget check, schema validation, cost and version recording, rules fallback. |
@@ -123,7 +123,7 @@ Six business agents (Sales, Talent, Production, Project Manager, QA, Client Succ
 
 ## Tests
 
-`npm test` — 61 tests. The orchestration-specific ones:
+`npm test` — 110 tests (Command and provider tests are described in [COMMAND.md](COMMAND.md#11-tests)). The orchestration-specific ones:
 
 * `tests/orchestration.test.js` — the full lifecycle through real routes: inquiry → triage → draft quote → staff approval → client acceptance → verified deposit → setup → production routing → QA → final invoice → final payment → release → completion; plus duplicate events, webhook replays, sweeps.
 * `tests/agent-safety.test.js` — policy shape and immutability; no shell execution; denied and cross-client tool calls; forged job input; malicious and prompt-injected model output; cost and version recording; AI and external budgets; retries with backoff, retry limits, permanent failures, staff retry; crash recovery with effect replay; forged payment events and underpayment; global and per-workflow pause; autonomous production against a mock INDEX V3 (idempotent submission, polling, review-gated import).

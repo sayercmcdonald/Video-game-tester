@@ -80,7 +80,7 @@ function createFacts(app) {
     const metrics = app.command.metrics;
     const approvals = metrics.approvalsCount();
     st(approvals ? `${approvals} item(s) waiting for your approval` : 'Nothing is waiting for your approval', { link: '/command/approvals', severity: approvals ? 'attention' : 'info', ref: 'state:approvals' });
-    for (const c of metrics.health().checks.filter((c) => c.status !== 'ok')) st(`${c.label}: ${c.detail}`, { link: c.link, severity: c.status === 'act' ? 'urgent' : 'attention', ref: `state:${c.id}` });
+    for (const c of metrics.health().checks.filter((c) => c.status !== 'ok' && c.id !== 'approvals')) st(`${c.label}: ${c.detail}`, { link: c.link, severity: c.status === 'act' ? 'urgent' : 'attention', ref: `state:${c.id}` });
     const counts = metrics.projectCounts();
     st(`${counts.inProduction} project(s) in production, ${counts.awaitingDeposit} awaiting deposit, ${counts.scoping} in scoping`, { link: '/command/projects', ref: 'state:projects' });
 

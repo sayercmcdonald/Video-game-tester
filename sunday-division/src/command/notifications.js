@@ -1,6 +1,7 @@
 'use strict';
 const { money, str, now } = require('../lib/util');
 const { addDays } = require('./time');
+const { sha256 } = require('../lib/crypto');
 
 const KIND_LABEL = {
   paid_project: 'New paid project', approval: 'Pending approval', workflow_failed: 'Workflow failure', contractor_delay: 'Contractor delay',
@@ -70,7 +71,7 @@ function createNotifications(app) {
       create({ kind: 'project_risk', severity: 'urgent', title: `QA failed: ${q.title} (${q.code})`, body: `Version ${q.version} failed automated checks. A reviewer needs to look before anything moves on.`, link: `/command/projects/${q.project_id}`, key: `risk:qa:q${q.id}`, projectId: q.project_id });
     }
     for (const w of db.all("SELECT w.*, p.code FROM workflows w LEFT JOIN projects p ON p.id = w.project_id WHERE w.blocked_reason IS NOT NULL AND w.state NOT IN ('completed','cancelled','lost')")) {
-      create({ kind: 'workflow_failed', severity: 'urgent', title: `Workflow blocked${w.code ? `: ${w.code}` : ''}`, body: w.blocked_reason, link: '/command/agents', key: `blocked:wf${w.id}:${w.updated_at}`, projectId: w.project_id });
+      create({ kind: 'workflow_failed', severity: 'urgent', title: `Workflow blocked${w.code ? `: ${w.code}` : ''}`, body: w.blocked_reason, link: '/command/agents', key: `blocked:wf${w.id}:${sha256(w.blocked_reason).slice(0, 12)}`, projectId: w.project_id });
     }
     const threshold = Math.round(app.settings.get('unusual_expense_usd') * 100);
     for (const c of db.all('SELECT c.*, p.code FROM costs c JOIN projects p ON p.id = c.project_id WHERE c.amount_cents > ? AND c.created_at >= ?', threshold, addDays(today, -30))) {

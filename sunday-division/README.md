@@ -1,7 +1,8 @@
 # Sunday Division
 
-The studio's website, client intake, client portal, internal operating dashboard and payments — one small Node.js application.
+The studio's website, client intake, client portal, internal operating dashboard, payments and the founder's own app — one small Node.js application.
 
+- **Sunday Division Command** (`/command`) — the founder's private, installable mobile app: overview and company health, an AI Morning Brief built only from verified facts, projects, approvals with code-built previews, Agent Studio, Command Chat, performance, notifications with Web Push, and settings for agent permissions, model providers and budgets. Founder-only, enforced on the server. See [`docs/COMMAND.md`](docs/COMMAND.md).
 - **Public site** — Home, Services, Portfolio (concept studies, labelled as such), About, Start a Project, Client Portal, Contact, Privacy.
 - **Intake** — validated project form with reference-image upload, stored privately.
 - **Dashboard** (`/admin`) — leads, quotes and scopes, projects, tasks and milestones, files, deliverables and revisions, contractors, invoices and payments, profitability, approvals queue, audit history.
@@ -9,7 +10,7 @@ The studio's website, client intake, client portal, internal operating dashboard
 - **Payments** — Stripe Checkout (hosted). Deposit first, balance before final files.
 - **Automation** — drafts triage notes, briefs, quotes, task lists and status updates. A person approves everything client-facing.
 - **INDEX V3 / FORM** — adapter and API contract ready; manual (human) mode until they are connected.
-- **Business agents** — six Claude tool-calling agents (Sales, Talent, Production, Project Manager, QA, Client Success) and a deterministic Operations Orchestrator run on a durable job queue inside the app, behind every human gate. See [`docs/AGENTS.md`](docs/AGENTS.md).
+- **Business agents** — six tool-calling agents (Anthropic Claude or OpenAI, through one provider interface) (Sales, Talent, Production, Project Manager, QA, Client Success) and a deterministic Operations Orchestrator run on a durable job queue inside the app, behind every human gate. See [`docs/AGENTS.md`](docs/AGENTS.md).
 - **Contractors** — approved roster, assignments recommended by the Talent Agent and approved by staff, and a contractor portal (`/contractor`) for briefs, offers and submissions.
 - **Message outbox** — every message to a client or contractor is approved by staff before it is sent.
 
@@ -21,8 +22,16 @@ Requires Node.js 22.13 or newer.
 npm install
 cp .env.example .env            # optional for local use
 npm run create-admin -- you@example.com "Your Name"
-npm start                       # http://localhost:3000  ·  dashboard at /admin
-npm test                        # 61 tests: agent workflow, agent safety, payments, approvals
+npm run founder -- grant you@example.com   # founder access to Command (or set FOUNDER_EMAIL)
+npm start                       # http://localhost:3000  ·  dashboard /admin  ·  founder app /command
+npm test                        # 110 tests: Command security, approvals, chat, brief, push, providers, mobile, agents, payments
+```
+
+To look around with something on screen, fill an empty data directory with clearly labelled sample records (development only):
+
+```bash
+DATA_DIR=./data-sample ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=a-long-password FOUNDER_EMAIL=you@example.com npm run seed:sample
+DATA_DIR=./data-sample ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=a-long-password FOUNDER_EMAIL=you@example.com npm start
 ```
 
 With no Stripe keys in development, payments use a built-in **simulated checkout** so the whole flow can be exercised without real money. It is refused when `NODE_ENV=production`.
@@ -59,7 +68,11 @@ All settings are environment variables — see [`.env.example`](.env.example). T
 | `TRUST_PROXY=1` | Required behind a reverse proxy so rate limits see real client IPs |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Creates the first admin on first start |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Enables live payments |
-| `ANTHROPIC_API_KEY` | Enables Claude drafting (otherwise rules-based drafting) |
+| `ANTHROPIC_API_KEY` | Enables Claude (otherwise rules-based drafting) |
+| `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_PRICE_*_PER_MTOK` | Enables OpenAI as an alternative provider |
+| `FOUNDER_EMAIL` | Who may use Sunday Division Command |
+| `COMPANY_TIMEZONE` | Morning Brief time and local periods |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Web Push keys (generated into `DATA_DIR` if unset) |
 | `AI_MONTHLY_BUDGET_USD`, `AI_PROJECT_BUDGET_USD` | Starting AI spend limits (then editable in Operations → Controls) |
 | `ORCHESTRATOR_POLL_MS` | How often the agent worker runs (default 2000; `0` disables) |
 | `AI_MODEL`, `AI_AGENT_EFFORT` | Model and effort for the agents (`claude-opus-5-5`, `medium`) |
@@ -93,9 +106,9 @@ The app is a single process with a SQLite database and an uploads folder, both u
 ## Known gaps before and after launch
 
 - **Email is manual.** The app does not send email: approved messages wait in the outbox for staff to send. Staff email the client their portal link and key, and reply to inquiries from their own mailbox. `NOTIFY_WEBHOOK_URL` can ping Slack on new inquiries. Transactional email is the first thing to add.
-- **One staff role.** Every admin user has full access; contractors do not sign in.
+- **Two staff levels.** Every admin user has full dashboard access; founder access (Command) is a separate server-side flag. Passkeys for Command are a natural next step.
 - **Privacy notice and quote terms are plain-language drafts** and need legal review for your jurisdiction.
 - **Portfolio shows studio concept studies only**, drawn as SVG in `src/views/flats.js`. Replace or extend with real work as clients give permission.
-- **Not verified in this environment:** live Stripe API calls, live Claude API calls and the Docker image build (see the notes above).
+- **Not verified in this environment:** live Stripe API calls, live Claude and OpenAI calls, real push delivery to a phone and the Docker image build (see the notes above).
 
-More detail: [`docs/AGENTS.md`](docs/AGENTS.md) · [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)
+More detail: [`docs/COMMAND.md`](docs/COMMAND.md) · [`docs/AGENTS.md`](docs/AGENTS.md) · [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)

@@ -29,10 +29,13 @@ function createBudget({ db, settings, clock, config }) {
   const extra = {};
   const oa = config && config.ai.openai;
   if (oa && oa.model && oa.prices) extra[oa.model] = oa.prices;
+  // Providers report dated snapshots ("model-2026-05-01") of the configured model name.
+  const configured = (model) => extra[model] || (Object.entries(extra).find(([k]) => String(model).startsWith(`${k}-`)) || [])[1];
   const cost = (model, inputTokens, outputTokens, cache = {}) => {
-    const p = extra[model] || priceFor(model);
+    const own = configured(model);
+    const p = own || priceFor(model);
     const { cacheRead = 0, cacheWrite = 0 } = cache;
-    return Math.round(inputTokens * p.input + outputTokens * p.output + cacheRead * p.cacheRead + (extra[model] ? 0 : cacheWrite * p.input * CACHE_WRITE_MULTIPLIER));
+    return Math.round(inputTokens * p.input + outputTokens * p.output + cacheRead * p.cacheRead + (own ? 0 : cacheWrite * p.input * CACHE_WRITE_MULTIPLIER));
   };
   const monthStart = () => {
     const d = new Date(clock());

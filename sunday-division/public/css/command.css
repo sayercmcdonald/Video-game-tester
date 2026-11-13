@@ -265,6 +265,8 @@ progress::-moz-progress-bar { background: var(--bone-2); }
 .c-sources summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--muted); }
 .c-sources ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .c-sources li:target { background: var(--surface-2); border-radius: 6px; }
+.c-source { display: grid; grid-template-columns: 34px 1fr; gap: 8px; min-height: 44px; padding: 6px 4px; align-items: baseline; text-decoration: none; border-bottom: 1px solid var(--line); }
+a.c-source:active { background: var(--surface-2); }
 
 /* ── Chat ── */
 .c-chat__head { display: flex; align-items: center; justify-content: space-between; }

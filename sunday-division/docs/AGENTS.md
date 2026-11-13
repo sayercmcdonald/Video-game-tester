@@ -40,7 +40,11 @@ application event ──► Operations Orchestrator (deterministic state machine
 * **Retries and failures**: overloaded/rate-limited/5xx model errors and transient infrastructure errors retry with exponential backoff (per-action limits). Refusals, permission violations (three refused tool calls), budget exhaustion, turn limits and invalid results fail the job at once, block the workflow and open an escalation for staff, who can retry or handle the step by hand.
 * **Brains never switch mid-task.** A task that starts on Claude finishes on Claude or fails; a task that starts on rules stays on rules.
 
-### Model settings
+### Model providers
+
+Agents reach models through `src/ai/providers` — Anthropic (Messages API) or OpenAI (Chat Completions with strict function calling) behind one adapter interface. The founder picks the provider in Command → Settings (default `AI_PROVIDER`), and can set any agent to rules-only or pause it. A task always finishes on the provider it started on. See [COMMAND.md](COMMAND.md#8-model-providers).
+
+### Model settings (Anthropic)
 
 `claude-opus-5-5` (override with `AI_MODEL`), adaptive thinking, effort `medium` (`AI_AGENT_EFFORT`), strict tool schemas, automatic prompt caching of the stable prefix, server-side refusal fallback (`fallbacks: "default"`). Forced `tool_choice` is not available on this model, so each prompt states which tools to call and the loop nudges an agent that stops without `submit_result` (twice, then fails).
 
@@ -56,6 +60,7 @@ Full system prompts, per-action instructions, tool lists and input/output schema
 | **Project Manager** | `plan`, `check_deadlines`, `completion_summary` | milestones, internal tasks, production tasks (limited to what the client bought) | client-facing date to confirm; overdue tasks |
 | **QA** | `check` | QA report per deliverable version (reads PDFs and images) | every result goes to a qualified technical reviewer; fail on integrity, scripts, embedded instructions |
 | **Client Success** | `quote_notice`, `kickoff_update` | draft client messages and portal updates | every message is a staff-approved draft |
+| **Command Agent** | `morning_brief` | the founder's Morning Brief, from facts collected by code (one read-only tool) | nothing: every statement must cite a fact, uncited ones are removed |
 | **Operations Orchestrator** | `verify_deposit_invoice`, `prepare_final_invoice`, `record_performance` + the workflow itself | — (deterministic code, no model) | deposit mismatch; payment exceptions; failed jobs |
 
 ### Tools

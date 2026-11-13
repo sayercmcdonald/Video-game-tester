@@ -206,7 +206,7 @@ ${!b ? html`<section class="c-section"><h1 class="c-serif c-h1">No brief yet</h1
   <p class="c-provenance">${dot(b.brain === 'rules' ? 'neutral' : 'ok')}${BRAIN_LABEL[b.brain] || b.brain} from ${b.facts.length} verified facts.${b.dropped ? html` <strong>${b.dropped} statement(s) removed</strong> because no fact supported them.` : ''}</p>
   ${b.content.sections.map((s) => html`<section class="c-brief__section"><h2 class="c-label">${s.title}</h2><ul class="c-brief__items">${s.items.map((it) => html`<li>${it.text}${cite(it.fact_ids)}</li>`)}</ul></section>`)}
   ${b.content.actions.length ? html`<section class="c-brief__section"><h2 class="c-label">Recommended</h2><ul class="c-actions-list">${b.content.actions.map((a) => html`<li><span>${a.text}${cite(a.fact_ids)}</span>${a.action_type ? html`<form method="post" action="/command/actions">${csrf(ctx)}<input type="hidden" name="type" value="${a.action_type}"><input type="hidden" name="target" value="${a.target_id}"><input type="hidden" name="source" value="brief"><button class="c-btn c-btn--small" type="submit">Review</button></form>` : html`<a class="c-btn c-btn--small" href="/command/approvals">Open</a>`}</li>`)}</ul></section>` : ''}
-  <details class="c-sources"><summary>Sources (${b.facts.length})</summary><ol>${b.facts.map((f) => html`<li id="fact-${f.id}"><span class="c-mono">${f.id}</span> ${f.text}${f.link ? html` <a class="c-link" href="${f.link}">Open</a>` : ''}</li>`)}</ol></details>
+  <details class="c-sources"><summary>Sources (${b.facts.length})</summary><ol>${b.facts.map((f) => html`<li id="fact-${f.id}">${f.link ? html`<a class="c-source" href="${f.link}"><span class="c-mono">${f.id}</span><span>${f.text}</span></a>` : html`<span class="c-source"><span class="c-mono">${f.id}</span><span>${f.text}</span></span>`}</li>`)}</ol></details>
 </article>
 ${genForm}`}
 ${history.length > 1 ? html`<section class="c-section"><h2 class="c-section-title">Earlier briefs</h2><ul class="c-list">${history.filter((h) => !b || h.id !== b.id).map((h) => html`<li><a class="c-list__row" href="/command/brief/${h.id}"><span>${h.brief_date} <span class="c-muted c-small">${h.status === 'ready' ? (BRAIN_LABEL[h.brain] || h.brain) : h.status}</span></span>${icon('arrow', 'i i--end')}</a></li>`)}</ul></section>` : ''}`,
@@ -270,6 +270,13 @@ ${p.timeline.length ? html`<ol class="c-timeline">${p.timeline.map((t) => html`<
 
 // ── Approvals & action previews ───────────────────────────────────────
 const GROUPS = [['quotes', 'Quotes'], ['contractors', 'Contractor assignments'], ['finance', 'Financial'], ['deliverables', 'Deliverable reviews'], ['messages', 'Messages']];
+const AGENT_NAME = { sales: 'Sales Agent', talent: 'Talent Agent', client_success: 'Client Success', project_manager: 'Project Manager', production: 'Production', orchestrator: 'Orchestrator', qa: 'QA Agent' };
+function sourceLabel(x) {
+  if (!x.source || x.source === 'manual' || x.source.startsWith('staff:')) return '';
+  if (x.source.startsWith('agent:')) return ` · from ${AGENT_NAME[x.source.slice(6)] || x.source.slice(6)}`;
+  if (x.group === 'quotes') return ` · drafted by Sales Agent (${{ rules: 'rules', claude: 'Claude', openai: 'OpenAI' }[x.source] || x.source})`;
+  return ` · from ${x.source}`;
+}
 const ALT_LABEL = { reject_assignment: 'Reject', discard_message: 'Discard' };
 function approvals(ctx, { items }) {
   const tz = tzOf(ctx);
@@ -284,11 +291,11 @@ ${items.length ? GROUPS.map(([g, label]) => {
     return html`<section class="c-section" id="${g === 'finance' ? 'finance' : g}"><h2 class="c-section-title">${label} <span class="c-count">${list.length}</span></h2>
 <ul class="c-cards">${list.map((x) => html`<li class="c-card c-approval">
   <div class="c-approval__main"><p class="c-approval__title">${x.exception ? dot('act') : ''}${x.title}</p><p class="c-muted c-small">${x.detail}</p>
-  <p class="c-small c-muted">${x.amount ? html`<strong class="c-amount">${x.amount}</strong> · ` : ''}waiting ${ago(x.since, Date.now())}${x.source && x.source !== 'manual' ? ` · from ${x.source.replace('agent:', '')}` : ''}${x.qa ? html` · QA ${x.qa.toUpperCase()}` : ''}</p></div>
+  <p class="c-small c-muted">${x.amount ? html`<strong class="c-amount">${x.amount}</strong> · ` : ''}waiting ${ago(x.since, Date.now())}${sourceLabel(x)}</p></div>
   <div class="c-approval__actions">
   ${x.needsNote ? html`<form method="post" action="/command/actions" class="c-form c-form--inline">${csrf(ctx)}<input type="hidden" name="type" value="${x.type}"><input type="hidden" name="target" value="${x.targetId}"><label for="note-${x.targetId}" class="c-sr">Your note</label><input id="note-${x.targetId}" name="note" required maxlength="500" placeholder="What did you check or do?"><button class="c-btn" type="submit">Review</button></form>`
     : html`${review(x.type, x.targetId, 'Review', 'c-btn--primary')}${x.alt ? review(x.alt, x.targetId, ALT_LABEL[x.alt], 'c-btn--ghost') : ''}`}
-  ${x.projectId ? html`<a class="c-link c-small" href="/command/projects/${x.projectId}">Project</a>` : ''}
+  ${x.projectId ? html`<a class="c-btn c-btn--small c-btn--ghost" href="/command/projects/${x.projectId}">Project</a>` : ''}
   </div></li>`)}</ul></section>`;
   }) : html`<section class="c-section c-done">${dot('ok')}<p class="c-serif c-h2">All clear.</p><p class="c-muted">Nothing is waiting for you${tz ? '' : ''}.</p></section>`}`,
   });

@@ -26,7 +26,11 @@ function createBrief(app) {
   function request({ manual = false, by = 'system:schedule' } = {}) {
     const t = nowMs();
     const date = localDate(t, tz());
-    const last = db.get("SELECT window_end FROM briefs WHERE status != 'failed' ORDER BY id DESC LIMIT 1");
+    // The daily brief covers the time since the previous daily brief; "generate now" covers
+    // the time since the most recent brief of either kind.
+    const last = manual
+      ? db.get("SELECT window_end FROM briefs WHERE status != 'failed' ORDER BY id DESC LIMIT 1")
+      : db.get("SELECT window_end FROM briefs WHERE status != 'failed' AND idempotency_key NOT LIKE '%:manual:%' ORDER BY id DESC LIMIT 1");
     const from = last ? last.window_end : new Date(t - 24 * 3600e3).toISOString();
     const to = new Date(t).toISOString();
     const key = manual ? `brief:${date}:manual:${db.get("SELECT COUNT(*) AS n FROM briefs WHERE brief_date = ?", date).n + 1}` : `brief:${date}`;
@@ -35,7 +39,7 @@ function createBrief(app) {
     const facts = app.command.facts.collect(from, to);
     const id = db.insertIgnore('briefs', { brief_date: date, idempotency_key: key, window_start: from, window_end: to, facts: JSON.stringify(facts), requested_by: by, created_at: to });
     if (!id) return hydrate(db.get('SELECT * FROM briefs WHERE idempotency_key = ?', key));
-    const job = app.orchestrator.queue.ensure({ key: `command:${key}`, agent: 'command', action: 'morning_brief', input: { brief_id: id }, priority: 3 });
+    const job = app.orchestrator.queue.ensure({ key: `command:${key}@${to}`, agent: 'command', action: 'morning_brief', input: { brief_id: id }, priority: 3 });
     db.run('UPDATE briefs SET job_id = ? WHERE id = ?', job.id, id);
     return get(id);
   }

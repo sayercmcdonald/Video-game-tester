@@ -57,6 +57,7 @@ function createApp(config) {
   require('./routes/webhooks').register(router, app);
   require('./routes/command').register(router, app);
 
+  app.router = router; // introspection (tests enumerate protected routes)
   app.server = createServer(app, router, layout);
   const janitor = setInterval(() => app.sessions.purgeExpired(), 3600e3);
   janitor.unref();

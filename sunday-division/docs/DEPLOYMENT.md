@@ -26,6 +26,10 @@ Nothing here has been deployed. Each step that touches money, clients or contrac
 | `ORCHESTRATOR_POLL_MS` | `2000` | |
 | `INDEX_V3_API_URL/KEY`, `FORM_API_URL/KEY` | unset | until each integration is verified |
 | `NOTIFY_WEBHOOK_URL` | optional | Slack ping on new inquiries |
+| `FOUNDER_EMAIL` | the founder's staff email | who may use Sunday Division Command (or `npm run founder -- grant`) |
+| `COMPANY_TIMEZONE` | e.g. `America/New_York` | Morning Brief time and local periods |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | generated once, kept in the secret store | Web Push; if unset a key pair is created in `DATA_DIR/vapid.json` |
+| `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_PRICE_*_PER_MTOK` | only to use OpenAI | prices are required so budgets can be enforced |
 
 Keep keys in the host's secret store, not in files.
 
@@ -38,6 +42,8 @@ Keep keys in the host's secret store, not in files.
 5. Check costs per task and per project against the budget; set the real budgets.
 6. Restart the server mid-task once and confirm the task resumes.
 
+7. Install Command on your iPhone (Safari → Share → Add to Home Screen), enable push in Settings, and check: a deposit payment produces a "New paid project" push; an approval confirmed from the phone; the step-up password prompt after 12 hours (or after "Sign out all devices"); the Morning Brief against the records it cites. See [COMMAND.md](COMMAND.md).
+
 ## 4. Go-live gates (each needs your explicit approval)
 
 * [ ] Staging rehearsal passed and transcripts reviewed.
@@ -45,6 +51,7 @@ Keep keys in the host's secret store, not in files.
 * [ ] Privacy notice and quote terms reviewed by a lawyer (they mention AI-assisted drafting and contractor access to project files).
 * [ ] Each contractor reviewed and approved by a person, with portal keys sent securely and an agreement covering fees, confidentiality and payment terms.
 * [ ] Backups running and a restore tested.
+* [ ] Founder access set (`FOUNDER_EMAIL`), Command installed on the founder's phone, a real push received.
 
 ## 5. Operating it
 
@@ -55,7 +62,7 @@ Keep keys in the host's secret store, not in files.
 
 ## 6. Rollback
 
-* Code: redeploy the previous image; the database migrates forward only, so restore the pre-deploy backup if a rollback must cross a migration (v2 → v3 in this release).
+* Code: redeploy the previous image; the database migrates forward only, so restore the pre-deploy backup if a rollback must cross a migration (v3 → v4 in this release: founder flag, founder sessions, notifications, briefs, Command actions; existing sessions are kept).
 * Agents misbehaving: pause automation (no restart needed), fix the prompt or policy, redeploy, resume. Failed jobs can be retried or handed to a person per job.
 
 ## Not in this release
