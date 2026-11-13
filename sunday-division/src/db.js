@@ -248,6 +248,143 @@ CREATE INDEX idx_tasks_project ON tasks(project_id);
 CREATE INDEX idx_invoices_project ON invoices(project_id);
 CREATE INDEX idx_audit_project ON audit_log(project_id, id);
 CREATE INDEX idx_sessions_expiry ON sessions(expires_at);
+`, `
+-- ── Orchestration layer (v2) ─────────────────────────────────────────────
+CREATE TABLE workflows (
+  id INTEGER PRIMARY KEY,
+  type TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  inquiry_id INTEGER UNIQUE REFERENCES inquiries(id),
+  project_id INTEGER REFERENCES projects(id),
+  state TEXT NOT NULL,
+  paused INTEGER NOT NULL DEFAULT 0,
+  blocked_reason TEXT,
+  summary TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+);
+CREATE TABLE workflow_transitions (
+  id INTEGER PRIMARY KEY,
+  workflow_id INTEGER NOT NULL REFERENCES workflows(id),
+  from_state TEXT,
+  to_state TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  actor TEXT NOT NULL DEFAULT 'system',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE jobs (
+  id INTEGER PRIMARY KEY,
+  workflow_id INTEGER REFERENCES workflows(id),
+  project_id INTEGER REFERENCES projects(id),
+  inquiry_id INTEGER REFERENCES inquiries(id),
+  agent TEXT NOT NULL,
+  action TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','succeeded','failed','cancelled')),
+  priority INTEGER NOT NULL DEFAULT 0,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  reschedules INTEGER NOT NULL DEFAULT 0,
+  run_at TEXT NOT NULL,
+  lease_until TEXT,
+  input TEXT NOT NULL DEFAULT '{}',
+  output TEXT,
+  error TEXT,
+  error_kind TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+CREATE TABLE job_dependencies (
+  job_id INTEGER NOT NULL REFERENCES jobs(id),
+  depends_on INTEGER NOT NULL REFERENCES jobs(id),
+  PRIMARY KEY (job_id, depends_on)
+);
+CREATE TABLE events (
+  id INTEGER PRIMARY KEY,
+  type TEXT NOT NULL,
+  dedupe_key TEXT NOT NULL UNIQUE,
+  inquiry_id INTEGER,
+  project_id INTEGER,
+  payload TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  processed_at TEXT
+);
+CREATE TABLE agent_runs (
+  id INTEGER PRIMARY KEY,
+  job_id INTEGER REFERENCES jobs(id),
+  workflow_id INTEGER,
+  project_id INTEGER,
+  agent TEXT NOT NULL,
+  agent_version TEXT NOT NULL DEFAULT '',
+  task TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('claude','rules','integration','system')),
+  model_requested TEXT NOT NULL DEFAULT '',
+  model_served TEXT NOT NULL DEFAULT '',
+  prompt_version TEXT NOT NULL DEFAULT '',
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_micros INTEGER NOT NULL DEFAULT 0,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('ok','fallback','error','budget_blocked','invalid_output','refused')),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE agent_tool_calls (
+  id INTEGER PRIMARY KEY,
+  job_id INTEGER REFERENCES jobs(id),
+  agent TEXT NOT NULL,
+  tool TEXT NOT NULL,
+  effect TEXT NOT NULL,
+  effect_key TEXT,
+  decision TEXT NOT NULL CHECK (decision IN ('executed','replayed','denied')),
+  detail TEXT NOT NULL DEFAULT '',
+  result TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_tool_effects ON agent_tool_calls(job_id, effect_key) WHERE decision = 'executed';
+CREATE TABLE human_tasks (
+  id INTEGER PRIMARY KEY,
+  workflow_id INTEGER REFERENCES workflows(id),
+  project_id INTEGER,
+  inquiry_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('approval','production','escalation','communication','review')),
+  title TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  link TEXT NOT NULL DEFAULT '',
+  dedupe_key TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done','dismissed')),
+  created_by TEXT NOT NULL,
+  resolved_by TEXT,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+CREATE TABLE ops_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE deliverable_qa (
+  id INTEGER PRIMARY KEY,
+  deliverable_id INTEGER NOT NULL REFERENCES deliverables(id),
+  version INTEGER NOT NULL,
+  agent TEXT NOT NULL,
+  result TEXT NOT NULL CHECK (result IN ('pass','warn','fail')),
+  checks TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  UNIQUE (deliverable_id, version, agent)
+);
+ALTER TABLE integration_jobs ADD COLUMN idempotency_key TEXT;
+ALTER TABLE integration_jobs ADD COLUMN service_version TEXT;
+CREATE UNIQUE INDEX idx_integration_idem ON integration_jobs(idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX idx_jobs_claim ON jobs(status, run_at, priority);
+CREATE INDEX idx_jobs_workflow ON jobs(workflow_id);
+CREATE INDEX idx_events_pending ON events(processed_at, id);
+CREATE INDEX idx_runs_created ON agent_runs(created_at);
+CREATE INDEX idx_runs_project ON agent_runs(project_id);
+CREATE INDEX idx_human_open ON human_tasks(status, created_at);
 `];
 
 function openDb(config) {
@@ -268,6 +405,13 @@ function openDb(config) {
     run: (sql, ...params) => prep(sql).run(...params),
     get: (sql, ...params) => prep(sql).get(...params),
     all: (sql, ...params) => prep(sql).all(...params),
+    /** INSERT OR IGNORE; returns the new id, or null when a unique constraint skipped it. */
+    insertIgnore: (table, row) => {
+      const cols = Object.keys(row);
+      const sql = `INSERT OR IGNORE INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
+      const r = prep(sql).run(...cols.map((c) => row[c]));
+      return r.changes ? Number(r.lastInsertRowid) : null;
+    },
     insert: (table, row) => {
       const cols = Object.keys(row);
       const sql = `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;

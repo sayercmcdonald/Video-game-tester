@@ -23,9 +23,12 @@ const object = (properties) => ({ type: 'object', properties, required: Object.k
 
 const TASKS = {
   triage: {
-    instruction: 'Organise this new inquiry for the studio team. Summarise what the client wants in two or three sentences, suggest the best-fitting package, set a priority for follow-up, list information the studio still needs, propose the clarifying questions to ask, and flag anything that needs care (budget below the package price, unrealistic timeline, out-of-scope requests such as manufacturing).',
+    instruction: 'Organise this new inquiry for the studio team. Summarise what the client wants in two or three sentences, classify which of the studio services it needs, suggest the best-fitting package, set a priority for follow-up, list information the studio still needs, propose the clarifying questions to ask, and flag anything that needs care (budget below the package price, unrealistic timeline, out-of-scope requests such as manufacturing). Set qualified to false only when the submission is not a genuine fashion design or development request the studio could quote (for example spam, or a request only for manufacturing); explain why in qualification_note.',
     schema: object({
       summary: { type: 'string' },
+      services: { type: 'array', items: { type: 'string', enum: catalog.SERVICES.map((s) => s.id) } },
+      qualified: { type: 'boolean' },
+      qualification_note: { type: 'string' },
       suggested_package: { type: 'string', enum: catalog.PACKAGES.map((p) => p.id) },
       priority: { type: 'string', enum: ['high', 'normal', 'low'] },
       missing_information: strings,

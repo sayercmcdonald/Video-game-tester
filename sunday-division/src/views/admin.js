@@ -4,7 +4,7 @@ const catalog = require('../services/catalog');
 
 const NAV = [
   ['/admin', 'Overview'], ['/admin/leads', 'Leads'], ['/admin/projects', 'Projects'],
-  ['/admin/approvals', 'Approvals'], ['/admin/invoices', 'Invoices'], ['/admin/contractors', 'Contractors'],
+  ['/admin/approvals', 'Approvals'], ['/admin/ops', 'Operations'], ['/admin/invoices', 'Invoices'], ['/admin/contractors', 'Contractors'],
 ];
 /** Statuses that need someone's attention are filled; settled ones are muted. */
 const ATTENTION = new Set(['new', 'draft', 'proposed', 'in_review', 'awaiting_deposit', 'open', 'needs_human', 'mismatch', 'duplicate', 'failed', 'sent']);
@@ -79,6 +79,8 @@ function overview(ctx, d) {
   ${stat('Active projects', d.active, '/admin/projects')}
   ${stat('Invoiced, unpaid', money(d.outstanding), '/admin/invoices')}
   ${stat('Collected', money(d.collected), '/admin/invoices')}
+  ${stat('Human queue (agents)', d.ops.humanTasks, '/admin/ops')}
+  ${stat('Failed agent jobs', d.ops.failed, '/admin/ops')}
 </div>
 <div class="a-cols">
   <section class="card"><h2>Recent activity</h2>
@@ -354,6 +356,7 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
       <label>Target delivery<input type="date" name="due_date" value="${p.due_date || ''}"></label>
       <button class="btn-a" type="submit">Save</button>
     </form>
+    ${d.workflow ? html`<dl class="kv"><dt>Automation</dt><dd>${badge(d.workflow.state, (ctx.app.orchestrator.STATES[d.workflow.state] || {}).label)}${d.workflow.paused ? ' (paused)' : ''}${d.workflow.blocked_reason ? ' (blocked)' : ''} · <a href="/admin/ops/workflows/${d.workflow.id}">Inspect workflow</a></dd></dl>` : ''}
     <dl class="kv"><dt>Work</dt><dd>${unlocked ? `Unlocked ${fmtDate(p.started_at)}` : 'Locked until deposit'}</dd>
       <dt>Portal access</dt><dd>${client.portal_key_issued_at ? `Key issued ${fmtDate(client.portal_key_issued_at)}` : 'No key issued yet'}</dd></dl>
     ${action(ctx, `/admin/projects/${p.id}/portal-key`, client.portal_key_issued_at ? 'Issue new portal key' : 'Issue portal key', { confirm: client.portal_key_issued_at ? 'Issue a new key? The current key and any open client sessions stop working.' : '' })}
@@ -410,7 +413,7 @@ function approvals(ctx, d) {
   const link = (r, anchor, text) => html`<a href="/admin/projects/${r.project_id}#${anchor}">${r.code} · ${text}</a>`;
   return shell(ctx, {
     title: 'Approvals', path: '/admin/approvals',
-    body: html`<header class="a-head"><div><h1 class="display display--m">Approvals</h1><p class="muted">Everything waiting on a person before it can reach a client.</p></div></header>
+    body: html`<header class="a-head"><div><h1 class="display display--m">Approvals</h1><p class="muted">Everything waiting on a person before it can reach a client. Agent escalations and production hand-offs are in the <a href="/admin/ops">Operations</a> queue.</p></div></header>
 <div class="a-cols">
   <div>
     ${group('Quotes to approve & send', d.quotes, (r) => html`<li>${link(r, 'quote', `Quote v${r.version} · ${money(r.total_cents)}`)} ${sourceTag(r.source)}</li>`, 'No draft quotes.')}

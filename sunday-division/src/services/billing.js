@@ -21,6 +21,7 @@ function createBilling(app) {
       amount_cents: invoice.amount_cents, status: 'succeeded', note, received_at: now(),
     });
     app.audit.log(actor, 'invoice.paid', { entity: 'invoice', entityId: invoice.id, projectId: invoice.project_id, detail: `${invoice.number} via ${paymentProvider}` });
+    app.events.emit('invoice.paid', { projectId: invoice.project_id, invoiceId: invoice.id, key: `invoice.paid:${invoice.id}` });
     const project = app.projects.mustGet(invoice.project_id);
     if (invoice.kind === 'deposit' && project.status === 'awaiting_deposit') {
       // The deposit rule: this is the only place a project becomes active.
@@ -39,11 +40,12 @@ function createBilling(app) {
     db.update('checkout_sessions', record.id, { status: 'completed' });
     const ref = String(session.payment_intent || session.id);
     const flag = (status, note) => {
-      db.insert('payments', {
+      const paymentId = db.insert('payments', {
         invoice_id: invoice.id, provider: record.provider, provider_ref: ref,
         amount_cents: Number(session.amount_total) || 0, status, note, received_at: now(),
       });
       app.audit.log('system', `payment.${status}`, { entity: 'invoice', entityId: invoice.id, projectId: invoice.project_id, detail: note });
+      app.events.emit('payment.exception', { projectId: invoice.project_id, paymentId, status, invoice: invoice.number, note, key: `payment.exception:${paymentId}` });
       return status;
     };
     if (Number(session.amount_total) !== invoice.amount_cents || String(session.currency).toLowerCase() !== invoice.currency) {
@@ -93,11 +95,33 @@ function createBilling(app) {
       const otherOpen = db.get("SELECT COALESCE(SUM(amount_cents), 0) AS n FROM invoices WHERE project_id = ? AND status = 'open' AND kind = 'other'", projectId).n;
       return Math.max(0, (quote ? quote.total_cents : 0) - paid) + otherOpen;
     },
+    /**
+     * Deterministic payment verification used by the workflow: the deposit invoice is paid,
+     * a successful payment of exactly that amount is recorded against it, and the billing
+     * service has unlocked the project. Nothing an agent writes can make this true.
+     */
+    depositVerified(projectId) {
+      const deposit = db.get("SELECT * FROM invoices WHERE project_id = ? AND kind = 'deposit' AND status = 'paid' ORDER BY id DESC", projectId);
+      if (!deposit) return false;
+      const payment = db.get("SELECT 1 FROM payments WHERE invoice_id = ? AND status = 'succeeded' AND amount_cents = ?", deposit.id, deposit.amount_cents);
+      const project = app.projects.get(projectId);
+      return Boolean(payment && project && app.projects.isWorkUnlocked(project));
+    },
+    /** Every final invoice is paid with a matching successful payment and nothing is owed. */
+    finalPaymentVerified(projectId) {
+      const finals = db.all("SELECT * FROM invoices WHERE project_id = ? AND kind = 'final' AND status != 'void'", projectId);
+      if (!finals.length || this.balanceDue(projectId) > 0) return false;
+      return finals.every((inv) => inv.status === 'paid' && db.get("SELECT 1 FROM payments WHERE invoice_id = ? AND status = 'succeeded' AND amount_cents = ?", inv.id, inv.amount_cents));
+    },
+
     /** Human approval gate: a draft invoice is not payable or visible until a person opens it. */
     approve(invoiceId, user) {
       const invoice = mustGet(invoiceId);
       if (invoice.status !== 'draft') throw new HttpError(409, 'Only draft invoices can be approved.');
-      db.update('invoices', invoiceId, { status: 'open', approved_by: user.id, approved_at: now() });
+      db.tx(() => {
+        db.update('invoices', invoiceId, { status: 'open', approved_by: user.id, approved_at: now() });
+        app.events.emit('invoice.issued', { projectId: invoice.project_id, invoiceId, key: `invoice.issued:${invoiceId}` });
+      });
       app.audit.log(`staff:${user.email}`, 'invoice.approved', { entity: 'invoice', entityId: invoiceId, projectId: invoice.project_id, detail: invoice.number });
       return invoice.project_id;
     },

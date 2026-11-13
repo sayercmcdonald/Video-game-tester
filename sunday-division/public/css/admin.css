@@ -111,3 +111,13 @@ a.stat:hover { background: var(--bone); }
 .a-flash--error { border-color: var(--danger); color: var(--danger); margin-bottom: 0; }
 .a-flash--key { background: var(--ink); color: var(--bone); }
 .a-flash--key .mono { user-select: all; overflow-wrap: anywhere; }
+
+/* ── Operations ───────────────────────────────────────────────────────── */
+.json { font-family: var(--mono); font-size: 0.72rem; line-height: 1.5; background: var(--paper); border: 1px solid var(--line); padding: 10px 12px; margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; }
+.pre { white-space: pre-line; }
+.agent-card > p { color: var(--graphite); max-width: 70em; }
+.agent-action { border-top: 1px solid var(--line); padding-top: 10px; }
+.agent-action summary { cursor: pointer; font-size: 0.9rem; }
+.agent-action[open] summary { margin-bottom: 10px; }
+.a-table details summary { cursor: pointer; color: var(--stone); }
+.stat .muted { font-size: 0.74rem; }

@@ -69,6 +69,19 @@ function createConfig(env = process.env) {
       index_v3: { baseUrl: (env.INDEX_V3_API_URL || '').replace(/\/+$/, ''), apiKey: env.INDEX_V3_API_KEY || '' },
       form: { baseUrl: (env.FORM_API_URL || '').replace(/\/+$/, ''), apiKey: env.FORM_API_KEY || '' },
     },
+    orchestrator: {
+      // How often the in-process worker looks for work; 0 disables the timer (tests drive it).
+      pollMs: env.ORCHESTRATOR_POLL_MS === undefined ? 2000 : Number(env.ORCHESTRATOR_POLL_MS),
+      sweepMs: Number(env.ORCHESTRATOR_SWEEP_MS || 5 * 60e3),
+      concurrency: Math.max(1, Number(env.ORCHESTRATOR_CONCURRENCY || 2)),
+      leaseMs: Number(env.ORCHESTRATOR_LEASE_MS || 10 * 60e3),
+    },
+    budgets: {
+      aiMonthlyUsd: Number(env.AI_MONTHLY_BUDGET_USD || 25),
+      aiProjectUsd: Number(env.AI_PROJECT_BUDGET_USD || 3),
+      externalProjectUsd: Number(env.EXTERNAL_PROJECT_BUDGET_USD || 50),
+      externalJobEstimateUsd: Number(env.EXTERNAL_JOB_ESTIMATE_USD || 5),
+    },
     limits: {
       intakeFiles: 6,
       intakeFileBytes: 8 * 1024 * 1024,

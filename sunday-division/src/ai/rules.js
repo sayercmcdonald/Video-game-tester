@@ -18,6 +18,12 @@ function suggestPackage(inq) {
   return 'concept';
 }
 
+/** Map requested deliverables onto the four studio services. */
+function servicesFor(inq) {
+  const map = { design: 'design', flats: 'technical', techpack: 'technical', '3d': '3d', imagery: 'imagery', campaign: 'imagery' };
+  return [...new Set((inq.deliverables || []).map((d) => map[d]).filter(Boolean))];
+}
+
 function triage(inq, { referenceCount = 0 } = {}) {
   const pkg = catalog.packageById(suggestPackage(inq));
   const missing = [];
@@ -43,6 +49,9 @@ function triage(inq, { referenceCount = 0 } = {}) {
 
   const wants = (inq.deliverables || []).map(labelFor).join(', ').toLowerCase();
   return {
+    services: servicesFor(inq),
+    qualified: true,
+    qualification_note: 'Valid submission through the intake form.',
     summary: `${inq.brand_name} is asking for ${wants || 'design support'} for a ${inq.garment_category.toLowerCase()} project. Budget: ${inq.budget}; timeline: ${inq.timeline}.`,
     suggested_package: pkg.id,
     priority,
@@ -146,4 +155,4 @@ function statusUpdate(state) {
   return { update: parts.join('\n\n') };
 }
 
-module.exports = { triage, brief, quote, tasks, statusUpdate, suggestPackage };
+module.exports = { triage, brief, quote, tasks, statusUpdate, suggestPackage, servicesFor };

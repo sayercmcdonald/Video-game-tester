@@ -75,6 +75,7 @@ function createQuotes(app) {
       db.tx(() => {
         db.run("UPDATE quotes SET status = 'superseded' WHERE project_id = ? AND status = 'sent'", quote.project_id);
         db.update('quotes', quoteId, { status: 'sent', approved_by: user.id, approved_at: now() });
+        app.events.emit('quote.sent', { projectId: project.id, quoteId, key: `quote.sent:${quoteId}` });
         if (project.inquiry_id) db.run("UPDATE inquiries SET status = 'quoted' WHERE id = ? AND status IN ('new','reviewing')", project.inquiry_id);
         app.projects.touch(project.id);
       });
@@ -90,7 +91,10 @@ function createQuotes(app) {
       if (quote.valid_until && quote.valid_until < now().slice(0, 10)) throw new HttpError(409, 'This quote has expired. Please ask the studio for an updated quote.');
       const actor = `client:${clientId}`;
       if (!accept) {
-        db.update('quotes', quoteId, { status: 'declined', responded_at: now() });
+        db.tx(() => {
+          db.update('quotes', quoteId, { status: 'declined', responded_at: now() });
+          app.events.emit('quote.declined', { projectId: project.id, quoteId, key: `quote.declined:${quoteId}` });
+        });
         app.audit.log(actor, 'quote.declined', { entity: 'quote', entityId: quoteId, projectId: project.id });
         return { accepted: false };
       }
@@ -99,6 +103,7 @@ function createQuotes(app) {
       let invoiceId;
       db.tx(() => {
         db.update('quotes', quoteId, { status: 'accepted', responded_at: now(), accepted_name: name });
+        app.events.emit('quote.accepted', { projectId: project.id, quoteId, key: `quote.accepted:${quoteId}` });
         db.update('projects', project.id, { status: 'awaiting_deposit', updated_at: now() });
         if (project.inquiry_id) db.update('inquiries', project.inquiry_id, { status: 'won' });
         // The deposit was approved by staff as part of the quote, so this invoice opens immediately.

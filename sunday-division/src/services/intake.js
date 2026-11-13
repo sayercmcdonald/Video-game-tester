@@ -69,12 +69,11 @@ function createIntake(app) {
         for (const upload of uploads) {
           app.files.storeClientUpload(upload, { inquiryId, uploadedBy: 'client' });
         }
+        app.events.emit('inquiry.received', { inquiryId, key: `inquiry.received:${inquiryId}` });
         return inquiryId;
       });
       const inquiry = this.get(id);
       app.audit.log('public', 'inquiry.received', { entity: 'inquiry', entityId: id, detail: inquiry.ref });
-      // Internal automation only — organising the submission commits the studio to nothing.
-      app.automation.triageInquiry(inquiry).catch((err) => console.error('[automation] triage failed', err.message));
       app.notify.newInquiry(inquiry);
       return inquiry;
     },
@@ -109,7 +108,10 @@ function createIntake(app) {
       : db.all("SELECT * FROM inquiries WHERE status != 'archived' ORDER BY id DESC")),
     setStatus(id, status, actor) {
       if (!['new', 'reviewing', 'quoted', 'won', 'lost', 'archived'].includes(status)) throw new HttpError(400, 'Unknown status.');
-      db.update('inquiries', id, { status });
+      db.tx(() => {
+        db.update('inquiries', id, { status });
+        app.events.emit('inquiry.status_changed', { inquiryId: id, status, key: `inquiry.status:${id}:${status}:${Date.now()}` });
+      });
       app.audit.log(actor, 'inquiry.status', { entity: 'inquiry', entityId: id, detail: status });
     },
     setNotes: (id, notes) => db.update('inquiries', id, { internal_notes: str(notes, 5000) }),

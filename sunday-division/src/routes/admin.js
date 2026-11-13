@@ -61,6 +61,7 @@ function register(router, app) {
       collected: n("SELECT COALESCE(SUM(amount_cents), 0) AS n FROM invoices WHERE status = 'paid'"),
       activity: app.audit.recent(14),
       system: { payments: app.billing.providerName, drafting: app.automation.mode(), integrations: app.integrations.status() },
+      ops: { humanTasks: app.db.get("SELECT COUNT(*) AS n FROM human_tasks WHERE status = 'open'").n, failed: app.db.get("SELECT COUNT(*) AS n FROM jobs WHERE status = 'failed'").n },
     }));
   });
   router.get('/admin/approvals', A, (ctx) => ctx.html(views.approvals(ctx, approvalQueues())));
@@ -137,6 +138,7 @@ function register(router, app) {
       integrations: app.integrations.status(),
       jobs: app.integrations.jobs(project.id),
       history: app.audit.forProject(project.id),
+      workflow: app.db.get('SELECT * FROM workflows WHERE project_id = ?', project.id),
     }));
   });
   router.post('/admin/projects/:id/details', A, (ctx) => {

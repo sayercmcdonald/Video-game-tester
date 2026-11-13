@@ -14,8 +14,12 @@ const layout = require('./views/layout');
 function createApp(config) {
   const app = { config, db: openDb(config) };
   app.sessions = createSessions(app);
+  app.events = require('./orchestrator/events').createEvents(app);
   app.rateLimit = createRateLimiter();
   app.audit = require('./services/audit').createAudit(app);
+  app.settings = require('./orchestrator/settings').createSettings(app);
+  app.humanTasks = require('./orchestrator/humanTasks').createHumanTasks(app);
+  app.sandbox = require('./sandbox').createSandbox();
   app.files = require('./services/files').createFiles(app);
   app.notify = require('./services/notify').createNotify(app);
   app.projects = require('./services/projects').createProjects(app);
@@ -23,7 +27,10 @@ function createApp(config) {
   app.billing = require('./services/billing').createBilling(app);
   app.intake = require('./services/intake').createIntake(app);
   app.automation = require('./services/automation').createAutomation(app);
+  app.ai = require('./ai/gateway').createAiGateway(app);
   app.integrations = require('./integrations').createIntegrations(app);
+  app.orchestrator = require('./orchestrator').createOrchestrator(app);
+  app.budget = require('./orchestrator/budget').createBudget({ db: app.db, settings: app.settings, clock: app.orchestrator.clock });
 
   // First-run convenience for container deploys: create the first admin from the environment.
   const { email, password, name } = config.bootstrapAdmin;
@@ -37,16 +44,20 @@ function createApp(config) {
   require('./routes/public').register(router, app);
   require('./routes/portal').register(router, app);
   require('./routes/admin').register(router, app);
+  require('./routes/ops').register(router, app);
   require('./routes/webhooks').register(router, app);
 
   app.server = createServer(app, router, layout);
   const janitor = setInterval(() => app.sessions.purgeExpired(), 3600e3);
   janitor.unref();
-  app.close = () => new Promise((resolve) => {
+  app.close = async () => {
     clearInterval(janitor);
-    app.server.close(() => { app.db.close(); resolve(); });
-    app.server.closeAllConnections();
-  });
+    await app.orchestrator.stop();
+    await new Promise((resolve) => {
+      app.server.close(() => { app.db.close(); resolve(); });
+      app.server.closeAllConnections();
+    });
+  };
   return app;
 }
 

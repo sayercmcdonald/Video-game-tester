@@ -92,6 +92,7 @@ function createFiles({ db, config }) {
       fs.createReadStream(full).pipe(ctx.res);
     },
     isInlineImage: (file) => INLINE_IMAGE.has(file.mime),
+    pathOf: (file) => path.join(dir, file.storage_name),
   };
 }
 

@@ -83,6 +83,7 @@ function createProjects(app) {
         due_date: isDate(body.due_date) ? body.due_date : null,
         updated_at: now(),
       });
+      app.events.emit('project.updated', { projectId: id, key: `project.updated:${id}:${Date.now()}` });
       app.audit.log(actor, 'project.updated', { entity: 'project', entityId: id, projectId: id });
     },
     setStatus(id, status, actor) {
@@ -93,7 +94,10 @@ function createProjects(app) {
       if (!(allowed[project.status] || []).includes(status)) {
         throw new HttpError(409, `A project cannot move from "${project.status}" to "${status}".`);
       }
-      db.update('projects', id, { status, updated_at: now() });
+      db.tx(() => {
+        db.update('projects', id, { status, updated_at: now() });
+        app.events.emit('project.status_changed', { projectId: id, status, key: `project.status:${id}:${status}:${Date.now()}` });
+      });
       app.audit.log(actor, 'project.status', { entity: 'project', entityId: id, projectId: id, detail: status });
     },
 
@@ -197,10 +201,13 @@ function createProjects(app) {
       const quoted = quote ? quote.total_cents : 0;
       const invoiced = sum("SELECT COALESCE(SUM(amount_cents), 0) AS n FROM invoices WHERE project_id = ? AND status IN ('open','paid')");
       const collected = sum("SELECT COALESCE(SUM(amount_cents), 0) AS n FROM invoices WHERE project_id = ? AND status = 'paid'");
-      const costs = sum('SELECT COALESCE(SUM(amount_cents), 0) AS n FROM costs WHERE project_id = ?');
+      const manualCosts = sum('SELECT COALESCE(SUM(amount_cents), 0) AS n FROM costs WHERE project_id = ?');
+      // AI and external-service spend recorded by the orchestrator (micro-dollars → cents, rounded up).
+      const automationCosts = Math.ceil(sum('SELECT COALESCE(SUM(cost_micros), 0) AS n FROM agent_runs WHERE project_id = ?') / 1e4);
+      const costs = manualCosts + automationCosts;
       const basis = quoted || invoiced;
       return {
-        quoted, invoiced, collected, costs,
+        quoted, invoiced, collected, costs, manualCosts, automationCosts,
         outstanding: invoiced - collected,
         projectedProfit: basis - costs,
         projectedMargin: basis ? (basis - costs) / basis : null,
@@ -231,8 +238,11 @@ function createProjects(app) {
       const d = db.get('SELECT * FROM deliverables WHERE id = ?', deliverableId);
       if (!d) throw new HttpError(404, 'Deliverable not found.');
       requireWorkUnlocked(mustGet(d.project_id));
-      db.update('deliverables', deliverableId, {
-        file_id: fileId, version: d.version + 1, status: 'in_review', approved_by: null, approved_at: null, released_at: null,
+      db.tx(() => {
+        db.update('deliverables', deliverableId, {
+          file_id: fileId, version: d.version + 1, status: 'in_review', approved_by: null, approved_at: null, released_at: null,
+        });
+        app.events.emit('deliverable.version_uploaded', { projectId: d.project_id, deliverableId, key: `deliverable.version:${deliverableId}:${d.version + 1}` });
       });
       app.audit.log(actor, 'deliverable.version_uploaded', { entity: 'deliverable', entityId: deliverableId, projectId: d.project_id, detail: `v${d.version + 1}` });
       return d.project_id;
@@ -243,7 +253,10 @@ function createProjects(app) {
       if (!d) throw new HttpError(404, 'Deliverable not found.');
       if (!d.file_id) throw new HttpError(400, 'Upload a file before approving.');
       if (d.status !== 'in_review') throw new HttpError(409, 'Only deliverables in review can be approved.');
-      db.update('deliverables', deliverableId, { status: 'approved', approved_by: user.id, approved_at: now() });
+      db.tx(() => {
+        db.update('deliverables', deliverableId, { status: 'approved', approved_by: user.id, approved_at: now() });
+        app.events.emit('deliverable.approved', { projectId: d.project_id, deliverableId, key: `deliverable.approved:${deliverableId}:${d.version}` });
+      });
       app.audit.log(`staff:${user.email}`, 'deliverable.approved', { entity: 'deliverable', entityId: deliverableId, projectId: d.project_id, detail: `v${d.version}` });
       return d.project_id;
     },
@@ -256,7 +269,10 @@ function createProjects(app) {
         const balance = app.billing.balanceDue(d.project_id);
         if (balance > 0) throw new HttpError(409, 'Final files are held until the balance is paid. Tick the override to release anyway.');
       }
-      db.update('deliverables', deliverableId, { status: 'released', released_at: now() });
+      db.tx(() => {
+        db.update('deliverables', deliverableId, { status: 'released', released_at: now() });
+        app.events.emit('deliverable.released', { projectId: d.project_id, deliverableId, key: `deliverable.released:${deliverableId}:${d.version}` });
+      });
       app.audit.log(`staff:${user.email}`, 'deliverable.released', {
         entity: 'deliverable', entityId: deliverableId, projectId: d.project_id,
         detail: `v${d.version}${overrideBalance ? ' (balance override)' : ''}`,
@@ -271,14 +287,21 @@ function createProjects(app) {
       const text = str(notes, 3000);
       if (!d) throw new HttpError(404, 'Deliverable not found.');
       if (text.length < 5) throw new HttpError(400, 'Describe the change you need.');
-      const id = db.insert('revisions', { deliverable_id: d.id, project_id: d.project_id, requested_by: requestedBy, notes: text, created_at: now() });
+      const id = db.tx(() => {
+        const revisionId = db.insert('revisions', { deliverable_id: d.id, project_id: d.project_id, requested_by: requestedBy, notes: text, created_at: now() });
+        app.events.emit('revision.requested', { projectId: d.project_id, revisionId, key: `revision.requested:${revisionId}` });
+        return revisionId;
+      });
       app.audit.log(requestedBy, 'revision.requested', { entity: 'revision', entityId: id, projectId: d.project_id, detail: d.title });
       return d.project_id;
     },
     resolveRevision(revisionId, actor) {
       const r = db.get('SELECT * FROM revisions WHERE id = ?', revisionId);
       if (!r) throw new HttpError(404, 'Revision not found.');
-      db.update('revisions', revisionId, { status: 'resolved', resolved_at: now() });
+      db.tx(() => {
+        db.update('revisions', revisionId, { status: 'resolved', resolved_at: now() });
+        app.events.emit('revision.resolved', { projectId: r.project_id, revisionId, key: `revision.resolved:${revisionId}` });
+      });
       app.audit.log(actor, 'revision.resolved', { entity: 'revision', entityId: revisionId, projectId: r.project_id });
       return r.project_id;
     },
@@ -302,7 +325,10 @@ function createProjects(app) {
     publishStatusUpdate(id, user) {
       const u = db.get('SELECT * FROM status_updates WHERE id = ?', id);
       if (!u || u.status !== 'draft') throw new HttpError(409, 'Only drafts can be published.');
-      db.update('status_updates', id, { status: 'published', approved_by: user.id, published_at: now() });
+      db.tx(() => {
+        db.update('status_updates', id, { status: 'published', approved_by: user.id, published_at: now() });
+        app.events.emit('status_update.published', { projectId: u.project_id, updateId: id, key: `status_update.published:${id}` });
+      });
       app.audit.log(`staff:${user.email}`, 'status_update.published', { entity: 'status_update', entityId: id, projectId: u.project_id });
       return u.project_id;
     },

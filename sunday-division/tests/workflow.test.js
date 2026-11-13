@@ -64,6 +64,8 @@ test('inquiry → quote → deposit → delivery → final payment', async (t) =
   });
 
   await t.test('lead is organised automatically and converts to a project', async () => {
+    // Triage runs on the orchestrator (timer disabled in tests, so drive it here).
+    await app.orchestrator.drain();
     const inquiry = db.get('SELECT * FROM inquiries WHERE ref = ?', ref);
     const page = await admin.get(`/admin/leads/${inquiry.id}`);
     assert.match(page.text, /Triage/);

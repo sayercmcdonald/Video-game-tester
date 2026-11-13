@@ -12,7 +12,7 @@ const ADMIN = { email: 'studio@example.test', password: 'correct-horse-battery-s
 async function startApp(env = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-test-'));
   const config = createConfig({
-    NODE_ENV: 'test', DATA_DIR: dataDir, AI_PROVIDER: 'rules', PAYMENTS_PROVIDER: 'simulated',
+    NODE_ENV: 'test', DATA_DIR: dataDir, AI_PROVIDER: 'rules', PAYMENTS_PROVIDER: 'simulated', ORCHESTRATOR_POLL_MS: '0',
     ADMIN_EMAIL: ADMIN.email, ADMIN_PASSWORD: ADMIN.password, ...env,
   });
   const app = createApp(config);

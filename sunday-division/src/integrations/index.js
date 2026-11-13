@@ -78,17 +78,29 @@ function createIntegrations(app) {
     jobs: (projectId) => db.all('SELECT * FROM integration_jobs WHERE project_id = ? ORDER BY id DESC', projectId).map(hydrate),
 
     /** Request a piece of production work from INDEX V3 / FORM, or from a human when not connected. */
-    async request(project, product, jobType, notes, actor) {
+    /**
+     * opts.mode: 'auto' (API when connected — staff button), 'manual' (always the human queue)
+     * or 'api' (must go to the service). opts.idempotencyKey makes a repeated request return
+     * the existing job, and is sent to the service so it can de-duplicate as well.
+     */
+    async request(project, product, jobType, notes, actor, opts = {}) {
       const spec = PRODUCTS[product] && PRODUCTS[product].jobTypes[jobType];
       if (!spec) throw new HttpError(400, 'Unknown production request.');
       app.projects.requireWorkUnlocked(project);
+      const mode = opts.mode || 'auto';
+      if (opts.idempotencyKey) {
+        const existing = db.get('SELECT * FROM integration_jobs WHERE idempotency_key = ?', opts.idempotencyKey);
+        if (existing && existing.status !== 'failed') return existing.id;
+        if (existing) db.run('UPDATE integration_jobs SET idempotency_key = NULL WHERE id = ?', existing.id);
+      }
+      if (mode === 'api' && !isConnected(product)) throw new HttpError(409, `${PRODUCTS[product].name} is not connected.`);
       const request = buildRequest(project, jobType, notes);
 
-      if (!isConnected(product)) {
+      if (mode === 'manual' || !isConnected(product)) {
         const id = db.tx(() => {
           const jobId = db.insert('integration_jobs', {
             project_id: project.id, product, mode: 'manual', job_type: jobType, status: 'needs_human',
-            request: JSON.stringify(request), created_at: now(), updated_at: now(),
+            request: JSON.stringify(request), idempotency_key: opts.idempotencyKey || null, created_at: now(), updated_at: now(),
           });
           app.projects.addTask(project.id, { title: `${spec.label} — manual production (${PRODUCTS[product].name} not connected)`, milestone: 'Production' }, { source: 'integration' });
           return jobId;
@@ -108,12 +120,12 @@ function createIntegrations(app) {
       }
       const id = db.insert('integration_jobs', {
         project_id: project.id, product, mode: 'api', job_type: jobType, status: 'queued',
-        request: JSON.stringify(request), created_at: now(), updated_at: now(),
+        request: JSON.stringify(request), idempotency_key: opts.idempotencyKey || null, created_at: now(), updated_at: now(),
       });
       try {
-        const res = await call(product, 'POST', '/v1/jobs', { json: request, headers: { 'Idempotency-Key': `sd-job-${id}` } });
+        const res = await call(product, 'POST', '/v1/jobs', { json: request, headers: { 'Idempotency-Key': opts.idempotencyKey ? `sd-${opts.idempotencyKey}` : `sd-job-${id}` } });
         const remote = await res.json();
-        db.update('integration_jobs', id, { external_id: String(remote.id), status: remote.status === 'running' ? 'running' : 'queued', updated_at: now() });
+        db.update('integration_jobs', id, { external_id: String(remote.id), status: remote.status === 'running' ? 'running' : 'queued', service_version: res.headers.get('x-service-version') || null, updated_at: now() });
       } catch (err) {
         db.update('integration_jobs', id, { status: 'failed', result: JSON.stringify({ error: err.message }), updated_at: now() });
         throw err;
@@ -127,9 +139,12 @@ function createIntegrations(app) {
       const job = hydrate(db.get('SELECT * FROM integration_jobs WHERE id = ?', jobId));
       if (!job) throw new HttpError(404, 'Job not found.');
       if (job.mode !== 'api' || !['queued', 'running'].includes(job.status)) return job;
-      const remote = await (await call(job.product, 'GET', `/v1/jobs/${encodeURIComponent(job.external_id)}`)).json();
+      const statusRes = await call(job.product, 'GET', `/v1/jobs/${encodeURIComponent(job.external_id)}`);
+      const remote = await statusRes.json();
+      const version = statusRes.headers.get('x-service-version') || remote.service_version || job.service_version || null;
       if (remote.status === 'failed') {
-        db.update('integration_jobs', job.id, { status: 'failed', result: JSON.stringify({ error: remote.error || 'failed' }), updated_at: now() });
+        db.update('integration_jobs', job.id, { status: 'failed', service_version: version, result: JSON.stringify({ error: remote.error || 'failed' }), updated_at: now() });
+        app.events.emit('integration.updated', { projectId: job.project_id, integrationJobId: job.id, key: `integration.updated:${job.id}:failed` });
       } else if (remote.status === 'completed') {
         const spec = PRODUCTS[job.product].jobTypes[job.job_type];
         const downloaded = [];
@@ -146,8 +161,9 @@ function createIntegrations(app) {
             }, { source: job.product, actor });
             app.projects.attachDeliverableFile(deliverableId, fileId, actor);
           }
+          app.events.emit('integration.updated', { projectId: job.project_id, integrationJobId: job.id, key: `integration.updated:${job.id}:completed` });
           db.update('integration_jobs', job.id, {
-            status: 'completed', updated_at: now(),
+            status: 'completed', service_version: version, updated_at: now(),
             result: JSON.stringify({ validation: remote.validation || null, outputs: (remote.outputs || []).map((o) => ({ id: o.id, filename: o.filename })) }),
           });
         });
@@ -161,7 +177,10 @@ function createIntegrations(app) {
     completeManual(jobId, actor) {
       const job = db.get('SELECT * FROM integration_jobs WHERE id = ?', jobId);
       if (!job || job.mode !== 'manual') throw new HttpError(404, 'Job not found.');
-      db.update('integration_jobs', jobId, { status: 'completed', updated_at: now() });
+      db.tx(() => {
+        db.update('integration_jobs', jobId, { status: 'completed', updated_at: now() });
+        app.events.emit('integration.updated', { projectId: job.project_id, integrationJobId: jobId, key: `integration.updated:${jobId}:completed` });
+      });
       app.audit.log(actor, 'integration.manual_completed', { entity: 'integration_job', entityId: jobId, projectId: job.project_id });
       return job.project_id;
     },
