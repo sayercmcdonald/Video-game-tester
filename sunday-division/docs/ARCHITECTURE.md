@@ -21,6 +21,9 @@ src/app.js                composition root: builds `app` (config, db, services, 
 src/http/                 router, request pipeline, body + multipart parsing, sessions, rate limits
 src/lib/                  escaping/templating, money, crypto helpers
 src/services/             business rules — intake, projects, quotes, billing, files, automation, audit
+src/orchestrator/         durable jobs, events, workflow state machine, budgets, settings, human queue, metrics
+src/agents/               agent contracts, scoped tools with effect ledger, handlers
+src/sandbox/              isolated inspection of untrusted files
 src/payments/             stripe + simulated providers behind one interface
 src/ai/                   prompts + schemas, Claude call, deterministic rules
 src/integrations/         INDEX V3 / FORM adapter (manual or API mode)
@@ -68,6 +71,10 @@ The success redirect is cosmetic; the webhook is the source of truth.
 Money is integer cents. Timestamps are ISO-8601 UTC. See `src/db.js` for the schema: `users`, `sessions`, `inquiries`, `clients`, `projects`, `quotes`, `tasks`, `contractors`, `costs`, `files`, `deliverables`, `revisions`, `invoices`, `checkout_sessions`, `payments`, `webhook_events`, `status_updates`, `integration_jobs`, `audit_log`.
 
 Profitability per project = accepted quote value − logged costs (projected), and collected − costs (cash position). Costs are logged as contractor hours × rate or flat amounts.
+
+## Orchestration
+
+Agents run on a durable SQLite job queue and a deterministic workflow state machine, layered on top of the services above without bypassing any of their gates. See [ORCHESTRATION.md](ORCHESTRATION.md).
 
 ## Growing past the first project
 

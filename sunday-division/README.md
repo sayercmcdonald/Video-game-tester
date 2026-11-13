@@ -9,6 +9,7 @@ The studio's website, client intake, client portal, internal operating dashboard
 - **Payments** — Stripe Checkout (hosted). Deposit first, balance before final files.
 - **Automation** — drafts triage notes, briefs, quotes, task lists and status updates. A person approves everything client-facing.
 - **INDEX V3 / FORM** — adapter and API contract ready; manual (human) mode until they are connected.
+- **Agent orchestration** — eight agents run routine operations on a durable job queue, from triage to completion summary, behind every existing human gate. See [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) and **Operations** in the dashboard.
 
 ## Run it
 
@@ -19,7 +20,7 @@ npm install
 cp .env.example .env            # optional for local use
 npm run create-admin -- you@example.com "Your Name"
 npm start                       # http://localhost:3000  ·  dashboard at /admin
-npm test                        # 26 tests, including the full inquiry-to-payment workflow
+npm test                        # 58 tests: workflows, agent safety, payments, approvals
 ```
 
 With no Stripe keys in development, payments use a built-in **simulated checkout** so the whole flow can be exercised without real money. It is refused when `NODE_ENV=production`.
@@ -54,6 +55,8 @@ All settings are environment variables — see [`.env.example`](.env.example). T
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Creates the first admin on first start |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Enables live payments |
 | `ANTHROPIC_API_KEY` | Enables Claude drafting (otherwise rules-based drafting) |
+| `AI_MONTHLY_BUDGET_USD`, `AI_PROJECT_BUDGET_USD` | Starting AI spend limits (then editable in Operations → Controls) |
+| `ORCHESTRATOR_POLL_MS` | How often the agent worker runs (default 2000; `0` disables) |
 
 ### Stripe setup
 
@@ -88,4 +91,4 @@ The app is a single process with a SQLite database and an uploads folder, both u
 - **Portfolio shows studio concept studies only**, drawn as SVG in `src/views/flats.js`. Replace or extend with real work as clients give permission.
 - **Not verified in this environment:** live Stripe API calls, live Claude API calls and the Docker image build (see the notes above).
 
-More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)
+More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)

@@ -34,7 +34,7 @@ Response `201`: `{ "id": "file_123" }`
 
 ### `POST /v1/jobs` — submit a job
 
-Header `Idempotency-Key: sd-job-<n>` — a repeated key must return the original job, not create a second one.
+Header `Idempotency-Key` — `sd-wf<workflow>:<product>:<job_type>` when submitted by an agent, `sd-job-<n>` when submitted by staff. A repeated key must return the original job, not create a second one.
 
 ```json
 {
@@ -79,10 +79,15 @@ Response `202`: `{ "id": "job_42", "status": "queued" }`
 
 Returns the file bytes with its `Content-Type`.
 
+### Versioning
+
+Return the service build in an `X-Service-Version` response header (for example `index-v3.0.4`). It is stored on the job and shown next to each output, so every deliverable can be traced to the exact version that produced it.
+
 ## Behaviour on the studio side
 
 - **Submit**: reference files are uploaded, then the job is created and recorded with status `queued`.
-- **Poll**: staff press *Check status* (no background polling yet). On `completed`, each output is downloaded, stored privately and attached to a new deliverable with `source = index_v3 | form`, status `in_review`, and a note recording the job id and validation status.
+- **Autonomy**: agents submit jobs only when *Autonomous production* is switched on in Operations → Controls, the service is connected, and the project's external budget allows. Otherwise the request goes to the human production queue.
+- **Poll**: the coordinator agent polls with backoff (1 → 30 minutes, up to 24 hours); staff can also press *Check status*. On `completed`, each output is downloaded, stored privately and attached to a new deliverable with `source = index_v3 | form`, status `in_review`, and a note recording the job id and validation status.
 - **Failure**: a `failed` job or a non-2xx response is recorded on the job and shown in the dashboard; nothing reaches the client.
 
 ## Planned, not yet built

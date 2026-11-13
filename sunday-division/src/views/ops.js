@@ -115,12 +115,12 @@ ${wf.summary ? html`<section class="card"><h2>Completion summary</h2><pre class=
   <section class="card"><h2>Agent runs — model, version and cost</h2>
   ${d.runs.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Agent · task</th><th>Provider</th><th>Model / prompt</th><th class="r">Tokens</th><th class="r">Cost</th><th>Status</th></tr></thead><tbody>
   ${d.runs.map((r) => html`<tr><td>${r.agent} <span class="muted small">v${r.agent_version}</span><br><span class="small">${r.task}</span></td><td>${r.provider}</td>
-    <td class="small mono">${r.model_served || r.model_requested || '—'}<br>${r.prompt_version}</td><td class="r small">${r.input_tokens} / ${r.output_tokens}</td><td class="r">${usd(r.cost_micros)}</td>
+    <td class="small mono">${r.model_served || r.model_requested || '—'}${r.provider === 'claude' ? html`<br>prompt ${r.prompt_version}` : ''}</td><td class="r small">${r.input_tokens} / ${r.output_tokens}</td><td class="r">${usd(r.cost_micros)}</td>
     <td>${badge(r.status)}${r.detail ? html`<br><span class="small muted">${r.detail}</span>` : ''}</td></tr>`)}</tbody></table>` : empty('No runs yet.')}
   </section>
   <section class="card"><h2>Tool calls</h2>
-  ${d.toolCalls.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Job</th><th>Agent</th><th>Tool</th><th>Effect</th><th>Decision</th><th>Detail</th></tr></thead><tbody>
-  ${d.toolCalls.map((t) => html`<tr><td class="mono">#${t.job_id}</td><td>${t.agent}</td><td class="mono small">${t.tool}</td><td>${t.effect}</td><td>${badge(t.decision)}</td><td class="small">${t.detail}</td></tr>`)}</tbody></table>` : empty('No state-changing tool calls yet.')}
+  ${d.toolCalls.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Job</th><th>Agent</th><th>Tool · effect</th><th>Decision</th><th>Detail</th></tr></thead><tbody>
+  ${d.toolCalls.map((t) => html`<tr><td class="mono nowrap">#${t.job_id}</td><td>${t.agent.replace('_', ' ')}</td><td><span class="mono small">${t.tool}</span><br><span class="muted small">${t.effect}</span></td><td>${badge(t.decision)}</td><td class="small wrap">${t.detail}</td></tr>`)}</tbody></table>` : empty('No state-changing tool calls yet.')}
   </section>
 </div>
 <div>

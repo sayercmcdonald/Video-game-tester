@@ -91,3 +91,39 @@ async function signInAdmin(base) {
 }
 
 module.exports = { startApp, Browser, PNG, ADMIN, INQUIRY, signInAdmin };
+
+/** Pay an open invoice the way a client does: hosted checkout → signed webhook. */
+async function payInvoice(app, invoiceId) {
+  const invoice = app.billing.get(invoiceId);
+  const project = app.projects.get(invoice.project_id);
+  await app.billing.startCheckout(invoiceId, app.projects.getClient(project.client_id));
+  const session = app.db.get("SELECT * FROM checkout_sessions WHERE invoice_id = ? AND status = 'open' ORDER BY id DESC", invoiceId);
+  const event = app.billing.provider.buildPaidEvent(session, invoice);
+  return app.billing.handleWebhook(Buffer.from(event.payload), event.signature);
+}
+
+/**
+ * Drive a fresh inquiry through the workflow to `stage` using the real services:
+ * 'quote_approval' | 'deposit' | 'production'. Returns ids for assertions.
+ */
+async function driveWorkflow(app, base, stage, inquiry = INQUIRY) {
+  await new Browser(base).upload('/start', inquiry, [{ field: 'references', name: 'ref.png', data: PNG, type: 'image/png' }]);
+  await app.orchestrator.drain();
+  const wf = app.db.get('SELECT * FROM workflows ORDER BY id DESC');
+  const out = { wfId: wf.id, inquiryId: wf.inquiry_id, projectId: wf.project_id, user: app.db.get('SELECT * FROM users') };
+  if (stage === 'quote_approval') return out;
+  const quote = app.quotes.forProject(wf.project_id)[0];
+  app.quotes.approveAndSend(quote.id, out.user);
+  const project = app.projects.get(wf.project_id);
+  app.quotes.respond(quote.id, project.client_id, { accept: true, signedName: 'Test Client' });
+  await app.orchestrator.drain();
+  out.quoteId = quote.id;
+  out.depositInvoiceId = app.db.get("SELECT id FROM invoices WHERE project_id = ? AND kind = 'deposit'", wf.project_id).id;
+  if (stage === 'deposit') return out;
+  await payInvoice(app, out.depositInvoiceId);
+  await app.orchestrator.drain();
+  return out;
+}
+
+module.exports.payInvoice = payInvoice;
+module.exports.driveWorkflow = driveWorkflow;

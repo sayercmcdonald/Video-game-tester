@@ -34,7 +34,13 @@ const sales_intake = {
     const project = await call(ctx, 'project.read');
     const inquiry = await call(ctx, 'inquiry.read');
     const existing = (await call(ctx, 'quotes.read'))[0];
-    if (existing) return { quote_id: existing.id, skipped: true, total_cents: existing.total_cents, below_floor: false, flags: [`A ${existing.status} quote already exists; not drafting another.`] };
+    if (existing) {
+      // Someone already wrote a quote: leave it alone, but make sure it reaches the approval queue.
+      if (existing.status === 'draft') {
+        await call(ctx, 'humanQueue.create', { kind: 'approval', key: 'approve_quote', link: `/admin/projects/${project.id}#quote`, title: `Review and approve the quote for ${project.code}`, detail: 'Drafted by staff before the Sales agent ran; the agent did not change it.' });
+      }
+      return { quote_id: existing.id, skipped: true, total_cents: existing.total_cents, below_floor: false, flags: [`A ${existing.status} quote already exists; not drafting another.`] };
+    }
 
     const brief = await call(ctx, 'model.brief');
     await call(ctx, 'brief.draft', { text: brief.text, source: brief.source });

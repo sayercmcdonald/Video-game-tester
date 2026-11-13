@@ -121,3 +121,10 @@ a.stat:hover { background: var(--bone); }
 .agent-action[open] summary { margin-bottom: 10px; }
 .a-table details summary { cursor: pointer; color: var(--stone); }
 .stat .muted { font-size: 0.74rem; }
+.a-form label.chk { display: flex; flex-direction: row; align-items: flex-start; gap: 10px; font-family: var(--sans); font-size: 0.92rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink); cursor: pointer; }
+.a-form label.chk input { margin: 3px 0 0; flex: none; width: 16px; height: 16px; accent-color: var(--ink); }
+.a-form label.chk:has(input:disabled) { color: var(--stone); cursor: not-allowed; }
+.a-table td { overflow-wrap: break-word; }
+.a-table td.wrap { overflow-wrap: anywhere; min-width: 140px; }
+.a-table td.nowrap { white-space: nowrap; }
+.card { min-width: 0; overflow-x: auto; }

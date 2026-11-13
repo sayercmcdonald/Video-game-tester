@@ -21,9 +21,12 @@ function register(router, app) {
     overview: metrics.overview(), workflows: metrics.workflows(), failed: metrics.failedJobs(), tasks: metrics.humanTasks(),
     recent: metrics.recentJobs(), profit: metrics.profitability(), paused: app.settings.get('orchestrator_paused'),
   })));
-  router.post('/admin/ops/run', A, async (ctx) => {
-    await app.orchestrator.drain({ maxRounds: 50 });
-    ctx.redirect('/admin/ops', 'Pending work processed.');
+  router.post('/admin/ops/run', A, (ctx) => {
+    // Evaluate now; model calls can take minutes, so the work itself continues in the background.
+    app.orchestrator.processEvents();
+    app.orchestrator.sweep();
+    app.orchestrator.drain({ maxRounds: 50 }).catch((err) => console.error('[orchestrator] manual run failed:', err));
+    ctx.redirect('/admin/ops', 'Pending work started. Refresh to see progress.');
   });
 
   router.get('/admin/ops/workflows/:id', A, (ctx) => {

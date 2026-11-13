@@ -23,8 +23,9 @@ function createAiGateway(app) {
     transport: (task, context) => require('./claude').draftWithClaude(config, task, context),
     transportOverridden: false,
     enabled() {
+      if (gateway.transportOverridden) return true; // tests inject a fake model
       if (config.ai.provider === 'rules') return false;
-      if (config.ai.provider === 'claude' || gateway.transportOverridden) return true;
+      if (config.ai.provider === 'claude') return true;
       return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
     },
     mode: () => (gateway.enabled() ? `Claude (${config.ai.model})` : 'Rules-based drafting'),
