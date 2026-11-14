@@ -29,6 +29,45 @@
     if (btn) { setTimeout(function () { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }, 0); }
   });
 
+  // ── High-impact confirmation: press and hold, or press twice ─────────
+  // A single accidental tap never confirms. Holding for 1.2 s confirms; any other activation
+  // (a tap, the keyboard, a screen reader) arms the button and a second one within 6 s confirms.
+  document.querySelectorAll('[data-hold]').forEach(function (btn) {
+    var form = btn.form;
+    var label = btn.querySelector('[data-hold-label]');
+    var hint = form.querySelector('[data-hold-hint]');
+    var HOLD_MS = 1200;
+    var timer = null;
+    var armedUntil = 0;
+    var submitted = false;
+    var say = function (text) { if (label) label.textContent = text; };
+    say('Hold to confirm');
+    if (hint) hint.hidden = false;
+    var disarm = function () { armedUntil = 0; btn.classList.remove('is-armed'); if (!submitted) say('Hold to confirm'); };
+    var cancelHold = function () { if (timer) { clearTimeout(timer); timer = null; } btn.classList.remove('is-holding'); };
+    btn.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || submitted) return;
+      btn.classList.add('is-holding');
+      timer = setTimeout(function () {
+        timer = null;
+        submitted = true;
+        say('Confirming…');
+        form.requestSubmit(btn);
+      }, HOLD_MS);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { btn.addEventListener(ev, cancelHold); });
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    btn.addEventListener('click', function (e) {
+      if (submitted) { e.preventDefault(); return; }
+      if (Date.now() < armedUntil) { submitted = true; say('Confirming…'); return; }
+      e.preventDefault();
+      armedUntil = Date.now() + 6000;
+      btn.classList.add('is-armed');
+      say('Press again to confirm');
+      setTimeout(function () { if (!submitted && Date.now() >= armedUntil) disarm(); }, 6100);
+    });
+  });
+
   // ── Command Chat ─────────────────────────────────────────────────────
   var form = document.querySelector('[data-chat-form]');
   if (form) {

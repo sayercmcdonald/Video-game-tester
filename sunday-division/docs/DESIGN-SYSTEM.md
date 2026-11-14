@@ -1,6 +1,6 @@
 # Sunday Division design system
 
-Reference: the approved Sunday Division Command concept (dark editorial, serif display type, bone accents, sage for operating states). Status: **tokens, components, app shell, Overview, Projects and Command are implemented for review.** Morning Brief, project detail, Agent activity, approval review and financial performance follow after approval; until then they keep their current layouts on the new tokens.
+Reference: the approved Sunday Division Command concept (dark editorial, serif display type, bone accents, sage for operating states). Status: **every Command screen is built from the components** — Overview, Projects, project detail, Agent Studio and task logs, Approvals and the review screen, Command, Morning Brief, Performance, Notifications, Settings, sign-in, offline and error pages. The studio dashboard and public site keep their current look.
 
 ## 1. What exists (inspection)
 
@@ -19,12 +19,14 @@ The design system keeps that architecture: tokens in CSS custom properties, comp
 ```
 public/css/tokens.css        design tokens (colour, type, space, shape, touch, motion) + @font-face
         │
-public/css/command.css       1 base · 2 layout (app bar, tab bar, rail) · 3 components (ui-*) · 4 screen styles · 5 motion
+public/css/command.css       1 base · 2 layout (app bar, tab bar, rail) · 3 components (ui-*) · 5 motion
         │
 src/views/command-ui.js      components: one function per component, one CSS block per component
         │                    Icon · StatusDot · StatusPill · ProgressBar · PageHeader · Hero · Section · Card ·
         │                    StatCard · Sparkline · List / ListRow · SegmentedTabs · Thumb · EmptyState ·
         │                    Button · IconButton · Avatar
+        │                    (+ CSS-only blocks: forms, flash, gallery, stages, approvals, review/hold,
+        │                     key-value, timeline, log, bars, table)
 src/views/command.js         screens composed from components (data in, HTML out)
         │
 src/command/metrics.js       the data the screens show — read from the records, never estimated
@@ -55,15 +57,21 @@ Type: **display** — Newsreader Display (SIL OFL), instanced at its display opt
 
 Five destinations in the bottom tab bar: **Overview · Projects · Agents · Approvals · Command**. Morning Brief, Performance, Notifications and Settings are reached from Overview (and the bell); on wide screens a side rail lists every section.
 
-## 5. Critical actions (approval review — next phase)
+## 5. Critical actions (approval review)
 
-Spending, external communications, permission changes and deliverable release already require a code-built preview, a digest-bound confirmation and, after 12 hours, the password. The approval review screen will add: a summary of consequences above the fold, the confirm control placed away from scroll momentum at the bottom, and press-and-hold to confirm high-impact actions (with an ordinary button for keyboard and assistive technology users).
+Spending, external communications, permission changes and deliverable release require a code-built preview, a digest-bound confirmation and, after 12 hours, the password (unchanged server rules). The review screen puts the consequences first ("When you confirm"), then the details, then the confirm zone at the bottom, separated from the content.
+
+High-impact confirmations use **press and hold** (1.2 s, with a visible fill; sliding off or releasing early cancels). Because press-and-hold is not reliable with screen readers and keyboards, any other activation **arms** the button ("Press again to confirm") and a second activation within six seconds confirms. A single accidental tap never confirms. Without JavaScript the button is an ordinary submit — the server-side checks still apply. Tested in a real browser at phone and desktop sizes.
 
 ## 6. Imagery
 
 The Overview hero is an original rendered fabric texture (`public/command/hero-drape.jpg`, no licence restrictions). Project thumbnails use the client's own reference images when they are real pictures (≥ 64 px), served to the founder only and never cached; otherwise the studio's flat drawing for the category. Replace the hero with the studio's own photography when available — the component takes any image.
 
-## 7. Next phases (after approval)
+## 7. Project detail
 
-1. Morning Brief, project detail (gallery + development stages), Agent activity, approval review (hold-to-confirm), financial performance — rebuilt from the same components; the screen styles in layer 4 are then removed.
-2. Optional: apply `tokens.css` to the studio dashboard and the public site (both keep their current look until then).
+* **Gallery**: the client's own reference images (swipe, scroll-snap), served only to the founder and only for that project; otherwise the studio drawing for the category, labelled as such.
+* **Development progress**: stages decided by records — Brief & scope (quote accepted), Deposit (verified payment), one stage per kind of work the client bought (all its tasks done), Review & sign-off (every deliverable signed off, no open revisions), Final delivery (finals released and paid).
+
+## 8. Optional next step
+
+Apply `tokens.css` to the studio dashboard and the public site; both keep their current look until you decide.

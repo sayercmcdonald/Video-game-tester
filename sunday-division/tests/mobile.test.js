@@ -26,7 +26,7 @@ function audit() {
     if (!named) problems.push(`unlabelled ${el.tagName.toLowerCase()} ${el.name}`);
   }
   for (const el of document.querySelectorAll('a, button, summary, select, input:not([type=hidden]), textarea')) {
-    if (!visible(el) || el.closest('p, li > span, .c-cite')) continue; // inline links in text are exempt (WCAG 2.5.8)
+    if (!visible(el) || el.closest('p, li > span, .ui-cite')) continue; // inline links in text are exempt (WCAG 2.5.8)
     // A checkbox or radio inside its label is operated through the whole label.
     const target = /^(checkbox|radio)$/.test(el.type) && el.closest('label') ? el.closest('label') : el;
     const r = target.getBoundingClientRect();
@@ -54,6 +54,7 @@ test('Command is usable on a phone and on a desktop', { skip: playwright ? false
   const founder = app.db.get('SELECT * FROM users WHERE email = ?', ADMIN.email);
   app.contractors.create({ name: 'Sam Okafor', email: 'sam@contractor.test', discipline: 'Technical design', capacity: '3', skills: ['technical_flats', 'tech_pack'], categories: ['Outerwear'], status: 'approved' }, 6000, founder);
   await driveWorkflow(app, base, 'production');
+  const second = await driveWorkflow(app, base, 'quote_approval', { ...require('./helpers').INQUIRY, brand_name: 'Second Brand', email: 'second@brand.test' });
   app.command.brief.request({ manual: true, by: 'test' });
   await app.orchestrator.drain();
   const browser = await playwright.chromium.launch();
@@ -99,6 +100,43 @@ test('Command is usable on a phone and on a desktop', { skip: playwright ? false
           return composer.bottom > bar.top + 1;
         });
         assert.equal(overlap, false);
+      }
+      if (label === 'iPhone 13') {
+        // High-impact confirmation: one tap only arms it; a second tap confirms.
+        const quote = app.quotes.forProject(second.projectId).find((q) => q.status === 'draft');
+        const tapId = app.command.actions.propose('send_quote', { quote_id: quote.id }, { source: 'approvals', by: `staff:${ADMIN.email}` }).id;
+        await page.goto(`${base}/command/actions/${tapId}`);
+        await page.tap('[data-hold]');
+        await page.waitForTimeout(300);
+        assert.equal(app.command.actions.get(tapId).status, 'proposed', 'a single tap changes nothing');
+        assert.match(await page.textContent('[data-hold-label]'), /Press again to confirm/);
+        await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/command/actions/')), page.tap('[data-hold]')]);
+        assert.equal(app.command.actions.get(tapId).status, 'executed');
+      } else {
+        // Press and hold confirms in one gesture; letting go early does not.
+        const rec = app.db.get("SELECT id FROM assignments WHERE status = 'recommended' ORDER BY id LIMIT 1");
+        const holdId = app.command.actions.propose('approve_assignment', { assignment_id: rec.id }, { source: 'approvals', by: `staff:${ADMIN.email}` }).id;
+        const centre = async () => {
+          await page.locator('[data-hold]').scrollIntoViewIfNeeded();
+          const b = await page.locator('[data-hold]').boundingBox();
+          return [b.x + b.width / 2, b.y + b.height / 2, b];
+        };
+        await page.goto(`${base}/command/actions/${holdId}`);
+        let [cx, cy, box] = await centre();
+        await page.mouse.move(cx, cy);
+        await page.mouse.down();
+        await page.waitForTimeout(100);
+        assert.match(await page.getAttribute('[data-hold]', 'class'), /is-holding/, 'the hold is under way');
+        await page.waitForTimeout(300);
+        await page.mouse.move(box.x - 40, box.y - 40); // slid off: cancelled
+        await page.mouse.up();
+        await page.waitForTimeout(1200);
+        assert.equal(app.command.actions.get(holdId).status, 'proposed', 'an interrupted hold changes nothing');
+        await page.goto(`${base}/command/actions/${holdId}`);
+        [cx, cy, box] = await centre();
+        await page.mouse.move(cx, cy);
+        await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/command/actions/')), (async () => { await page.mouse.down(); await page.waitForTimeout(1500); await page.mouse.up(); })()]);
+        assert.equal(app.command.actions.get(holdId).status, 'executed');
       }
       assert.deepEqual(errors, []);
       await ctx.close();

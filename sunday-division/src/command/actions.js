@@ -56,7 +56,7 @@ const ACTIONS = {
       title: `Send quote v${s.quote.version} to ${s.brand || s.project.name}`,
       rows: [['Project', `${s.project.code} — ${s.project.name}`], ['Total', money(s.quote.total_cents)], ['Deposit', `${money(s.quote.deposit_cents)} (${s.quote.deposit_percent}%)`], ['Valid until', s.quote.valid_until || 'No expiry'], ['Drafted by', s.quote.source === 'manual' ? 'Staff' : `Automation (${s.quote.source})`]],
       items: s.quote.line_items.map((li) => `${li.description} — ${li.quantity} × ${money(li.unit_cents)}`),
-      text: s.quote.scope,
+      text: s.quote.scope, textLabel: 'Scope the client will read',
       effects: ['The quote becomes visible to the client in their portal.', `If the client accepts, a deposit invoice for ${money(s.quote.deposit_cents)} opens automatically.`, 'Send the client their portal link if they do not have it.'],
     }),
     execute(app, p, user) { app.quotes.approveAndSend(p.quote_id, user); const s = quoteState(app, p.quote_id); return { message: `Quote sent to ${s.brand || 'the client'}.`, link: `/command/projects/${s.project.id}` }; },
@@ -73,7 +73,7 @@ const ACTIONS = {
     preview: (s, app) => ({
       title: `Offer "${s.task.title}" to ${s.contractor.name}`,
       rows: [['Project', `${s.project.code} — ${s.project.name}`], ['Contractor', `${s.contractor.name} (approved, ${money(s.contractor.rate_cents)}/h)`], ['Estimate', `${s.assignment.hours} h`], ['Fee', money(s.assignment.fee_cents)], ['Due', s.assignment.due_date || 'Not set'], ['Recommended by', who(s.assignment.recommended_by)]],
-      text: s.assignment.rationale,
+      text: s.assignment.rationale, textLabel: 'Why this contractor',
       effects: [`Commits the studio to a fee of ${money(s.assignment.fee_cents)} if the work is signed off.`, app.messaging.provider === 'simulated' ? 'Sends the offer message — SIMULATED in this environment: nothing leaves the server.' : 'Prepares the offer message for you to send (manual delivery).', 'The contractor accepts or declines in their portal.'],
     }),
     execute(app, p, user) {
@@ -105,7 +105,7 @@ const ACTIONS = {
     preview: (s) => ({
       title: s.message.subject,
       rows: [['To', `The ${s.message.recipient_type}${s.code ? ` on ${s.code}` : ''}`], ['Purpose', s.message.purpose.replace(/_/g, ' ')], ['Prepared by', s.message.prepared_by]],
-      text: s.message.body,
+      text: s.message.body, textLabel: 'Message',
       effects: [s.provider === 'simulated' ? 'SIMULATED delivery in this environment: recorded as sent, nothing leaves the server.' : 'Approved for sending. Delivery is manual: send it from the Messages outbox and mark it sent.'],
     }),
     execute(app, p, user) { const how = app.messaging.approveAndSend(p.message_id, user); return { message: how === 'simulated' ? 'Message recorded as sent (SIMULATED — nothing left the server).' : 'Message approved. Send it yourself from the outbox, then mark it sent.', link: '/command/approvals' }; },
@@ -133,7 +133,7 @@ const ACTIONS = {
     preview: (s) => ({
       title: `Issue ${s.invoice.kind} invoice ${s.invoice.number} — ${money(s.invoice.amount_cents)}`,
       rows: [['Client', s.brand], ['Project', `${s.project.code} — ${s.project.name}`], ['Amount', money(s.invoice.amount_cents)], ['Quoted total', money(s.quoted)], ['Already invoiced', money(s.invoiced)]],
-      text: s.invoice.description,
+      text: s.invoice.description, textLabel: 'Invoice description',
       effects: ['The invoice becomes payable in the client portal.', 'Payment is confirmed only by the payment provider’s signed webhook.'],
     }),
     execute(app, p, user) { const pid = app.billing.approve(p.invoice_id, user); return { message: 'Invoice issued.', link: `/command/projects/${pid}` }; },
@@ -175,7 +175,7 @@ const ACTIONS = {
       return { task: { id: t.id, status: t.status, title: t.title, detail: t.detail, project_id: t.project_id } };
     },
     check(s) { if (s.task.status !== 'open') throw new HttpError(409, 'Already resolved.'); },
-    preview: (s, app, p) => ({ title: s.task.title, rows: [['Your note', p.note]], text: s.task.detail, effects: ['Closes the exception with your note. Refunds or corrections happen in the payment provider — this does not move money or change any invoice.'] }),
+    preview: (s, app, p) => ({ title: s.task.title, rows: [['Your note', p.note]], text: s.task.detail, textLabel: 'What the payment system reported', effects: ['Closes the exception with your note. Refunds or corrections happen in the payment provider — this does not move money or change any invoice.'] }),
     execute(app, p, user) { app.humanTasks.resolve(p.task_id, `staff:${user.email}`); app.audit.log(`staff:${user.email}`, 'payment_exception.reviewed', { entity: 'human_task', entityId: p.task_id, detail: str(p.note, 300) }); return { message: 'Exception marked reviewed.', link: '/command/approvals' }; },
   },
 

@@ -5,24 +5,6 @@ const { REGISTRY } = require('../agents/definitions');
 const { TOOLS } = require('../agents/tools');
 const ui = require('./command-ui');
 
-// ── Icons (24px line icons, currentColor) ─────────────────────────────
-const I = {
-  overview: '<rect x="4" y="4" width="7" height="9" rx="1"/><rect x="13" y="4" width="7" height="5" rx="1"/><rect x="13" y="11" width="7" height="9" rx="1"/><rect x="4" y="15" width="7" height="5" rx="1"/>',
-  projects: '<path d="M12 3.5l8.5 4.5-8.5 4.5L3.5 8z"/><path d="M3.5 12l8.5 4.5 8.5-4.5"/><path d="M3.5 16l8.5 4.5 8.5-4.5"/>',
-  approvals: '<circle cx="12" cy="12" r="8.5"/><path d="M8.2 12.4l2.6 2.6 5-5.4"/>',
-  chat: '<path d="M4.5 5.5h15v10h-9l-4.5 3.8V15.5h-1.5z"/>',
-  more: '<circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/>',
-  brief: '<path d="M6 3.5h9l3 3v14H6z"/><path d="M9 10h6M9 13.5h6M9 17h4"/>',
-  agents: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.6-5.5 7-5.5s6.2 1.7 7 5.5"/>',
-  performance: '<path d="M4 19.5h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
-  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M6 18l1.6-1.6M16.4 7.6L18 6"/>',
-  bell: '<path d="M6.5 16.5v-5a5.5 5.5 0 0111 0v5l1.5 1.5h-14z"/><path d="M10 20.5a2.2 2.2 0 004 0"/>',
-  back: '<path d="M14.5 5.5L8 12l6.5 6.5"/>',
-  arrow: '<path d="M9.5 5.5L16 12l-6.5 6.5"/>',
-  send: '<path d="M5 12h13M12.5 6l6 6-6 6"/>',
-};
-const icon = (name, cls = 'i') => raw(`<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${I[name]}</svg>`);
-
 // The five destinations (bottom tab bar on phones); the rail on wide screens adds the rest.
 const NAV = [
   ['overview', '/command', 'Overview', true], ['projects', '/command/projects', 'Projects', true], ['agents', '/command/agents', 'Agents', true],
@@ -32,11 +14,9 @@ const NAV = [
 const TAB_ALIAS = { chat: 'command', more: 'overview', notifications: 'overview', brief: 'overview', performance: 'overview', settings: 'overview' };
 
 const tzOf = (ctx) => ctx.app.settings.get('timezone');
-const dot = (status, label) => html`<span class="dot dot--${status}" ${label ? raw(`role="img" aria-label="${esc(label)}"`) : raw('aria-hidden="true"')}></span>`;
 const csrf = (ctx) => html`<input type="hidden" name="_csrf" value="${ctx.session.csrf}">`;
 const whole = (cents) => `$${Math.round((Number(cents) || 0) / 100).toLocaleString('en-US')}`;
 const pct = (x) => (x === null || x === undefined ? '—' : `${Math.round(x * 100)}%`);
-const empty = (text) => html`<p class="c-empty">${text}</p>`;
 const firstName = (ctx) => String(ctx.user.name || '').split(/\s+/)[0] || 'there';
 
 /** Safe, minimal formatting for chat replies: escape first, then bullets and bold. */
@@ -103,7 +83,7 @@ function shell(ctx, { title, tab, body, back, wide = false }) {
   <a class="ui-appbar__bell" href="/command/notifications" aria-label="Notifications${unread ? `, ${unread} unread` : ''}">${ui.Icon('bell')}${unread ? html`<span class="ui-appbar__unread" aria-hidden="true"></span>` : ''}</a>
 </header>
 <main id="main" class="c-main ${wide ? 'c-main--wide' : ''}" tabindex="-1">
-${ctx.flash ? html`<p class="c-flash" role="status">${ctx.flash}</p>` : ''}
+${ctx.flash ? html`<p class="ui-flash" role="status">${ctx.flash}</p>` : ''}
 ${body}
 </main>
 </div>
@@ -118,35 +98,42 @@ function bare(ctx, { title, body }) {
 <title>${title} · Command</title><meta name="theme-color" content="#111111"><meta name="color-scheme" content="dark"><meta name="robots" content="noindex, nofollow">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Command">
 <link rel="manifest" href="/command/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/command/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/tokens.css"><link rel="stylesheet" href="/assets/css/command.css"></head>
 <body class="c-body c-body--bare"><main id="main" class="c-bare">${body}</main></body></html>`;
 }
 
+const field = (id, label, control, help) => html`<div class="ui-field"><label class="ui-field__label" for="${id}">${label}</label>${control}${help ? html`<p class="ui-field__help">${help}</p>` : ''}</div>`;
+
 function login(ctx, { error, email = '' }) {
   return bare(ctx, {
     title: 'Sign in',
-    body: html`<div class="c-login">
-  <p class="c-login__brand">Sunday Division</p>
-  <h1 class="c-serif c-login__title">Command</h1>
-  <p class="c-muted">Private to the founder. Access is checked on the server for every request.</p>
-  ${error ? html`<p class="c-flash c-flash--error" role="alert">${error}</p>` : ''}
-  <form method="post" action="/command/login" class="c-form">
-    <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required value="${email}" autocapitalize="none">
-    <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button class="c-btn c-btn--primary" type="submit">Sign in</button>
+    body: html`<div class="ui-login">
+  <p class="ui-wordmark"><span>Sunday</span><span>Division</span></p>
+  <h1 class="ui-login__title">Command</h1>
+  <p class="ui-login__lede">Private to the founder. Access is checked on the server for every request.</p>
+  ${error ? html`<p class="ui-flash ui-flash--danger" role="alert">${error}</p>` : ''}
+  <form method="post" action="/command/login" class="ui-form">
+    ${field('email', 'Email', html`<input class="ui-input" id="email" name="email" type="email" autocomplete="username" required value="${email}" autocapitalize="none">`)}
+    ${field('password', 'Password', html`<input class="ui-input" id="password" name="password" type="password" autocomplete="current-password" required>`)}
+    ${ui.Button({ label: 'Sign in', variant: 'primary', attrs: 'data-block' })}
   </form>
 </div>`,
   });
 }
 
 function offline(ctx) {
-  return bare(ctx, { title: 'Offline', body: html`<div class="c-login"><p class="c-login__brand">Sunday Division</p><h1 class="c-serif c-login__title">You're offline</h1><p class="c-muted">Command never stores business data on this device, so there is nothing to show without a connection. Reconnect and try again.</p><p><a class="c-btn c-btn--primary" href="/command">Try again</a></p></div>` });
+  return bare(ctx, { title: 'Offline', body: html`<div class="ui-login"><p class="ui-wordmark"><span>Sunday</span><span>Division</span></p><h1 class="ui-login__title">You’re offline</h1><p class="ui-login__lede">Command never stores business data on this device, so there is nothing to show without a connection. Reconnect and try again.</p>${ui.Button({ label: 'Try again', href: '/command', variant: 'primary' })}</div>` });
 }
 
 function errorPage(ctx, status, message) {
-  const body = html`<section class="c-section"><p class="c-eyebrow">Error ${status}</p><h1 class="c-serif c-h1">${status === 404 ? 'Not found' : status === 409 ? 'Not possible right now' : status === 403 ? 'Not allowed' : 'That did not go through'}</h1><p>${message}</p><p><a class="c-link" href="/command">Back to Overview</a></p></section>`;
-  return ctx.user && ctx.user.founder && ctx.session ? shell(ctx, { title: 'Error', tab: '', body }) : bare(ctx, { title: 'Error', body });
+  const title = { 404: 'Not found', 409: 'Not possible right now', 403: 'Not allowed', 429: 'Too many attempts' }[status] || 'That did not go through';
+  const body = html`${ui.PageHeader({ eyebrow: `Error ${status}`, title, subtitle: message })}${ui.Button({ label: 'Back to Overview', href: '/command', variant: 'secondary' })}`;
+  return ctx.user && ctx.user.founder && ctx.session ? shell(ctx, { title: 'Error', tab: '', body }) : bare(ctx, { title: 'Error', body: html`<div class="ui-login">${body}</div>` });
 }
+
+/** A one-button form that proposes an action (nothing changes until the preview is confirmed). */
+const actionForm = (ctx, { type, target, label, variant = 'secondary', source }) => html`<form method="post" action="/command/actions" class="ui-inline-form">${csrf(ctx)}<input type="hidden" name="type" value="${type}">${target !== undefined && target !== null ? html`<input type="hidden" name="target" value="${target}">` : ''}${source ? html`<input type="hidden" name="source" value="${source}">` : ''}${ui.Button({ label, variant, small: true })}</form>`;
 
 // ── Overview ──────────────────────────────────────────────────────────
 function overview(ctx, { health, trailing, counts, focus, brief, pendingBrief, paused }) {
@@ -201,23 +188,22 @@ ${ui.Section({ title: 'Studio', id: 'studio', body: ui.List([
 const BRAIN_LABEL = { anthropic: 'Written by Claude', openai: 'Written by OpenAI', simulated: 'Written by a SIMULATED test model', rules: 'Compiled from records without AI' };
 function brief(ctx, { brief: b, pending, history }) {
   const tz = tzOf(ctx);
-  const facts = b ? new Map(b.facts.map((f) => [f.id, f])) : new Map();
-  const cite = (ids) => html`<span class="c-cite">${ids.map((id) => html`<a href="#fact-${id}" aria-label="Source ${id}">${id.slice(1)}</a>`)}</span>`;
-  const genForm = html`<form method="post" action="/command/actions">${csrf(ctx)}<input type="hidden" name="type" value="generate_brief"><button class="c-btn" type="submit">Generate a new brief</button></form>`;
+  const cite = (ids) => (ids && ids.length ? html`<sup class="ui-cite">${ids.map((id) => html`<a href="#fact-${id}" aria-label="Source ${id}">${id.slice(1)}</a>`)}</sup>` : '');
+  const generate = html`<form method="post" action="/command/actions" class="ui-inline-form">${csrf(ctx)}<input type="hidden" name="type" value="generate_brief">${ui.Button({ label: 'Generate a new brief', variant: 'secondary' })}</form>`;
+  const earlier = history.filter((h) => !b || h.id !== b.id);
   return shell(ctx, {
-    title: 'Morning Brief', tab: 'brief',
-    body: html`${pending ? html`<p class="c-flash" role="status">A new brief is being written. Refresh in a moment.</p>` : ''}
-${!b ? html`<section class="c-section"><h1 class="c-serif c-h1">No brief yet</h1><p class="c-muted">Each morning at ${ctx.app.settings.get('brief_hour')}:00 (${tz}) the app collects verified events since the last brief and summarises them.</p>${genForm}</section>` : html`
-<article class="c-brief">
-  <p class="c-eyebrow">${fmtLocal(b.window_start, tz)} – ${fmtLocal(b.window_end, tz)}</p>
-  <h1 class="c-serif c-h1">${b.content.headline.text}${b.content.headline.fact_ids.length ? cite(b.content.headline.fact_ids) : ''}</h1>
-  <p class="c-provenance">${dot(b.brain === 'rules' ? 'neutral' : 'ok')}${BRAIN_LABEL[b.brain] || b.brain} from ${b.facts.length} verified facts.${b.dropped ? html` <strong>${b.dropped} statement(s) removed</strong> because no fact supported them.` : ''}</p>
-  ${b.content.sections.map((s) => html`<section class="c-brief__section"><h2 class="c-label">${s.title}</h2><ul class="c-brief__items">${s.items.map((it) => html`<li>${it.text}${cite(it.fact_ids)}</li>`)}</ul></section>`)}
-  ${b.content.actions.length ? html`<section class="c-brief__section"><h2 class="c-label">Recommended</h2><ul class="c-actions-list">${b.content.actions.map((a) => html`<li><span>${a.text}${cite(a.fact_ids)}</span>${a.action_type ? html`<form method="post" action="/command/actions">${csrf(ctx)}<input type="hidden" name="type" value="${a.action_type}"><input type="hidden" name="target" value="${a.target_id}"><input type="hidden" name="source" value="brief"><button class="c-btn c-btn--small" type="submit">Review</button></form>` : html`<a class="c-btn c-btn--small" href="/command/approvals">Open</a>`}</li>`)}</ul></section>` : ''}
-  <details class="c-sources"><summary>Sources (${b.facts.length})</summary><ol>${b.facts.map((f) => html`<li id="fact-${f.id}">${f.link ? html`<a class="c-source" href="${f.link}"><span class="c-mono">${f.id}</span><span>${f.text}</span></a>` : html`<span class="c-source"><span class="c-mono">${f.id}</span><span>${f.text}</span></span>`}</li>`)}</ol></details>
-</article>
-${genForm}`}
-${history.length > 1 ? html`<section class="c-section"><h2 class="c-section-title">Earlier briefs</h2><ul class="c-list">${history.filter((h) => !b || h.id !== b.id).map((h) => html`<li><a class="c-list__row" href="/command/brief/${h.id}"><span>${h.brief_date} <span class="c-muted c-small">${h.status === 'ready' ? (BRAIN_LABEL[h.brain] || h.brain) : h.status}</span></span>${icon('arrow', 'i i--end')}</a></li>`)}</ul></section>` : ''}`,
+    title: 'Morning Brief', tab: 'brief', back: '/command',
+    body: html`${pending ? html`<p class="ui-flash" role="status">A new brief is being written. Refresh in a moment.</p>` : ''}
+${!b ? html`${ui.PageHeader({ eyebrow: 'Morning Brief', title: 'No brief yet', subtitle: `Each morning at ${ctx.app.settings.get('brief_hour')}:00 (${tz}) Command collects the verified events since the last brief and summarises them.` })}${generate}` : html`
+<article class="ui-brief">
+${ui.PageHeader({ eyebrow: `Morning Brief · ${fmtLocal(b.window_start, tz)} – ${fmtLocal(b.window_end, tz)}`, title: html`${b.content.headline.text}${cite(b.content.headline.fact_ids)}` })}
+<p class="ui-provenance">${ui.Icon(b.brain === 'rules' ? 'brief' : 'spark')}<span>${BRAIN_LABEL[b.brain] || b.brain} from ${b.facts.length} verified facts.${b.dropped ? html` <strong>${b.dropped} statement${b.dropped === 1 ? '' : 's'} removed</strong> because no fact supported ${b.dropped === 1 ? 'it' : 'them'}.` : ''}</span></p>
+${b.content.sections.map((sec) => ui.Section({ title: sec.title, body: html`<ul class="ui-card ui-brief__items">${sec.items.map((it) => html`<li>${it.text}${cite(it.fact_ids)}</li>`)}</ul>` }))}
+${b.content.actions.length ? ui.Section({ title: 'Recommended', body: html`<ul class="ui-list ui-list--card">${b.content.actions.map((a) => html`<li><div class="ui-row"><span class="ui-row__text"><span class="ui-row__title">${a.text}${cite(a.fact_ids)}</span></span>${a.action_type ? actionForm(ctx, { type: a.action_type, target: a.target_id, source: 'brief', label: 'Review' }) : ui.Button({ label: 'Open', href: '/command/approvals', small: true })}</div></li>`)}</ul>` }) : ''}
+${ui.Section({ title: 'Sources', body: html`<details class="ui-card ui-sources"><summary>${b.facts.length} verified facts${ui.Icon('chevron', 'ui-sources__chev')}</summary><ol>${b.facts.map((f) => html`<li id="fact-${f.id}">${f.link ? html`<a class="ui-source" href="${f.link}"><span class="ui-source__id">${f.id}</span><span>${f.text}</span></a>` : html`<span class="ui-source"><span class="ui-source__id">${f.id}</span><span>${f.text}</span></span>`}</li>`)}</ol></details>` })}
+<div class="ui-actions-bar">${generate}</div>
+</article>`}
+${earlier.length ? ui.Section({ title: 'Earlier briefs', body: ui.List(earlier.map((h) => ({ title: h.brief_date, meta: h.status === 'ready' ? (BRAIN_LABEL[h.brain] || h.brain) : h.status, href: h.status === 'ready' ? `/command/brief/${h.id}` : null })), { cls: 'ui-list--card' }) }) : ''}`,
   });
 }
 
@@ -248,42 +234,47 @@ ${rows.length ? html`<ul class="ui-projects">${rows.map((p) => html`<li><a class
   });
 }
 
-const STAGES = ['triage', 'scoping', 'awaiting_quote_approval', 'awaiting_client_acceptance', 'awaiting_deposit', 'setup', 'in_production', 'awaiting_final_payment', 'ready_for_release', 'completed'];
-function project(ctx, { p, states }) {
+const TASK_PILL = { done: ['success', 'Done'], doing: ['neutral', 'In progress'], review: ['review', 'In review'], todo: ['neutral', 'To do'], proposed: ['neutral', 'Proposed'] };
+const ASSIGNMENT_PILL = { recommended: ['review', 'Awaiting approval'], offered: ['neutral', 'Offered'], accepted: ['neutral', 'Accepted'], submitted: ['review', 'Submitted'], changes_requested: ['attention', 'Changes requested'], signed_off: ['success', 'Signed off'], declined: ['attention', 'Declined'], rejected: ['neutral', 'Rejected'], cancelled: ['neutral', 'Cancelled'] };
+const DELIVERABLE_PILL = { in_progress: ['neutral', 'In progress'], in_review: ['review', 'In review'], approved: ['success', 'Signed off'], released: ['success', 'Released'] };
+const INVOICE_PILL = { paid: ['success', 'Paid'], open: ['review', 'Open'], draft: ['neutral', 'Draft'], void: ['neutral', 'Void'] };
+const pill = (map, key) => { const [tone, label] = map[key] || ['neutral', String(key || '').replace(/_/g, ' ')]; return ui.StatusPill({ tone, label }); };
+const ROUTE_LABEL = { contractor: 'Contractor', studio: 'Studio', index_v3: 'INDEX V3', form: 'FORM' };
+
+function project(ctx, { p, card }) {
   const tz = tzOf(ctx);
-  const currentIdx = STAGES.indexOf(p.workflow_state);
-  const statusDot = (s) => dot({ signed_off: 'ok', approved: 'ok', released: 'ok', done: 'ok', paid: 'ok', submitted: 'watch', in_review: 'watch', recommended: 'watch', offered: 'neutral', accepted: 'neutral', changes_requested: 'watch', declined: 'act', rejected: 'neutral', open: 'watch', draft: 'neutral' }[s] || 'neutral');
+  const done = p.stages.filter((st) => st.done).length;
+  const total = p.stages.length;
+  const live = (a) => !['rejected', 'cancelled', 'declined'].includes(a.status);
+  const assignmentFor = (t) => p.assignments.find((a) => a.task_id === t.id && live(a)) || p.assignments.find((a) => a.task_id === t.id);
+  const gallery = p.images.length
+    ? html`<div class="ui-gallery" role="region" aria-label="Client reference images" tabindex="0">${p.images.map((f, i) => html`<img src="/command/projects/${p.id}/images/${f.id}" alt="Client reference image ${i + 1} of ${p.images.length}" loading="${i ? 'lazy' : 'eager'}" decoding="async">`)}</div>${p.images.length > 1 ? html`<p class="ui-gallery__hint">${p.images.length} client reference images — swipe</p>` : ''}`
+    : card && card.garment ? html`<figure class="ui-card ui-drawing">${ui.Thumb({ garment: card.garment, alt: `${p.category} — studio drawing` })}<figcaption>Studio drawing for ${p.category.toLowerCase()}. No client reference images yet.</figcaption></figure>` : '';
   return shell(ctx, {
     title: p.code, tab: 'projects', back: '/command/projects',
-    body: html`<section class="c-hero">
-  <p class="c-eyebrow"><span class="c-mono">${p.code}</span> · ${p.brand_name}</p>
-  <h1 class="c-serif c-h1">${p.name}</h1>
-  <p class="c-muted">${p.stage}${p.due_date ? ` · due ${p.due_date}` : ''}${p.workflow_paused ? ' · paused' : ''}</p>
-  ${p.blocked_reason ? html`<p class="c-flash c-flash--error">${p.blocked_reason}</p>` : ''}
+    body: html`${ui.PageHeader({ eyebrow: `${p.code} · ${p.brand_name}`, title: p.name, subtitle: `${card ? card.packageLabel : ''}${p.due_date ? ` · due ${p.due_date}` : ''}`, actions: card ? ui.StatusPill(card.status_) : '' })}
+${p.blocked_reason ? html`<p class="ui-flash ui-flash--danger" role="alert">${p.blocked_reason}</p>` : ''}
+${gallery}
+<section class="ui-card ui-devprogress" aria-labelledby="dev-h">
+  <div class="ui-devprogress__head"><h2 id="dev-h" class="ui-devprogress__title">Development progress</h2><span class="ui-devprogress__count">${done} of ${total} stages</span></div>
+  ${ui.ProgressBar({ value: done, max: total, label: 'Development stages complete' })}
+  <ol class="ui-stages">${p.stages.map((st) => html`<li class="${st.done ? 'is-done' : st.current ? 'is-current' : ''}" ${st.current ? raw('aria-current="step"') : ''}><span class="ui-stages__mark" aria-hidden="true">${st.done ? ui.Icon('check') : ''}</span><span class="ui-stages__label">${st.label}${st.detail ? html`<span class="ui-stages__detail">${st.detail}</span>` : ''}</span><span class="c-sr">${st.done ? 'done' : st.current ? 'in progress' : 'not started'}</span></li>`)}</ol>
 </section>
-${p.workflow_state ? html`<ol class="c-stages" aria-label="Stages">${STAGES.map((s, i) => html`<li class="${i < currentIdx ? 'is-done' : i === currentIdx ? 'is-current' : ''}" ${i === currentIdx ? raw('aria-current="step"') : ''}><span>${(states[s] || {}).label || s}</span></li>`)}</ol>` : ''}
-<div class="c-grid">
-<section class="c-card"><h2 class="c-label">Money</h2><dl class="c-kv">
-  <dt>Quoted</dt><dd>${money(p.money.quoted)}</dd><dt>Collected</dt><dd>${money(p.money.collected)}</dd><dt>Costs</dt><dd>${money(p.money.costs)}</dd>
-  <dt>Projected profit</dt><dd>${money(p.money.projectedProfit)} <span class="c-muted">${pct(p.money.projectedMargin)}</span></dd></dl>
-  ${p.invoices.length ? html`<ul class="c-mini">${p.invoices.map((i) => html`<li>${statusDot(i.status)}<span>${i.number} · ${i.kind}</span><span>${money(i.amount_cents)} · ${i.status}</span></li>`)}</ul>` : ''}
-</section>
-<section class="c-card"><h2 class="c-label">Waiting on people</h2>${p.openActions.length ? html`<ul class="c-mini">${p.openActions.map((h) => html`<li>${dot(h.kind === 'escalation' ? 'act' : 'watch')}<span>${h.title}</span></li>`)}</ul>` : empty('Nothing open.')}</section>
-</div>
-<section class="c-section"><h2 class="c-section-title">Production</h2>
-${p.tasks.length ? html`<ul class="c-cards">${p.tasks.map((t) => {
-    const as = p.assignments.filter((a) => a.task_id === t.id);
-    return html`<li class="c-card"><div class="c-project__top">${statusDot(t.status)}<strong>${t.title}</strong><span class="c-pill">${t.route || 'unrouted'}</span></div>
-    ${as.length ? html`<ul class="c-mini">${as.map((a) => html`<li>${statusDot(a.status)}<span>${a.contractor_name}</span><span>${a.status.replace('_', ' ')} · ${money(a.fee_cents)}${a.due_date ? ` · due ${a.due_date}` : ''}</span></li>`)}</ul>` : ''}</li>`;
-  })}</ul>` : empty('No production tasks yet.')}
-</section>
-<section class="c-section"><h2 class="c-section-title">Deliverables</h2>
-${p.deliverables.length ? html`<ul class="c-list">${p.deliverables.map((d) => html`<li class="c-list__row">${statusDot(d.status)}<span><strong>${d.title}</strong> <span class="c-muted c-small">v${d.version} · ${d.status.replace('_', ' ')}${d.qa ? ` · QA ${d.qa.result.toUpperCase()}` : ''}</span></span></li>`)}</ul>` : empty('No deliverables yet.')}
-</section>
-<section class="c-section"><h2 class="c-section-title">Timeline</h2>
-${p.timeline.length ? html`<ol class="c-timeline">${p.timeline.map((t) => html`<li><span class="c-small c-muted">${fmtLocal(t.created_at, tz)}</span> ${t.label}</li>`)}</ol>` : empty('No workflow history.')}
-</section>
-<a class="c-card c-card--link c-cta" href="/command/chat?project=${p.id}"><span>Ask Command about ${p.code}</span>${icon('arrow')}</a>`,
+${ui.Section({ title: 'Production', count: p.tasks.length, body: p.tasks.length ? html`<ul class="ui-list ui-list--card">${p.tasks.map((t) => {
+    const a = assignmentFor(t);
+    const meta = a ? `${a.contractor_name} · ${money(a.fee_cents)}${a.due_date ? ` · due ${a.due_date}` : ''}` : t.route === 'contractor' ? 'Contractor · awaiting a recommendation' : t.route ? ROUTE_LABEL[t.route] || t.route : 'Not routed yet';
+    return html`<li>${ui.ListRow({ title: t.title, meta, trailing: a ? pill(ASSIGNMENT_PILL, a.status) : pill(TASK_PILL, t.status) })}</li>`;
+  })}</ul>` : ui.EmptyState({ title: 'No production tasks yet', body: 'The Project Manager plans production once the deposit is verified.' }) })}
+${ui.Section({ title: 'Deliverables', count: p.deliverables.length, body: p.deliverables.length ? ui.List(p.deliverables.map((d) => ({ title: d.title, meta: `v${d.version}${d.qa ? ` · automated QA ${d.qa.result}` : ''}`, trailing: pill(DELIVERABLE_PILL, d.status) })), { cls: 'ui-list--card' }) : ui.EmptyState({ title: 'No deliverables yet' }) })}
+${ui.Section({ title: 'Money', body: html`<div class="ui-pair">
+  ${ui.StatCard({ label: 'Quoted', value: whole(p.money.quoted), sub: p.quote ? `Quote v${p.quote.version} · ${p.quote.status}` : 'No quote yet' })}
+  ${ui.StatCard({ label: 'Collected', value: whole(p.money.collected), sub: p.money.outstanding ? `${whole(p.money.outstanding)} outstanding` : 'Nothing outstanding' })}
+  ${ui.StatCard({ label: 'Costs', value: whole(p.money.costs), sub: `incl. ${money(p.money.automationCosts)} AI & services` })}
+  ${ui.StatCard({ label: 'Projected margin', value: pct(p.money.projectedMargin), sub: `${whole(p.money.projectedProfit)} projected profit` })}
+</div>${p.invoices.length ? html`<div class="ui-gap">${ui.List(p.invoices.map((i) => ({ title: `${i.number} · ${i.kind}`, meta: money(i.amount_cents), trailing: pill(INVOICE_PILL, i.status) })), { cls: 'ui-list--card' })}</div>` : ''}` })}
+${ui.Section({ title: 'Waiting on people', count: p.openActions.length, body: p.openActions.length ? ui.List(p.openActions.map((h) => ({ dot: h.kind === 'escalation' ? 'danger' : 'review', title: h.title, meta: ago(h.created_at, Date.now()) }))) : ui.EmptyState({ title: 'Nothing open' }) })}
+${ui.Section({ title: 'Timeline', body: p.timeline.length ? html`<ol class="ui-timeline">${p.timeline.map((t) => html`<li><span class="ui-timeline__time">${fmtLocal(t.created_at, tz)}</span><span>${t.label}</span></li>`)}</ol>` : ui.EmptyState({ title: 'No history yet' }) })}
+<div class="ui-actions-bar">${ui.Button({ label: `Ask Command about ${p.code}`, href: `/command/chat?project=${p.id}`, variant: 'secondary', icon: 'command' })}</div>`,
   });
 }
 
@@ -298,105 +289,108 @@ function sourceLabel(x) {
 }
 const ALT_LABEL = { reject_assignment: 'Reject', discard_message: 'Discard' };
 function approvals(ctx, { items }) {
-  const tz = tzOf(ctx);
-  const review = (type, target, label, cls = '') => html`<form method="post" action="/command/actions">${csrf(ctx)}<input type="hidden" name="type" value="${type}"><input type="hidden" name="target" value="${target}"><button class="c-btn ${cls}" type="submit">${label}</button></form>`;
+  const noteForm = (x) => html`<form method="post" action="/command/actions" class="ui-note-form">${csrf(ctx)}<input type="hidden" name="type" value="${x.type}"><input type="hidden" name="target" value="${x.targetId}">${field(`note-${x.targetId}`, 'What did you check or do?', html`<input class="ui-input" id="note-${x.targetId}" name="note" required maxlength="500">`)}${ui.Button({ label: 'Review', variant: 'primary', small: true })}</form>`;
   return shell(ctx, {
     title: 'Approvals', tab: 'approvals',
-    body: html`<h1 class="c-serif c-h1 c-h1--page">Approvals</h1>
-<p class="c-muted">Nothing here happens until you review the preview and confirm. Quotes, offers, messages, invoices and releases need your password if you last signed in more than 12 hours ago.</p>
+    body: html`${ui.PageHeader({ title: 'Approvals', subtitle: 'Nothing here happens until you review the preview and confirm.' })}
 ${items.length ? GROUPS.map(([g, label]) => {
     const list = items.filter((x) => x.group === g);
     if (!list.length) return '';
-    return html`<section class="c-section" id="${g === 'finance' ? 'finance' : g}"><h2 class="c-section-title">${label} <span class="c-count">${list.length}</span></h2>
-<ul class="c-cards">${list.map((x) => html`<li class="c-card c-approval">
-  <div class="c-approval__main"><p class="c-approval__title">${x.exception ? dot('act') : ''}${x.title}</p><p class="c-muted c-small">${x.detail}</p>
-  <p class="c-small c-muted">${x.amount ? html`<strong class="c-amount">${x.amount}</strong> · ` : ''}waiting ${ago(x.since, Date.now())}${sourceLabel(x)}</p></div>
-  <div class="c-approval__actions">
-  ${x.needsNote ? html`<form method="post" action="/command/actions" class="c-form c-form--inline">${csrf(ctx)}<input type="hidden" name="type" value="${x.type}"><input type="hidden" name="target" value="${x.targetId}"><label for="note-${x.targetId}" class="c-sr">Your note</label><input id="note-${x.targetId}" name="note" required maxlength="500" placeholder="What did you check or do?"><button class="c-btn" type="submit">Review</button></form>`
-    : html`${review(x.type, x.targetId, 'Review', 'c-btn--primary')}${x.alt ? review(x.alt, x.targetId, ALT_LABEL[x.alt], 'c-btn--ghost') : ''}`}
-  ${x.projectId ? html`<a class="c-btn c-btn--small c-btn--ghost" href="/command/projects/${x.projectId}">Project</a>` : ''}
-  </div></li>`)}</ul></section>`;
-  }) : html`<section class="c-section c-done">${dot('ok')}<p class="c-serif c-h2">All clear.</p><p class="c-muted">Nothing is waiting for you${tz ? '' : ''}.</p></section>`}`,
+    return ui.Section({ title: label, id: g, count: list.length, body: html`<ul class="ui-approvals">${list.map((x) => html`<li class="ui-card ui-approval">
+  <div class="ui-approval__top"><p class="ui-approval__title">${x.exception ? ui.StatusDot('danger', 'Exception') : ''}${x.title}</p>${x.amount ? html`<p class="ui-approval__amount">${x.amount}</p>` : ''}</div>
+  <p class="ui-approval__detail">${x.detail}</p>
+  <p class="ui-approval__meta">Waiting ${ago(x.since, Date.now())}${sourceLabel(x)}</p>
+  <div class="ui-approval__actions">${x.needsNote ? noteForm(x) : html`${actionForm(ctx, { type: x.type, target: x.targetId, label: 'Review', variant: 'primary' })}${x.alt ? actionForm(ctx, { type: x.alt, target: x.targetId, label: ALT_LABEL[x.alt] }) : ''}`}${x.projectId ? ui.Button({ label: 'Project', href: `/command/projects/${x.projectId}`, variant: 'ghost', small: true }) : ''}</div>
+</li>`)}</ul>` });
+  }) : ui.EmptyState({ title: 'All clear.', body: 'Nothing is waiting for you.' })}`,
   });
 }
 
+const who = (by) => String(by).replace(/^staff:/, '').replace(/^model:/, 'a model (').replace(/^a model \((.+)$/, 'a model ($1)');
 function action(ctx, { a, needsPassword }) {
   const p = a.preview;
   const open = a.status === 'proposed';
+  const high = a.risk === 'high';
   return shell(ctx, {
     title: 'Review', tab: a.source === 'chat' ? 'chat' : 'approvals', back: a.source === 'chat' && a.conversation_id ? `/command/chat/${a.conversation_id}` : '/command/approvals',
-    body: html`<article class="c-preview">
-  <p class="c-eyebrow">${p.label}</p>
-  <h1 class="c-serif c-h1">${p.title}</h1>
-  <p class="c-risk c-risk--${a.risk}">${a.risk === 'high' ? 'High impact' : 'Low impact'} · ${p.why}</p>
-  ${p.rows && p.rows.length ? html`<dl class="c-kv c-kv--preview">${p.rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>` : ''}
-  ${p.items && p.items.length ? html`<ul class="c-preview__items">${p.items.map((i) => html`<li>${i}</li>`)}</ul>` : ''}
-  ${p.text ? html`<div class="c-preview__text">${p.text.split(/\n{2,}/).map((para) => html`<p>${para}</p>`)}</div>` : ''}
-  ${p.warnings && p.warnings.length ? html`<div class="c-flash c-flash--error" role="alert">${p.warnings.map((w) => html`<p>${w}</p>`)}</div>` : ''}
-  <h2 class="c-label">What happens when you confirm</h2>
-  <ul class="c-effects">${p.effects.map((e) => html`<li>${e}</li>`)}</ul>
-  <p class="c-small c-muted">Proposed by ${a.proposed_by.replace('staff:', '')} via ${a.source}. The preview was built from the records, not by a model. If anything changes before you confirm, this proposal expires instead of running.</p>
-  ${open ? html`<form method="post" action="/command/actions/${a.id}/confirm" class="c-form c-confirm">${csrf(ctx)}<input type="hidden" name="digest" value="${a.digest}">
-    ${needsPassword ? html`<label for="password">Your password <span class="c-muted c-small">(required for high-impact actions after 12 hours)</span></label><input id="password" name="password" type="password" autocomplete="current-password" required>` : ''}
-    <button class="c-btn c-btn--primary c-btn--block" type="submit">Confirm</button></form>
-  <form method="post" action="/command/actions/${a.id}/cancel">${csrf(ctx)}<button class="c-btn c-btn--ghost c-btn--block" type="submit">Cancel</button></form>`
-    : html`<p class="c-flash ${a.status === 'failed' || a.status === 'expired' ? 'c-flash--error' : ''}">This action was ${a.status}${a.result && a.result.message ? html`: ${a.result.message}` : ''}${a.error ? html` — ${a.error}` : ''}.</p>`}
+    body: html`<article class="ui-review">
+${ui.PageHeader({ eyebrow: p.label, title: p.title })}
+<p class="ui-review__risk">${ui.StatusPill({ tone: high ? 'review' : 'neutral', label: high ? 'High impact' : 'Low impact' })}<span>${p.why}</span></p>
+${p.warnings && p.warnings.length ? html`<div class="ui-flash ui-flash--danger" role="alert">${p.warnings.map((w) => html`<p>${w}</p>`)}</div>` : ''}
+${ui.Section({ title: 'When you confirm', body: html`<ul class="ui-card ui-effects">${p.effects.map((e) => html`<li>${e}</li>`)}</ul>` })}
+${p.rows && p.rows.length ? ui.Section({ title: 'Details', body: html`<dl class="ui-card ui-kv">${p.rows.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>` }) : ''}
+${p.items && p.items.length ? ui.Section({ title: 'Line items', body: html`<ul class="ui-card ui-plainlist">${p.items.map((i) => html`<li>${i}</li>`)}</ul>` }) : ''}
+${p.text ? ui.Section({ title: p.textLabel || 'Details', body: html`<div class="ui-card ui-text">${p.text.split(/\n{2,}/).map((para) => html`<p>${para}</p>`)}</div>` }) : ''}
+<p class="ui-review__note">Proposed by ${who(a.proposed_by)} via ${a.source}. This preview was built from the records, not by a model. If anything changes before you confirm, it expires instead of running.</p>
+${open ? html`<div class="ui-confirm">
+  <form method="post" action="/command/actions/${a.id}/confirm" class="ui-form">${csrf(ctx)}<input type="hidden" name="digest" value="${a.digest}">
+    ${needsPassword ? field('password', 'Your password — required for high-impact actions after 12 hours', html`<input class="ui-input" id="password" name="password" type="password" autocomplete="current-password" required>`) : ''}
+    ${high
+    ? html`<button class="ui-btn ui-btn--primary ui-hold" type="submit" data-hold data-block><span class="ui-hold__fill" aria-hidden="true"></span><span class="ui-hold__label" data-hold-label>Confirm</span></button><p class="ui-hold__hint" data-hold-hint hidden aria-live="polite">Press and hold to confirm — or press twice.</p>`
+    : ui.Button({ label: 'Confirm', variant: 'primary', attrs: 'data-block' })}
+  </form>
+  <form method="post" action="/command/actions/${a.id}/cancel">${csrf(ctx)}${ui.Button({ label: 'Cancel — change nothing', variant: 'secondary', attrs: 'data-block' })}</form>
+</div>` : html`<p class="ui-flash ${a.status === 'failed' || a.status === 'expired' ? 'ui-flash--danger' : ''}" role="status">This action was ${a.status}${a.result && a.result.message ? html`: ${a.result.message}` : ''}${a.error ? html` — ${a.error}` : ''}.</p>`}
 </article>`,
   });
 }
 
 // ── Agent Studio ──────────────────────────────────────────────────────
-const STATE_DOT = { working: 'ok', idle: 'neutral', queued: 'neutral', failing: 'act', paused: 'watch' };
+const AGENT_ICON = { sales: 'cash', project_manager: 'brief', talent: 'person', production: 'projects', qa: 'approvals', client_success: 'command', command: 'spark', orchestrator: 'update' };
+const AGENT_STATE = { working: ['success', 'Working'], queued: ['neutral', 'Queued'], idle: ['neutral', 'Idle'], failing: ['danger', 'Failing'], paused: ['attention', 'Paused'] };
+const JOB_DOT = { succeeded: 'success', failed: 'danger', running: 'review', queued: 'neutral', cancelled: 'neutral' };
 function agents(ctx, { agents: list, failed, recent, provider, spent, budget, paused }) {
   const usd = (micros) => `$${(micros / 1e6).toFixed(2)}`;
-  const review = (jobId) => html`<form method="post" action="/command/actions">${csrf(ctx)}<input type="hidden" name="type" value="retry_task"><input type="hidden" name="target" value="${jobId}"><button class="c-btn c-btn--small" type="submit">Retry</button></form>`;
+  const running = list.reduce((k, a) => k + a.running, 0);
+  const queued = list.reduce((k, a) => k + a.queued, 0);
+  const [tone, state] = paused ? ['attention', 'Automation is paused'] : failed.length ? ['danger', `${failed.length} failed task${failed.length === 1 ? '' : 's'} need you`] : ['success', 'Operating normally'];
   return shell(ctx, {
     title: 'Agent Studio', tab: 'agents',
-    body: html`<h1 class="c-serif c-h1 c-h1--page">Agent Studio</h1>
-<section class="c-card"><dl class="c-kv"><dt>Model</dt><dd>${provider}</dd><dt>AI spend this month</dt><dd>${usd(spent)} of $${budget}<meter min="0" max="${budget}" value="${spent / 1e6}" high="${budget * 0.75}" optimum="0" aria-label="AI budget used">${usd(spent)}</meter></dd><dt>Automation</dt><dd>${paused ? 'Paused' : 'Running'}</dd></dl></section>
-<section class="c-section"><h2 class="c-section-title">Agents</h2><ul class="c-cards">${list.map((a) => {
-    const def = REGISTRY[a.id];
-    return html`<li class="c-card"><div class="c-project__top">${dot(STATE_DOT[a.state], a.state)}<strong>${def ? def.name : a.id}</strong><span class="c-pill">${a.state}</span>${a.mode !== 'auto' ? html`<span class="c-pill c-pill--warn">${a.mode}</span>` : ''}</div>
-    <p class="c-muted c-small">${def ? def.purpose : ''}</p>
-    <p class="c-small">${a.succeeded} done · ${a.queued} queued · ${a.running} running · ${a.failed ? html`<strong class="c-bad">${a.failed} failed</strong>` : '0 failed'} · ${usd(a.costMonthMicros)} this month</p></li>`;
-  })}</ul></section>
-<section class="c-section"><h2 class="c-section-title">Failures <span class="c-count">${failed.length}</span></h2>
-${failed.length ? html`<ul class="c-cards">${failed.map((j) => html`<li class="c-card"><p><a href="/command/agents/tasks/${j.id}"><strong>${j.agent}.${j.action}</strong></a> ${j.project_code ? html`<span class="c-mono c-small">${j.project_code}</span>` : ''}</p><p class="c-small c-muted">${j.error_kind}: ${j.error}</p>${review(j.id)}</li>`)}</ul>` : empty('No failed tasks.')}
+    body: html`${ui.PageHeader({ title: 'Agent Studio', subtitle: 'Your AI team: what each agent is doing, what failed and what it costs.' })}
+<section class="ui-card ui-status-card" aria-label="Status">
+  <p class="ui-status-card__state">${ui.StatusDot(tone)}<span>${state}</span></p>
+  <p class="ui-status-card__meta">${running} task${running === 1 ? '' : 's'} in progress · ${queued} queued</p>
+  <dl class="ui-kv ui-kv--flat"><div><dt>Model</dt><dd>${provider}</dd></div><div><dt>AI spend this month</dt><dd>${usd(spent)} of $${budget}</dd></div></dl>
+  ${ui.ProgressBar({ value: Math.min(spent / 1e6, budget), max: budget || 1, label: 'AI budget used this month' })}
 </section>
-<section class="c-section"><h2 class="c-section-title">Recent tasks</h2>
-<ul class="c-list">${recent.map((j) => html`<li><a class="c-list__row" href="/command/agents/tasks/${j.id}">${dot(j.status === 'succeeded' ? 'ok' : j.status === 'failed' ? 'act' : j.status === 'running' ? 'watch' : 'neutral')}<span><strong>${j.agent}.${j.action}</strong> <span class="c-small c-muted">${j.project_code || ''} · ${j.brain === 'model' ? (j.simulated ? 'simulated model' : (j.provider || 'model')) : j.brain || '—'} · ${usd(j.cost_micros || 0)}</span></span>${icon('arrow', 'i i--end')}</a></li>`)}</ul>
-</section>`,
+${ui.Section({ title: 'Agents', body: ui.List(list.map((a) => {
+    const [t, label] = AGENT_STATE[a.state] || ['neutral', a.state];
+    const def = REGISTRY[a.id];
+    return { icon: AGENT_ICON[a.id] || 'agents', title: def ? def.name : a.id, meta: `${a.summary}${a.mode === 'rules' ? ' · rules only' : ''} · ${usd(a.costMonthMicros)} this month`, trailing: ui.StatusPill({ tone: t, label: a.state === 'queued' ? `${label} · ${a.queued}` : label }) };
+  }), { cls: 'ui-list--card' }) })}
+${ui.Section({ title: 'Failures', count: failed.length, body: failed.length ? html`<ul class="ui-approvals">${failed.map((j) => html`<li class="ui-card ui-approval">
+  <div class="ui-approval__top"><p class="ui-approval__title">${ui.StatusDot('danger', 'Failed')}${j.agent}.${j.action}</p>${j.project_code ? html`<p class="ui-approval__amount">${j.project_code}</p>` : ''}</div>
+  <p class="ui-approval__detail">${j.error_kind}: ${j.error}</p>
+  <div class="ui-approval__actions">${actionForm(ctx, { type: 'retry_task', target: j.id, label: 'Retry', variant: 'primary' })}${ui.Button({ label: 'Log', href: `/command/agents/tasks/${j.id}`, variant: 'ghost', small: true })}</div>
+</li>`)}</ul>` : ui.EmptyState({ title: 'No failed tasks.' }) })}
+${ui.Section({ title: 'Recent activity', body: recent.length ? ui.List(recent.map((j) => ({ dot: JOB_DOT[j.status] || 'neutral', title: `${j.agent}.${j.action}`, meta: `${j.project_code ? `${j.project_code} · ` : ''}${j.brain === 'model' ? (j.simulated ? 'simulated model' : (j.provider || 'model')) : j.brain || 'not started'} · ${usd(j.cost_micros || 0)} · ${ago(j.finished_at || j.started_at || j.created_at, Date.now())}`, href: `/command/agents/tasks/${j.id}` })), { cls: 'ui-list--card' }) : ui.EmptyState({ title: 'No agent activity yet' }) })}`,
   });
 }
 
 function agentTask(ctx, { job, session, runs, transcript }) {
   const usd = (micros) => `$${(micros / 1e6).toFixed(4)}`;
   const block = (b) => {
-    if (b.type === 'text') return html`<div class="c-turn__text">${richText(b.text)}</div>`;
-    if (b.type === 'tool_use') return html`<div class="c-call"><span class="c-call__name">→ ${b.name}</span><pre>${JSON.stringify(b.input, null, 1)}</pre></div>`;
+    if (b.type === 'text') return html`<div class="ui-turn__text">${richText(b.text)}</div>`;
+    if (b.type === 'tool_use') return html`<div class="ui-call"><span class="ui-call__name">→ ${b.name}</span><pre>${JSON.stringify(b.input, null, 1)}</pre></div>`;
     if (b.type === 'tool_result') {
       const content = Array.isArray(b.content) ? b.content.map((c) => (c.type === 'text' ? c.text : `[${c.type} attached]`)).join('\n') : String(b.content);
-      return html`<div class="c-call ${b.is_error ? 'c-call--error' : ''}"><span class="c-call__name">← result${b.is_error ? ' (refused)' : ''}</span><pre>${content.slice(0, 3000)}</pre></div>`;
+      return html`<div class="ui-call ${b.is_error ? 'ui-call--error' : ''}"><span class="ui-call__name">← result${b.is_error ? ' (refused)' : ''}</span><pre>${content.slice(0, 3000)}</pre></div>`;
     }
-    if (b.type === 'thinking') return html`<p class="c-small c-muted">Reasoning (not shown)</p>`;
+    if (b.type === 'thinking') return html`<p class="ui-turn__note">Reasoning (not shown)</p>`;
     return '';
   };
   const simulated = runs.some((r) => r.provider === 'simulated');
+  const brain = session ? (session.brain === 'model' ? `model (${simulated ? 'SIMULATED' : session.provider})` : 'rules') : 'not started';
   return shell(ctx, {
     title: `Task ${job.id}`, tab: 'agents', back: '/command/agents',
-    body: html`<p class="c-eyebrow">Agent task #${job.id}</p><h1 class="c-serif c-h1">${job.agent}.${job.action}</h1>
-<p class="c-muted">${job.status} · ${job.attempts}/${job.max_attempts} attempt(s) · ${session ? (session.brain === 'model' ? `model (${simulated ? 'SIMULATED' : session.provider})` : 'rules') : 'not started'}${session ? ` · ${session.turns} turn(s) · ${session.tool_calls} tool call(s) · ${usd(session.cost_micros)}` : ''}</p>
-${job.error ? html`<p class="c-flash c-flash--error">${job.error_kind}: ${job.error}</p>` : ''}
-${simulated ? html`<p class="c-flash">Simulated model: these turns came from a scripted test double, not a real provider.</p>` : ''}
-<section class="c-section"><h2 class="c-section-title">Execution log</h2>
-${!session ? empty('Not started.') : session.brain === 'rules'
-    ? html`<ol class="c-log">${transcript.map((e, i) => html`<li class="c-turn"><p class="c-label">Step ${i + 1} · rules</p><div class="c-call"><span class="c-call__name">→ ${e.tool}</span><pre>${JSON.stringify(e.input, null, 1)}</pre></div><div class="c-call"><span class="c-call__name">← result</span><pre>${String(e.result).slice(0, 3000)}</pre></div></li>`)}</ol>`
-    : html`<ol class="c-log">${transcript.map((m, i) => html`<li class="c-turn c-turn--${m.role}"><p class="c-label">${i === 0 ? 'Task' : m.role === 'assistant' ? 'Agent' : 'Tool results'}</p>${Array.isArray(m.content) ? m.content.map(block) : html`<div class="c-turn__text">${richText(String(m.content))}</div>`}</li>`)}</ol>`}
-</section>
-<section class="c-section"><h2 class="c-section-title">Model calls</h2>
-${runs.length ? html`<ul class="c-list">${runs.map((r) => html`<li class="c-list__row"><span><strong>${r.task.split('#')[1] ? `Turn ${r.task.split('#')[1]}` : r.task}</strong> <span class="c-small c-muted">${r.provider} · ${r.model_served || r.model_requested || '—'} · ${r.input_tokens}/${r.output_tokens} tokens · ${usd(r.cost_micros)} · ${r.status}</span></span></li>`)}</ul>` : empty('No model calls.')}
-</section>
-<a class="c-link" href="/admin/ops/tasks/${job.id}">Open in the studio dashboard</a>`,
+    body: html`${ui.PageHeader({ eyebrow: `Agent task #${job.id}`, title: `${job.agent}.${job.action}`, subtitle: `${job.status} · ${job.attempts}/${job.max_attempts} attempt(s) · ${brain}${session ? ` · ${session.turns} turn(s) · ${session.tool_calls} tool call(s) · ${usd(session.cost_micros)}` : ''}` })}
+${job.error ? html`<p class="ui-flash ui-flash--danger" role="alert">${job.error_kind}: ${job.error}</p>` : ''}
+${simulated ? html`<p class="ui-flash" role="note">Simulated model: these turns came from a scripted test double, not a real provider.</p>` : ''}
+${ui.Section({ title: 'Execution log', body: !session ? ui.EmptyState({ title: 'Not started yet' }) : session.brain === 'rules'
+    ? html`<ol class="ui-log">${transcript.map((e, i) => html`<li class="ui-turn"><p class="ui-overline">Step ${i + 1} · rules</p><div class="ui-call"><span class="ui-call__name">→ ${e.tool}</span><pre>${JSON.stringify(e.input, null, 1)}</pre></div><div class="ui-call"><span class="ui-call__name">← result</span><pre>${String(e.result).slice(0, 3000)}</pre></div></li>`)}</ol>`
+    : html`<ol class="ui-log">${transcript.map((m, i) => html`<li class="ui-turn ui-turn--${m.role}"><p class="ui-overline">${i === 0 ? 'Task' : m.role === 'assistant' ? 'Agent' : 'Tool results'}</p>${Array.isArray(m.content) ? m.content.map(block) : html`<div class="ui-turn__text">${richText(String(m.content))}</div>`}</li>`)}</ol>` })}
+${ui.Section({ title: 'Model calls', count: runs.length, body: runs.length ? ui.List(runs.map((r) => ({ title: r.task.split('#')[1] ? `Turn ${r.task.split('#')[1]}` : r.task, meta: `${r.provider} · ${r.model_served || r.model_requested || '—'} · ${r.input_tokens}/${r.output_tokens} tokens · ${usd(r.cost_micros)}`, trailing: r.status })), { cls: 'ui-list--card' }) : ui.EmptyState({ title: 'No model calls' }) })}
+<div class="ui-actions-bar">${ui.Button({ label: 'Open in the studio dashboard', href: `/admin/ops/tasks/${job.id}`, variant: 'ghost' })}</div>`,
   });
 }
 
@@ -446,45 +440,51 @@ ${conversations.length && !conversation ? ui.Section({ title: 'Recent conversati
 
 // ── Performance ───────────────────────────────────────────────────────
 function performance(ctx, { period, periodName, weeks, months, eff }) {
-  const chips = [['this_week', 'Week'], ['this_month', 'Month'], ['last_month', 'Last month'], ['year_to_date', 'Year']];
+  const periods = [['this_week', 'Week'], ['this_month', 'Month'], ['last_month', 'Last month'], ['year_to_date', 'Year']];
   const max = Math.max(1, ...weeks.map((w) => Math.max(w.revenue, w.expenses)));
   const W = 320; const H = 120; const bw = W / weeks.length;
   const bars = weeks.map((w, i) => {
     const rh = Math.round((w.revenue / max) * (H - 18));
     const eh = Math.round((w.expenses / max) * (H - 18));
-    return `<rect class="bar ${w.partial ? 'bar--partial' : ''}" x="${(i * bw + 3).toFixed(1)}" y="${H - 14 - rh}" width="${(bw * 0.62 - 3).toFixed(1)}" height="${Math.max(rh, 1)}"><title>Week of ${w.week}: ${whole(w.revenue)} in</title></rect><rect class="bar bar--exp" x="${(i * bw + bw * 0.62).toFixed(1)}" y="${H - 14 - eh}" width="${(bw * 0.3).toFixed(1)}" height="${Math.max(eh, 1)}"><title>Week of ${w.week}: ${whole(w.expenses)} out</title></rect>`;
+    return `<rect class="ui-bars__in ${w.partial ? 'is-partial' : ''}" x="${(i * bw + 3).toFixed(1)}" y="${H - 14 - rh}" width="${(bw * 0.58 - 3).toFixed(1)}" height="${Math.max(rh, 1)}"><title>Week of ${w.week}: ${whole(w.revenue)} in</title></rect><rect class="ui-bars__out" x="${(i * bw + bw * 0.58).toFixed(1)}" y="${H - 14 - eh}" width="${(bw * 0.3).toFixed(1)}" height="${Math.max(eh, 1)}"><title>Week of ${w.week}: ${whole(w.expenses)} out</title></rect>`;
   }).join('');
-  const nd = (n) => html`<span class="c-muted">Not enough data yet${n !== undefined ? ` (${n})` : ''}</span>`;
-  const days = (d) => (d === null ? nd() : `${d.toFixed(1)} days`);
+  const none = (n) => html`<span class="ui-muted">Not enough data${n !== undefined ? ` (${n})` : ''}</span>`;
+  const days = (d) => (d === null ? none() : `${d.toFixed(1)} days`);
+  const rate = (x, k) => (k ? html`${pct(x)} <span class="ui-muted">of ${k}</span>` : none(0));
   return shell(ctx, {
-    title: 'Performance', tab: 'performance', wide: true,
-    body: html`<h1 class="c-serif c-h1 c-h1--page">Performance</h1>
-<nav class="c-chips" aria-label="Period">${chips.map(([k, l]) => html`<a class="c-chip" href="/command/performance?period=${k}" ${periodName === k ? raw('aria-current="true"') : ''}>${l}</a>`)}</nav>
-<div class="c-kpis">
-  <div class="c-kpi"><p class="c-kpi__label">Revenue</p><p class="c-kpi__value">${whole(period.revenue)}</p><p class="c-kpi__sub">${period.payments} verified payment(s)${period.simulatedRevenue ? html`<br><span class="c-sim">incl. ${whole(period.simulatedRevenue)} simulated</span>` : ''}</p></div>
-  <div class="c-kpi"><p class="c-kpi__label">Expenses</p><p class="c-kpi__value">${whole(period.expenses)}</p><p class="c-kpi__sub">Contractors ${whole(period.contractorCosts)} · AI ${money(period.aiCents)}</p></div>
-  <div class="c-kpi"><p class="c-kpi__label">Profit</p><p class="c-kpi__value">${whole(period.profit)}</p><p class="c-kpi__sub">${period.margin === null ? 'No revenue' : `${pct(period.margin)} margin`}</p></div>
-  <div class="c-kpi"><p class="c-kpi__label">Booked</p><p class="c-kpi__value">${whole(period.booked)}</p><p class="c-kpi__sub">Quotes accepted</p></div>
+    title: 'Performance', tab: 'performance', back: '/command', wide: true,
+    body: html`${ui.PageHeader({ title: 'Performance', subtitle: 'Cash basis: verified payments received minus recorded costs, AI and external services.' })}
+${ui.SegmentedTabs(periods.map(([k, l]) => ({ label: l, href: `/command/performance?period=${k}`, current: periodName === k })), { label: 'Period' })}
+<div class="ui-grid4">
+  ${ui.StatCard({ label: 'Revenue', value: whole(period.revenue), sub: html`${period.payments} verified payment${period.payments === 1 ? '' : 's'}${period.simulatedRevenue ? html` · <span class="ui-sim">${whole(period.simulatedRevenue)} simulated</span>` : ''}` })}
+  ${ui.StatCard({ label: 'Expenses', value: whole(period.expenses), sub: 'Contractors, costs, AI, services' })}
+  ${ui.StatCard({ label: 'Profit', value: whole(period.profit), sub: period.margin === null ? 'No revenue in the period' : `${pct(period.margin)} margin` })}
+  ${ui.StatCard({ label: 'Booked', value: whole(period.booked), sub: 'Value of quotes accepted' })}
 </div>
-<section class="c-card"><h2 class="c-label">Last 12 weeks</h2>
-  <figure class="c-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Weekly money in and out for the last 12 weeks; detail in the table below">${raw(bars)}<line class="axis" x1="0" x2="${W}" y1="${H - 14}" y2="${H - 14}"/><text class="tick" x="0" y="${H - 2}">${weeks[0].week.slice(5)}</text><text class="tick" x="${W}" y="${H - 2}" text-anchor="end">now</text></svg>
-  <figcaption class="c-legend"><span class="c-legend__in">Money in</span><span class="c-legend__out">Money out</span></figcaption></figure>
-</section>
-<section class="c-card"><h2 class="c-label">By month</h2>
-<div class="c-table-wrap"><table class="c-table"><thead><tr><th scope="col">Month</th><th scope="col" class="r">In</th><th scope="col" class="r">Out</th><th scope="col" class="r">Profit</th><th scope="col" class="r">Margin</th></tr></thead>
-<tbody>${months.map((m) => html`<tr><th scope="row">${m.month}${m.partial ? '*' : ''}</th><td class="r">${whole(m.revenue)}</td><td class="r">${whole(m.expenses)}</td><td class="r">${whole(m.profit)}</td><td class="r">${pct(m.margin)}</td></tr>`)}</tbody></table></div>
-<p class="c-note">* month to date. Cash basis: verified payments minus recorded costs, AI and external services.</p></section>
-<div class="c-grid">
-<section class="c-card"><h2 class="c-label">Turnaround</h2><dl class="c-kv">
-  <dt>Inquiry → quote sent</dt><dd>${days(eff.turnaround.inquiryToQuote)}</dd>
-  <dt>Deposit → production</dt><dd>${days(eff.turnaround.depositToProduction)}</dd>
-  <dt>Inquiry → completed</dt><dd>${days(eff.turnaround.inquiryToCompletion)}</dd></dl></section>
-<section class="c-card"><h2 class="c-label">Production efficiency</h2><dl class="c-kv">
-  <dt>QA pass on first version</dt><dd>${eff.qaSample ? html`${pct(eff.qaFirstPass)} <span class="c-muted">of ${eff.qaSample}</span>` : nd(0)}</dd>
-  <dt>Submissions needing changes</dt><dd>${eff.revisionSample ? html`${pct(eff.revisionRate)} <span class="c-muted">of ${eff.revisionSample}</span>` : nd(0)}</dd>
-  <dt>Contractor work on time</dt><dd>${eff.onTimeSample ? html`${pct(eff.onTime)} <span class="c-muted">of ${eff.onTimeSample}</span>` : nd(0)}</dd>
-  <dt>Offer response time</dt><dd>${eff.offerSample ? `${eff.offerResponseHours.toFixed(1)} h` : nd(0)}</dd>
-  <dt>Automation rate</dt><dd>${eff.automationRate === null ? nd() : html`${pct(eff.automationRate)} <span class="c-muted">${eff.automationBasis.agentSteps} agent / ${eff.automationBasis.routineHumanSteps} routine human steps</span>`}</dd></dl></section>
+${ui.Section({ title: 'Where the money went', body: ui.List([
+    { title: 'Contractor fees', meta: 'Signed-off work, paid outside the system', trailing: money(period.contractorCosts) },
+    { title: 'Other recorded costs', trailing: money(period.otherCosts) },
+    { title: 'AI models', trailing: money(period.aiCents) },
+    { title: 'External services', meta: 'INDEX V3 / FORM', trailing: money(period.externalCents) },
+  ], { cls: 'ui-list--card' }) })}
+${ui.Section({ title: 'Last 12 weeks', body: html`<figure class="ui-card ui-chart"><svg class="ui-bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="Money in and out per week for the last 12 weeks; the figures are in the monthly table below">${raw(bars)}<line class="ui-bars__axis" x1="0" x2="${W}" y1="${H - 14}" y2="${H - 14}"/><text class="ui-bars__tick" x="0" y="${H - 2}">${weeks[0].week.slice(5)}</text><text class="ui-bars__tick" x="${W}" y="${H - 2}" text-anchor="end">now</text></svg>
+<figcaption class="ui-legend"><span class="ui-legend__in">Money in</span><span class="ui-legend__out">Money out</span></figcaption></figure>` })}
+${ui.Section({ title: 'By month', body: html`<div class="ui-card ui-table-card"><table class="ui-table"><thead><tr><th scope="col">Month</th><th scope="col" class="r">In</th><th scope="col" class="r">Out</th><th scope="col" class="r">Profit</th><th scope="col" class="r">Margin</th></tr></thead>
+<tbody>${months.map((m) => html`<tr><th scope="row">${m.month}${m.partial ? '*' : ''}</th><td class="r">${whole(m.revenue)}</td><td class="r">${whole(m.expenses)}</td><td class="r">${whole(m.profit)}</td><td class="r">${pct(m.margin)}</td></tr>`)}</tbody></table>
+<p class="ui-note">* month to date</p></div>` })}
+<div class="ui-two">
+${ui.Section({ title: 'Turnaround', body: ui.List([
+    { title: 'Inquiry → quote sent', trailing: days(eff.turnaround.inquiryToQuote) },
+    { title: 'Deposit → production', trailing: days(eff.turnaround.depositToProduction) },
+    { title: 'Inquiry → completed', trailing: days(eff.turnaround.inquiryToCompletion) },
+  ], { cls: 'ui-list--card' }) })}
+${ui.Section({ title: 'Production efficiency', body: ui.List([
+    { title: 'QA pass on first version', trailing: rate(eff.qaFirstPass, eff.qaSample) },
+    { title: 'Submissions needing changes', trailing: rate(eff.revisionRate, eff.revisionSample) },
+    { title: 'Contractor work on time', trailing: rate(eff.onTime, eff.onTimeSample) },
+    { title: 'Offer response time', trailing: eff.offerSample ? `${eff.offerResponseHours.toFixed(1)} h` : none(0) },
+    { title: 'Automation rate', meta: eff.automationRate === null ? '' : `${eff.automationBasis.agentSteps} agent / ${eff.automationBasis.routineHumanSteps} routine human steps`, trailing: eff.automationRate === null ? none() : pct(eff.automationRate) },
+  ], { cls: 'ui-list--card' }) })}
 </div>`,
   });
 }
@@ -492,83 +492,78 @@ function performance(ctx, { period, periodName, weeks, months, eff }) {
 // ── Settings ──────────────────────────────────────────────────────────
 const MODE_HELP = { auto: 'Model when available', rules: 'Rules only, never a model', paused: 'Paused — tasks wait' };
 function settings(ctx, { values, providers, devices, integrationsConnected, vapidKey, kinds }) {
-  const sel = (name, options, value, id) => html`<select id="${id || name}" name="${name}">${options.map(([v, l]) => html`<option value="${v}" ${String(value) === String(v) ? raw('selected') : ''}>${l}</option>`)}</select>`;
+  const select = (name, options, value) => html`<select class="ui-input ui-select" id="${name}" name="${name}">${options.map(([v, l]) => html`<option value="${v}" ${String(value) === String(v) ? raw('selected') : ''}>${l}</option>`)}</select>`;
+  const check = (name, label, checked, disabled = false) => html`<label class="ui-check"><input type="checkbox" name="${name}" value="true" ${checked ? raw('checked') : ''} ${disabled ? raw('disabled') : ''}><span>${label}</span></label>`;
   const toolSummary = (agentId) => {
-    const def = REGISTRY[agentId];
     const names = new Set();
-    for (const a of Object.values(def.actions)) for (const t of a.tools) if (t !== 'submit_result') names.add(t);
-    const by = { read: [], internal: [], draft: [], external: [] };
-    for (const n of names) (by[TOOLS[n].effect] || []).push(n);
-    return html`<p class="c-small c-muted">Reads ${by.read.length} · records ${by.internal.length} · drafts ${by.draft.length}${by.external.length ? ` · external ${by.external.length} (only with autonomous production)` : ''}</p>`;
+    for (const a of Object.values(REGISTRY[agentId].actions)) for (const t of a.tools) if (t !== 'submit_result') names.add(t);
+    const by = { read: 0, internal: 0, draft: 0, external: 0 };
+    for (const n of names) by[TOOLS[n].effect] += 1;
+    return `Reads ${by.read} · records ${by.internal} · drafts ${by.draft}${by.external ? ` · external ${by.external} (only with autonomous production)` : ''}`;
   };
   return shell(ctx, {
-    title: 'Settings', tab: 'settings',
-    body: html`<h1 class="c-serif c-h1 c-h1--page">Settings</h1>
-
-<section class="c-card" id="notifications" aria-labelledby="n-h"><h2 id="n-h" class="c-label">Notifications</h2>
-  <div class="c-push" data-push data-key="${vapidKey}">
-    <p class="c-small" data-push-status>Push notifications: ${devices} device(s) registered.</p>
-    <button class="c-btn" type="button" data-push-enable hidden>Enable on this device</button>
-    <button class="c-btn c-btn--ghost" type="button" data-push-disable hidden>Turn off on this device</button>
-    <p class="c-small c-muted">On iPhone, add Command to your Home Screen first (Share → Add to Home Screen). Pushes carry no business data; your phone fetches the details over your signed-in session.</p>
+    title: 'Settings', tab: 'settings', back: '/command',
+    body: html`${ui.PageHeader({ title: 'Settings' })}
+${ui.Section({ title: 'Notifications', id: 'notifications', body: html`<div class="ui-card">
+  <div class="ui-push" data-push data-key="${vapidKey}">
+    <p class="ui-push__status" data-push-status>Push notifications: ${devices} device${devices === 1 ? '' : 's'} registered.</p>
+    <div class="ui-row-actions"><button class="ui-btn ui-btn--primary ui-btn--small" type="button" data-push-enable hidden>Enable on this device</button><button class="ui-btn ui-btn--secondary ui-btn--small" type="button" data-push-disable hidden>Turn off on this device</button></div>
+    <p class="ui-field__help">On iPhone, add Command to your Home Screen first (Share → Add to Home Screen). Pushes carry no business data; your phone fetches the details over your signed-in session.</p>
   </div>
-  <form method="post" action="/command/settings/preferences" class="c-form">${csrf(ctx)}
-    <fieldset><legend>Send a push for</legend>
-    ${kinds.map(([k, label]) => html`<label class="c-check"><input type="checkbox" name="push_${k}" value="true" ${values[`push_${k}`] ? raw('checked') : ''}> ${label}</label>`)}</fieldset>
-    <label for="brief_hour">Morning Brief time</label>${sel('brief_hour', Array.from({ length: 24 }, (_, h) => [h, `${String(h).padStart(2, '0')}:00`]), values.brief_hour)}
-    <label for="timezone">Time zone</label><div class="c-row"><input id="timezone" name="timezone" value="${values.timezone}" autocapitalize="none" spellcheck="false"><button class="c-btn c-btn--small c-btn--ghost" type="button" data-tz-fill>Use this device's</button></div>
-    <button class="c-btn c-btn--primary" type="submit">Save preferences</button>
+  <form method="post" action="/command/settings/preferences" class="ui-form">${csrf(ctx)}
+    <fieldset class="ui-fieldset"><legend class="ui-field__label">Send a push for</legend>${kinds.map(([k, label]) => check(`push_${k}`, label, values[`push_${k}`]))}</fieldset>
+    ${field('brief_hour', 'Morning Brief time', select('brief_hour', Array.from({ length: 24 }, (_, h) => [h, `${String(h).padStart(2, '0')}:00`]), values.brief_hour))}
+    ${field('timezone', 'Time zone', html`<div class="ui-row-actions"><input class="ui-input" id="timezone" name="timezone" value="${values.timezone}" autocapitalize="none" spellcheck="false"><button class="ui-btn ui-btn--secondary ui-btn--small" type="button" data-tz-fill>Use this device’s</button></div>`)}
+    ${ui.Button({ label: 'Save preferences', variant: 'primary' })}
   </form>
-</section>
-
-<section class="c-card" id="permissions" aria-labelledby="p-h"><h2 id="p-h" class="c-label">Agent permissions</h2>
-  <p class="c-small c-muted">Each agent's tools are fixed in code: none can send, approve, pay, release files or change settings. Here you choose how each one runs. Changes are previewed and confirmed.</p>
-  <form method="post" action="/command/settings/changes" class="c-form">${csrf(ctx)}
-  ${ctx.app.settings.AGENT_IDS.map((id) => html`<div class="c-agent-setting"><label for="agent_mode_${id}"><strong>${REGISTRY[id].name}</strong></label>${toolSummary(id)}${sel(`agent_mode_${id}`, ctx.app.settings.AGENT_MODES.map((m) => [m, `${m} — ${MODE_HELP[m]}`]), values[`agent_mode_${id}`])}</div>`)}
-  <label class="c-check"><input type="checkbox" name="orchestrator_paused" value="true" ${values.orchestrator_paused ? raw('checked') : ''}> Pause all automation</label>
-  <label class="c-check"><input type="checkbox" name="autonomous_production" value="true" ${values.autonomous_production ? raw('checked') : ''} ${integrationsConnected || values.autonomous_production ? '' : raw('disabled')}> Autonomous production (INDEX V3 / FORM)${integrationsConnected ? '' : html` <span class="c-muted c-small">— connect a service first</span>`}</label>
-  <input type="hidden" name="section" value="permissions">
-  <button class="c-btn c-btn--primary" type="submit">Review changes</button></form>
-</section>
-
-<section class="c-card" id="providers" aria-labelledby="m-h"><h2 id="m-h" class="c-label">Model provider</h2>
-  <form method="post" action="/command/settings/changes" class="c-form">${csrf(ctx)}<input type="hidden" name="section" value="provider">
-  <fieldset><legend class="c-sr">Provider</legend>
-  ${[['auto', 'Automatic', 'Anthropic if configured, else OpenAI, else rules'], ...providers.map((p) => [p.id, p.label, p.configured ? `${p.model} · configured${p.simulated ? ' (SIMULATED test double)' : ''}` : `Not configured — ${p.missing}`]), ['rules', 'Rules only', 'No model calls at all']].map(([v, l, d]) => html`<label class="c-radio"><input type="radio" name="ai_provider" value="${v}" ${values.ai_provider === v ? raw('checked') : ''} ${v !== 'auto' && v !== 'rules' && !providers.find((p) => p.id === v).configured ? raw('disabled') : ''}><span><strong>${l}</strong><span class="c-small c-muted">${d}</span></span></label>`)}
+</div>` })}
+${ui.Section({ title: 'Agent permissions', id: 'permissions', body: html`<div class="ui-card">
+  <p class="ui-field__help">Each agent’s tools are fixed in code: none can send, approve, pay, release files or change settings. Here you choose how each one runs. Changes are previewed and confirmed.</p>
+  <form method="post" action="/command/settings/changes" class="ui-form">${csrf(ctx)}<input type="hidden" name="section" value="permissions">
+  ${ctx.app.settings.AGENT_IDS.map((id) => field(`agent_mode_${id}`, REGISTRY[id].name, select(`agent_mode_${id}`, ctx.app.settings.AGENT_MODES.map((m) => [m, `${m} — ${MODE_HELP[m]}`]), values[`agent_mode_${id}`]), toolSummary(id)))}
+  ${check('orchestrator_paused', 'Pause all automation', values.orchestrator_paused)}
+  ${check('autonomous_production', integrationsConnected ? 'Autonomous production (INDEX V3 / FORM)' : 'Autonomous production (INDEX V3 / FORM) — connect a service first', values.autonomous_production, !(integrationsConnected || values.autonomous_production))}
+  ${ui.Button({ label: 'Review changes', variant: 'primary' })}</form>
+</div>` })}
+${ui.Section({ title: 'Model provider', id: 'providers', body: html`<div class="ui-card">
+  <form method="post" action="/command/settings/changes" class="ui-form">${csrf(ctx)}<input type="hidden" name="section" value="provider">
+  <fieldset class="ui-fieldset"><legend class="c-sr">Provider</legend>
+  ${[['auto', 'Automatic', 'Anthropic if configured, else OpenAI, else rules'], ...providers.map((pr) => [pr.id, pr.label, pr.configured ? `${pr.model} · configured${pr.simulated ? ' (SIMULATED test double)' : ''}` : `Not configured — ${pr.missing}`]), ['rules', 'Rules only', 'No model calls at all']].map(([v, l, d]) => html`<label class="ui-radio"><input type="radio" name="ai_provider" value="${v}" ${values.ai_provider === v ? raw('checked') : ''} ${v !== 'auto' && v !== 'rules' && !providers.find((pr) => pr.id === v).configured ? raw('disabled') : ''}><span><strong>${l}</strong><span class="ui-field__help">${d}</span></span></label>`)}
   </fieldset>
-  <button class="c-btn c-btn--primary" type="submit">Review change</button></form>
-  <p class="c-small c-muted">API keys are set on the server (environment), never in this app.</p>
-</section>
-
-<section class="c-card" id="budgets" aria-labelledby="b-h"><h2 id="b-h" class="c-label">Operational budgets</h2>
-  <form method="post" action="/command/settings/changes" class="c-form">${csrf(ctx)}<input type="hidden" name="section" value="budgets">
-  ${['ai_monthly_budget_usd', 'ai_project_budget_usd', 'external_project_budget_usd', 'external_job_estimate_usd', 'unusual_expense_usd'].map((k) => html`<label for="${k}">${ctx.app.settings.DEFINITIONS[k].label}</label><input id="${k}" name="${k}" value="${values[k]}" inputmode="decimal">`)}
-  <button class="c-btn c-btn--primary" type="submit">Review changes</button></form>
-</section>
-
-<section class="c-card" aria-labelledby="s-h"><h2 id="s-h" class="c-label">Session</h2>
-  <p class="c-small c-muted">Signed in as ${ctx.user.email}. Founder access is granted on the server only (FOUNDER_EMAIL or the founder script).</p>
-  <div class="c-row"><form method="post" action="/command/logout">${csrf(ctx)}<button class="c-btn" type="submit">Sign out</button></form>
-  <form method="post" action="/command/logout-all">${csrf(ctx)}<button class="c-btn c-btn--ghost" type="submit">Sign out all devices</button></form></div>
-</section>`,
+  ${ui.Button({ label: 'Review change', variant: 'primary' })}</form>
+  <p class="ui-field__help">API keys are set on the server (environment), never in this app.</p>
+</div>` })}
+${ui.Section({ title: 'Operational budgets', id: 'budgets', body: html`<div class="ui-card"><form method="post" action="/command/settings/changes" class="ui-form">${csrf(ctx)}<input type="hidden" name="section" value="budgets">
+  ${['ai_monthly_budget_usd', 'ai_project_budget_usd', 'external_project_budget_usd', 'external_job_estimate_usd', 'unusual_expense_usd'].map((k) => field(k, ctx.app.settings.DEFINITIONS[k].label, html`<input class="ui-input" id="${k}" name="${k}" value="${values[k]}" inputmode="decimal">`))}
+  ${ui.Button({ label: 'Review changes', variant: 'primary' })}</form></div>` })}
+${ui.Section({ title: 'Session', body: html`<div class="ui-card">
+  <p class="ui-field__help">Signed in as ${ctx.user.email}. Founder access is granted on the server only (FOUNDER_EMAIL or the founder script).</p>
+  <div class="ui-row-actions"><form method="post" action="/command/logout">${csrf(ctx)}${ui.Button({ label: 'Sign out', variant: 'secondary', small: true })}</form>
+  <form method="post" action="/command/logout-all">${csrf(ctx)}${ui.Button({ label: 'Sign out all devices', variant: 'ghost', small: true })}</form></div>
+</div>` })}`,
   });
 }
 
+const SEVERITY_DOT = { info: 'neutral', attention: 'attention', urgent: 'danger' };
 function notifications(ctx, { rows, labels }) {
-  const sev = { info: 'neutral', attention: 'watch', urgent: 'act' };
+  const unread = rows.some((r) => !r.read_at);
   return shell(ctx, {
-    title: 'Notifications', tab: 'notifications',
-    body: html`<div class="c-chat__head"><h1 class="c-serif c-h1 c-h1--page">Notifications</h1>${rows.some((r) => !r.read_at) ? html`<form method="post" action="/command/notifications/read">${csrf(ctx)}<button class="c-btn c-btn--small c-btn--ghost" type="submit">Mark all read</button></form>` : ''}</div>
-${rows.length ? html`<ul class="c-list">${rows.map((n) => html`<li class="${n.read_at ? '' : 'is-unread'}"><a class="c-list__row" href="/command/notifications/${n.id}">${dot(sev[n.severity] || 'neutral')}<span><span class="c-label">${labels[n.kind]} · ${ago(n.created_at, Date.now())}</span><strong>${n.title}</strong>${n.body ? html`<span class="c-small c-muted">${n.body}</span>` : ''}</span></a></li>`)}</ul>` : empty('No notifications yet.')}`,
+    title: 'Notifications', tab: 'notifications', back: '/command',
+    body: html`${ui.PageHeader({ title: 'Notifications', actions: unread ? html`<form method="post" action="/command/notifications/read">${csrf(ctx)}${ui.Button({ label: 'Mark all read', variant: 'secondary', small: true })}</form>` : '' })}
+${rows.length ? html`<ul class="ui-list ui-list--card ui-notices">${rows.map((n) => html`<li class="${n.read_at ? '' : 'is-unread'}">${ui.ListRow({ dot: SEVERITY_DOT[n.severity] || 'neutral', title: n.title, meta: `${labels[n.kind]} · ${ago(n.created_at, Date.now())}${n.body ? ` · ${n.body}` : ''}`, href: `/command/notifications/${n.id}` })}</li>`)}</ul>` : ui.EmptyState({ title: 'No notifications yet', body: 'Paid projects, approvals, failures, delays, risks and unusual expenses will appear here.' })}`,
   });
 }
 
 function more(ctx) {
-  const items = [['brief', '/command/brief', 'Morning Brief', 'Verified events and recommended actions'], ['agents', '/command/agents', 'Agent Studio', 'Status, logs, failures and cost'], ['performance', '/command/performance', 'Performance', 'Revenue, profit, turnaround, efficiency'], ['settings', '/command/settings', 'Settings', 'Notifications, agent permissions, providers, budgets'], ['bell', '/command/notifications', 'Notifications', 'Everything that needed you']];
   return shell(ctx, {
-    title: 'More', tab: 'more',
-    body: html`<h1 class="c-serif c-h1 c-h1--page">More</h1><ul class="c-list c-list--big">${items.map(([i, href, l, d]) => html`<li><a class="c-list__row" href="${href}">${icon(i)}<span><strong>${l}</strong><span class="c-small c-muted">${d}</span></span>${icon('arrow', 'i i--end')}</a></li>`)}</ul>
-<p class="c-small c-muted"><a class="c-link" href="/admin">Open the studio dashboard</a> (separate sign-in)</p>`,
+    title: 'More', tab: 'more', back: '/command',
+    body: html`${ui.PageHeader({ title: 'More' })}${ui.List([
+      { icon: 'brief', title: 'Morning Brief', meta: 'Verified events and recommended actions', href: '/command/brief' },
+      { icon: 'performance', title: 'Performance', meta: 'Revenue, profit, turnaround, efficiency', href: '/command/performance' },
+      { icon: 'bell', title: 'Notifications', href: '/command/notifications' },
+      { icon: 'settings', title: 'Settings', meta: 'Notifications, agent permissions, providers, budgets', href: '/command/settings' },
+      { icon: 'overview', title: 'Studio dashboard', meta: 'Separate sign-in', href: '/admin' },
+    ], { cls: 'ui-list--card' })}`,
   });
 }
 

@@ -362,7 +362,8 @@ test('Morning Brief: verified facts in, unsupported statements out', async (t) =
     const b = await signInFounder(base);
     const page = await b.get('/command/brief');
     assert.match(page.text, /verified facts/);
-    assert.match(page.text, /Sources \(/);
+    assert.match(page.text, />Sources</);
+    assert.match(page.text, /\d+ verified facts/);
   });
 });
 
@@ -540,4 +541,28 @@ test('Overview and Projects show only real figures and real imagery', async (t) 
     assert.match(img.headers.get('cache-control'), /no-store/);
     assert.equal((await new Browser(base).get(`/command/projects/${projectId}/thumb`)).status, 303);
   });
+});
+
+test('project detail: development stages from the records, gallery limited to the project', async (t) => {
+  const { app, base, close } = await startApp(founderEnv);
+  t.after(close);
+  const founder = app.db.get('SELECT * FROM users WHERE email = ?', ADMIN.email);
+  app.contractors.create({ name: 'Sam Okafor', email: 'sam@contractor.test', discipline: 'Technical design', capacity: '3', skills: ['technical_flats', 'tech_pack'], categories: ['Outerwear'], status: 'approved' }, 6000, founder);
+  const { projectId } = await driveWorkflow(app, base, 'production');
+  const other = await driveWorkflow(app, base, 'quote_approval', { ...require('./helpers').INQUIRY, brand_name: 'Other Brand', email: 'other@brand.test' });
+  const p = app.command.metrics.project(projectId);
+  const byLabel = Object.fromEntries(p.stages.map((st) => [st.label, st]));
+  assert.equal(byLabel['Brief & scope'].done, true);
+  assert.equal(byLabel.Deposit.done, true, 'verified deposit');
+  assert.equal(byLabel['Technical development'].done, false);
+  assert.equal(p.stages.filter((st) => st.current).length, 1);
+  assert.equal(p.stages.find((st) => st.current).label, p.stages.find((st) => !st.done).label);
+  assert.ok(!byLabel['Final delivery'].done);
+  const b = await signInFounder(base);
+  const page = (await b.get(`/command/projects/${projectId}`)).text;
+  assert.match(page, /Development progress/);
+  assert.match(page, new RegExp(`${p.stages.filter((st) => st.done).length} of ${p.stages.length} stages`));
+  // Another project's file can never be fetched through this project's gallery.
+  const otherFile = app.db.get('SELECT id FROM files WHERE inquiry_id = ?', app.projects.get(other.projectId).inquiry_id);
+  assert.equal((await b.get(`/command/projects/${projectId}/images/${otherFile.id}`)).status, 404);
 });

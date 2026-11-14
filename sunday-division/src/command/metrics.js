@@ -165,8 +165,45 @@ function createCommandMetrics(app) {
       money: app.projects.profitability(id),
       openActions: db.all("SELECT * FROM human_tasks WHERE project_id = ? AND status = 'open' ORDER BY id", id),
       activity: db.all('SELECT * FROM audit_log WHERE project_id = ? ORDER BY id DESC LIMIT 12', id),
+      stages: developmentStages(p),
+      images: imagesFor(p),
+      category: p.inquiry_id ? (db.get('SELECT garment_category FROM inquiries WHERE id = ?', p.inquiry_id) || {}).garment_category || '' : '',
     };
   }
+
+  /**
+   * The project's development stages, each decided by its records: the scope is agreed when a
+   * quote is accepted, work starts on a verified deposit, each kind of production work is done
+   * when all its tasks are, review when every deliverable is signed off, delivery when the
+   * final files are released and paid for. Only the work the client bought is listed.
+   */
+  const STAGE_GROUPS = [
+    ['Design concepts', ['design']],
+    ['Technical development', ['technical_flats', 'tech_pack', 'measurement_spec']],
+    ['3D & assets', ['garment_3d', 'product_imagery', 'campaign_assets']],
+  ];
+  function developmentStages(p) {
+    const tasks = db.all("SELECT job_type, status FROM tasks WHERE project_id = ? AND kind = 'production'", p.id);
+    const deliverables = db.all('SELECT status, stage FROM deliverables WHERE project_id = ?', p.id);
+    const stages = [
+      { label: 'Brief & scope', done: Boolean(db.get("SELECT 1 FROM quotes WHERE project_id = ? AND status = 'accepted'", p.id)) },
+      { label: 'Deposit', done: app.billing.depositVerified(p.id) },
+    ];
+    for (const [label, types] of STAGE_GROUPS) {
+      const group = tasks.filter((t) => types.includes(t.job_type));
+      if (group.length) stages.push({ label, done: group.every((t) => t.status === 'done'), detail: `${group.filter((t) => t.status === 'done').length} of ${group.length} task${group.length === 1 ? '' : 's'}` });
+    }
+    const finals = deliverables.filter((d) => d.stage === 'final');
+    stages.push({ label: 'Review & sign-off', done: deliverables.length > 0 && deliverables.every((d) => ['approved', 'released'].includes(d.status)) && !n("SELECT COUNT(*) AS n FROM revisions r JOIN deliverables d ON d.id = r.deliverable_id WHERE d.project_id = ? AND r.status = 'open'", p.id) });
+    stages.push({ label: 'Final delivery', done: finals.length > 0 && finals.every((d) => d.status === 'released') && app.billing.finalPaymentVerified(p.id) });
+    const current = stages.findIndex((st) => !st.done);
+    return stages.map((st, i) => ({ ...st, current: i === current }));
+  }
+  /** One of the project's real reference images (never another project's file). */
+  const projectImage = (projectId, fileId) => {
+    const p = db.get('SELECT * FROM projects WHERE id = ?', projectId);
+    return p ? imagesFor(p).find((f) => f.id === fileId) || null : null;
+  };
 
   function weeklyRevenue(weeks = 12) {
     const tzName = tz();
@@ -262,6 +299,30 @@ function createCommandMetrics(app) {
   // ── Project cards ──────────────────────────────────────────────────
   const sizes = new Map();
   /** The client's first reference image, if it is a real picture (not a placeholder pixel). */
+  function imagesFor(p, limit = 12) {
+    const out = [];
+    const files = db.all("SELECT * FROM files WHERE kind = 'reference' AND mime LIKE 'image/%' AND (project_id = ? OR (inquiry_id IS NOT NULL AND inquiry_id = ?)) ORDER BY id LIMIT 40", p.id, p.inquiry_id || -1);
+    for (const f of files) {
+      if (out.length >= limit) break;
+      if (realImage(f)) out.push(f);
+    }
+    return out;
+  }
+  function realImage(f) {
+    if (!sizes.has(f.id)) {
+      let size = null;
+      try {
+        const fd = fs.openSync(app.files.pathOf(f), 'r');
+        const buf = Buffer.alloc(Math.min(f.size, 256 * 1024));
+        fs.readSync(fd, buf, 0, buf.length, 0);
+        fs.closeSync(fd);
+        size = imageSize(buf);
+      } catch { /* unreadable: skip */ }
+      sizes.set(f.id, size);
+    }
+    const size = sizes.get(f.id);
+    return Boolean(size && size.w >= 64 && size.h >= 64);
+  }
   function thumbFor(p) {
     const files = db.all("SELECT * FROM files WHERE kind = 'reference' AND mime LIKE 'image/%' AND (project_id = ? OR (inquiry_id IS NOT NULL AND inquiry_id = ?)) ORDER BY id LIMIT 4", p.id, p.inquiry_id || -1);
     for (const f of files) {
@@ -317,7 +378,7 @@ function createCommandMetrics(app) {
       done: (p) => ['delivered', 'closed', 'cancelled'].includes(p.status),
     };
     const counts = Object.fromEntries(Object.entries(tabs).map(([k, f]) => [k, all.filter(f).length]));
-    return { rows: all.filter(tabs[tab] || tabs.active), counts };
+    return { rows: tab === 'all' ? all : all.filter(tabs[tab] || tabs.active), counts };
   }
   const thumbFile = (projectId) => { const p = db.get('SELECT * FROM projects WHERE id = ?', projectId); return p ? thumbFor(p) : null; };
 
@@ -334,11 +395,27 @@ function createCommandMetrics(app) {
       const queued = counts.queued || 0;
       const failed = counts.failed || 0;
       const state = mode === 'paused' ? 'paused' : failed ? 'failing' : running ? 'working' : queued ? 'queued' : 'idle';
-      return { id, mode, state, running, queued, failed, succeeded: counts.succeeded || 0, lastFailure: last, costMonthMicros: cost, stats: (stats.runs || {})[id] || null };
+      return { id, mode, state, running, queued, failed, succeeded: counts.succeeded || 0, lastFailure: last, costMonthMicros: cost, stats: (stats.runs || {})[id] || null, summary: agentSummary(id) };
     });
   }
+  /** One line per agent describing its current workload, counted from the records. */
+  function agentSummary(id) {
+    const week = new Date(nowMs() - 7 * 864e5).toISOString();
+    const plural = (k, one, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+    switch (id) {
+      case 'sales': return `${plural(n("SELECT COUNT(*) AS n FROM inquiries WHERE kind = 'project' AND created_at >= ?", week), 'inquiry', 'inquiries')} this week · ${plural(n("SELECT COUNT(*) AS n FROM quotes q JOIN projects p ON p.id = q.project_id WHERE q.status = 'draft' AND p.status = 'scoping'"), 'quote draft')}`;
+      case 'project_manager': return `${plural(n("SELECT COUNT(*) AS n FROM projects WHERE status = 'active'"), 'project')} in production`;
+      case 'talent': return `${plural(n("SELECT COUNT(*) AS n FROM assignments WHERE status = 'recommended'"), 'recommendation')} waiting · ${plural(n("SELECT COUNT(*) AS n FROM contractors WHERE status = 'approved'"), 'approved contractor')}`;
+      case 'production': return `${plural(n("SELECT COUNT(*) AS n FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.kind = 'production' AND t.status != 'done' AND p.status = 'active'"), 'production task')} open`;
+      case 'qa': return `${plural(n("SELECT COUNT(*) AS n FROM deliverables WHERE status = 'in_review' AND file_id IS NOT NULL"), 'deliverable')} in review`;
+      case 'client_success': return `${plural(n("SELECT COUNT(*) AS n FROM messages WHERE status = 'draft'") + n("SELECT COUNT(*) AS n FROM status_updates WHERE status = 'draft'"), 'draft')} for your approval`;
+      case 'command': { const b = db.get("SELECT ready_at FROM briefs WHERE status = 'ready' ORDER BY id DESC LIMIT 1"); return b ? `Last brief ${new Intl.DateTimeFormat('en-US', { timeZone: tz(), month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(b.ready_at))}` : 'No brief yet'; }
+      case 'orchestrator': return `${plural(n("SELECT COUNT(*) AS n FROM workflows WHERE state NOT IN ('completed','cancelled','lost')"), 'active workflow')}`;
+      default: return '';
+    }
+  }
 
-  return { money, forPeriod, projectCounts, health, urgent, projects, project, weeklyRevenue, monthly, efficiency, approvalsCount, agents, atRiskProjects, today, trailing, focus, projectCards, thumbFile };
+  return { money, forPeriod, projectCounts, health, urgent, projects, project, weeklyRevenue, monthly, efficiency, approvalsCount, agents, atRiskProjects, today, trailing, focus, projectCards, thumbFile, projectImage };
 }
 
 module.exports = { createCommandMetrics, imageSize };

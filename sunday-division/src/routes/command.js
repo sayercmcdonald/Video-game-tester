@@ -99,7 +99,14 @@ function register(router, app) {
   router.get('/command/projects/:id', F, (ctx) => {
     const p = m().project(int(ctx.params.id));
     if (!p) throw new HttpError(404, 'Project not found.');
-    ctx.html(views.project(ctx, { p, states: app.orchestrator.STATES }));
+    const card = m().projectCards('all').rows.find((r) => r.id === p.id) || null;
+    ctx.html(views.project(ctx, { p, card }));
+  });
+  // A project's own reference images for its gallery: founder-only, never cached on the device.
+  router.get('/command/projects/:id/images/:file', F, (ctx) => {
+    const f = m().projectImage(int(ctx.params.id), int(ctx.params.file));
+    if (!f || !/^image\/(jpeg|png|webp)$/.test(f.mime)) throw new HttpError(404, 'No image.');
+    ctx.send(200, fs.readFileSync(app.files.pathOf(f)), { 'Content-Type': f.mime, 'Cache-Control': 'private, no-store', 'Content-Disposition': 'inline' });
   });
 
   router.get('/command/approvals', F, (ctx) => ctx.html(views.approvals(ctx, { items: app.command.approvals() })));
