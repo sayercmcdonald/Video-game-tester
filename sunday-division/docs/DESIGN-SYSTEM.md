@@ -62,6 +62,7 @@ Rules the components enforce:
 | `--sd-warm-white` | `#F4EFE7` | text on dark · the page on light |
 | `--sd-sage` | `#71977B` | operating / success (dark) |
 | `--sd-mist` / `--sd-stone` | `#B3AB9F` / `#8F887D` | secondary (8.3:1) / tertiary (5.4:1) text on dark |
+| `--sd-field` | `#757067` | form-field outlines on dark (≥ 3.1:1 on every dark surface) |
 | `--sd-paper` | `#FBF8F3` | raised surfaces on light |
 | `--sd-umber` / `--sd-taupe` | `#45403A` / `#625C54` | secondary (9.0:1) / tertiary (5.8:1) text on light |
 | `--sd-sage-deep`, `--sd-amber-deep`, `--sd-clay-deep` | `#476A52`, `#7A5A22`, `#8C3A2B` | status text on light (≥ 5.3:1) |
@@ -103,4 +104,9 @@ The Command hero is an original rendered fabric texture (`public/command/hero-dr
 
 ## 9. Known limitations
 
-See [`RELEASE-CHECKS.md`](RELEASE-CHECKS.md) for the full list. In short: Canela is not licensed (Newsreader stands in); input borders on the dark themes are subtle (about 1.6:1 against the page, below the 3:1 WCAG 1.4.11 guideline for component boundaries — fields are still identified by their labels and by position); static CSS is cached for an hour without versioned URLs.
+See [`PRODUCTION-READINESS.md`](PRODUCTION-READINESS.md) for the full checklist. Design-specific: Canela is not licensed (Newsreader Display stands in) and there is no studio photography yet.
+
+## 10. Field outlines and asset caching
+
+* **Field outlines.** Text fields, selects and text areas use `--color-field-border` — `--sd-field` `#757067` on the dark themes (3.8:1 on obsidian, 3.6:1 on charcoal, 3.1:1 on graphite) and taupe on light (≥ 5:1) — so every field boundary meets WCAG 1.4.11. Buttons and pills keep the quieter `--sd-line-strong` hairline: their text identifies them. The browser tests check every visible field on every product.
+* **Versioned assets.** Pages link `/assets/<file>?v=<content hash>` (`src/lib/assets.js`). The current hash is served `immutable` for a year; any other version is revalidated. The Command service worker receives the same versioned list and a cache name derived from it, so a deploy that changes a file installs a fresh cache. Fonts are referenced by the stylesheets under their plain names and keep a one-hour cache; a changed font ships under a new file name.
