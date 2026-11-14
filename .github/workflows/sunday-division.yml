@@ -1,0 +1,77 @@
+# Sunday Division — tests on every pull request that touches it.
+# Runs the full suite, including the real-browser tests (Playwright + Chromium), and checks
+# that the app installs from the lockfile and boots in production mode.
+name: Sunday Division
+
+on:
+  pull_request:
+    paths:
+      - 'sunday-division/**'
+      - '.github/workflows/sunday-division.yml'
+  push:
+    branches: [claude/game-qa-lab]
+    paths:
+      - 'sunday-division/**'
+      - '.github/workflows/sunday-division.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sunday-division-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: sunday-division
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: sunday-division/package-lock.json
+
+      - name: Install dependencies (lockfile)
+        run: npm ci --no-audit --no-fund
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Install Playwright and Chromium for the browser tests
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.63.0
+          npx playwright install --with-deps chromium
+
+      - name: Syntax check
+        run: for f in server.js $(git ls-files 'src/*.js' 'scripts/*.js' 'public/*.js' 'tests/*.js'); do node --check "$f"; done
+
+      - name: Test suite
+        run: npm test
+
+      - name: Production boot smoke test
+        env:
+          NODE_ENV: production
+          PORT: '3100'
+          BASE_URL: https://studio.example.test
+          DATA_DIR: ${{ runner.temp }}/sd-data
+          ADMIN_EMAIL: ci@studio.example.test
+          ADMIN_PASSWORD: ci-only-passphrase-not-a-secret
+        run: |
+          node --disable-warning=ExperimentalWarning server.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          SERVER=$!
+          for i in $(seq 1 40); do curl -sf http://127.0.0.1:3100/healthz > /dev/null && break; sleep 0.25; done
+          curl -sf http://127.0.0.1:3100/healthz
+          for p in / /start /portal /admin/login /command/login; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3100$p")
+            echo "$p $code"; test "$code" = 200
+          done
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/admin)" = 303
+          curl -sI http://127.0.0.1:3100/ | grep -qi '^content-security-policy:'
+          kill "$SERVER"
