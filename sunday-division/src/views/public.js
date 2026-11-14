@@ -150,7 +150,7 @@ function services(ctx) {
 
 <section class="section section--tight">
   <ol class="services-list services-list--wide">
-    ${catalog.SERVICES.map((s, i) => html`<li class="services-list__item reveal"><span class="num">0${i + 1}</span><h3>${s.name}</h3><p>${s.text}</p></li>`)}
+    ${catalog.SERVICES.map((s, i) => html`<li class="services-list__item reveal"><span class="num">0${i + 1}</span><h2>${s.name}</h2><p>${s.text}</p></li>`)}
   </ol>
 </section>
 

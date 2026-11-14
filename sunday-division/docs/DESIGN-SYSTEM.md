@@ -1,77 +1,106 @@
 # Sunday Division design system
 
-Reference: the approved Sunday Division Command concept (dark editorial, serif display type, bone accents, sage for operating states). Status: **every Command screen is built from the components** — Overview, Projects, project detail, Agent Studio and task logs, Approvals and the review screen, Command, Morning Brief, Performance, Notifications, Settings, sign-in, offline and error pages. The studio dashboard and public site keep their current look.
+Reference: the approved Sunday Division Command concept (dark editorial, serif display type, bone accents, sage for operating states).
+
+**Status:** one design system across all four products. Each keeps its own job:
+
+| Product | Theme | Purpose | Stylesheets |
+|---|---|---|---|
+| **Command** (`/command`) | dark | the founder's premium, mobile-first command centre | `tokens.css` → `ui.css` → `command.css` |
+| **Studio dashboard** (`/admin`) | dark | productivity: dense tables, a persistent rail, project and operational visibility | `tokens.css` → `ui.css` → `studio.css` |
+| **Client portal** (`/portal`) and contractor portal (`/contractor`) | light | premium and very simple: the next step first, then one card per subject | `tokens.css` → `ui.css` → `site.css` |
+| **Public website** | light, with obsidian moments | editorial and fashion-forward; explains the services and converts visitors | `tokens.css` → `ui.css` → `site.css` |
+
+Screenshots: [`docs/screenshots/`](screenshots/).
 
 ## 1. What exists (inspection)
 
 | | Today |
 |---|---|
 | Rendering | Server-rendered HTML from template-literal view functions (`src/views/*.js`); escape-by-default `html```; no client framework, no build step |
-| Styles | `site.css` (public site), `admin.css` (studio dashboard), `command.css` (founder app) — each had its own variables |
+| Styles | One token file and one shared component file; one product stylesheet each for Command, the studio and the site/portals |
 | Script | Small progressive-enhancement files per area (`public/js/*.js`); every screen works without JavaScript |
-| Fonts | Self-hosted, SIL OFL (Instrument Serif, Hanken Grotesk, IBM Plex Mono) |
-| Constraints | Strict CSP (no inline scripts or style attributes), `no-store` founder pages, service worker caches static assets only |
-
-The design system keeps that architecture: tokens in CSS custom properties, components as server-side view functions with matching CSS blocks. No framework and no new runtime dependency.
+| Fonts | Self-hosted, SIL OFL: Newsreader (display), Inter (interface), IBM Plex Mono (codes and measurements) |
+| Constraints | Strict CSP (no inline scripts or style attributes), `no-store` pages, the Command service worker caches static assets only |
 
 ## 2. Architecture
 
 ```
-public/css/tokens.css        design tokens (colour, type, space, shape, touch, motion) + @font-face
-        │
-public/css/command.css       1 base · 2 layout (app bar, tab bar, rail) · 3 components (ui-*) · 5 motion
-        │
-src/views/command-ui.js      components: one function per component, one CSS block per component
-        │                    Icon · StatusDot · StatusPill · ProgressBar · PageHeader · Hero · Section · Card ·
-        │                    StatCard · Sparkline · List / ListRow · SegmentedTabs · Thumb · EmptyState ·
-        │                    Button · IconButton · Avatar
-        │                    (+ CSS-only blocks: forms, flash, gallery, stages, approvals, review/hold,
-        │                     key-value, timeline, log, bars, table)
-src/views/command.js         screens composed from components (data in, HTML out)
-        │
-src/command/metrics.js       the data the screens show — read from the records, never estimated
+public/css/tokens.css     design tokens: palette, semantic colour (dark default + .theme-light),
+        │                 type, space, shape, touch, motion; @font-face for SD Display / SD Sans / SD Mono
+public/css/ui.css         shared components (ui-*), coloured only through semantic tokens, no base rules
+        │                 header · section · card · stat · sparkline · list/row · dot · pill · progress ·
+        │                 tabs · empty state · buttons · flash · forms · table · utilities
+        ├── public/css/command.css   Command: base, app bar, tab bar / rail, Command-only blocks, motion
+        ├── public/css/studio.css    Studio: base, rail + workspace, cards, figures, tables, forms, records
+        └── public/css/site.css      Website + portals: editorial layout; the site's own variable names
+                                     are aliases for tokens (--ink: var(--sd-obsidian), …)
+
+src/views/command-ui.js   components as server-side functions (Icon, StatusPill, StatCard, …)
+src/views/studio-ui.js    the studio's status → tone rule and the "Simulated" label, on StatusPill
+src/views/*.js            screens composed from components (data in, HTML out)
 ```
+
+Moving the shared components out of `command.css` changed nothing in Command: 24 Command screens rendered with the old and the new stylesheets are pixel-identical at phone and desktop sizes.
 
 Rules the components enforce:
 
-* **No invented values.** `StatCard` shows a delta only when one is passed; the Overview passes one only when the previous period has data. `Sparkline` renders nothing for an empty or flat series. `Thumb` shows the client's own reference image, or the studio's technical-flat drawing for the garment category (labelled as a drawing), never a stock photo of someone else's product.
-* **Sage means something.** Only operating / completed states use sage (`success`). A decision waiting for the founder is bone (`review`). Attention and problems use amber and clay sparingly.
-* **Touch.** Primary controls are at least 44 px; list rows 52 px; tab bar 52 px items above the home indicator (safe-area insets throughout).
-* **Accessible by construction.** Icons are `aria-hidden` and always paired with a label; status dots carry a text label where they convey meaning; progress uses `<progress>`; contrast is checked by the mobile test.
+* **No invented values.** `StatCard` shows a delta only when one is passed; `Sparkline` renders nothing for an empty or flat series; `Thumb` shows the client's own reference image or the studio's labelled drawing. The portal's "Next step" is read from the client's records (an open quote, an unpaid invoice, released files) and is absent when there is nothing to do.
+* **Sage means something.** Only operating or finished states are sage (`success`). A decision waiting for a person is bone on dark and ink on light (`review`). Attention is amber, failures clay, both sparingly. The same rule drives Command, the dashboard (`studio-ui.js`) and the portals.
+* **Development data is always labelled.** Sample records carry "(sample)"; simulated deliveries carry an amber "Simulated" pill; Command shows "Sample data". Sample data and simulated providers are refused in production.
+* **Touch and pointer targets.** Primary controls are at least 44 px in Command and on the site; dense dashboard controls are at least 24 px (WCAG 2.5.8), 36–40 px in practice.
+* **Accessible by construction.** Icons are `aria-hidden` and paired with a label; every page has one `h1`, a skip link and named landmarks; focus is always visible.
 
 ## 3. Tokens
 
 | Token | Value | Use |
 |---|---|---|
-| `--sd-obsidian` | `#111111` | primary background |
+| `--sd-obsidian` | `#111111` | dark background · ink on light |
 | `--sd-charcoal` | `#191919` | elevated surfaces (cards) |
-| `--sd-graphite` | `#252525` | secondary surfaces (icon tiles, bubbles, tracks) |
-| `--sd-bone` | `#E8E0D4` | primary accent (primary buttons, progress, "your decision") |
-| `--sd-warm-white` | `#F4EFE7` | text and controls (16.5:1 on obsidian) |
-| `--sd-sage` | `#71977B` | operating / success states (5.8:1 on obsidian) |
-| `--sd-mist` / `--sd-stone` | `#B3AB9F` / `#8F887D` | secondary (8.3:1) / tertiary (5.4:1) text |
+| `--sd-graphite` | `#252525` | secondary surfaces |
+| `--sd-bone` | `#E8E0D4` | primary accent on dark · alternate section on light |
+| `--sd-warm-white` | `#F4EFE7` | text on dark · the page on light |
+| `--sd-sage` | `#71977B` | operating / success (dark) |
+| `--sd-mist` / `--sd-stone` | `#B3AB9F` / `#8F887D` | secondary (8.3:1) / tertiary (5.4:1) text on dark |
+| `--sd-paper` | `#FBF8F3` | raised surfaces on light |
+| `--sd-umber` / `--sd-taupe` | `#45403A` / `#625C54` | secondary (9.0:1) / tertiary (5.8:1) text on light |
+| `--sd-sage-deep`, `--sd-amber-deep`, `--sd-clay-deep` | `#476A52`, `#7A5A22`, `#8C3A2B` | status text on light (≥ 5.3:1) |
 
-Type: **display** — Newsreader Display (SIL OFL), instanced at its display optical size, standing in for Canela (commercial; drop in a licensed web font as "SD Display" when held). **Interface** — Inter (SIL OFL). Scales: `--text-display-xl/l/m/s`, `--text-figure-l/m`, `--text-title/body/callout/label/footnote/caption/overline`. Space: 4-point grid (`--space-1` … `--space-9`). Radii: 8 / 14 / 20 / 28 / pill. Motion: 140 / 240 / 420 ms, ease-out; cross-document view transitions, disabled with reduced motion.
+Products use the semantic tokens (`--color-bg`, `--color-surface`, `--color-text-2`, `--color-accent`, `--color-success`, …). `class="theme-light"` on `<html>` swaps them for the light set, so a `ui-pill` or `ui-btn` is correct on either theme.
 
-## 4. Navigation
+Type: **display** — Newsreader Display (SIL OFL), instanced at its display optical size, upright and italic, standing in for Canela (commercial; drop in a licensed web font as "SD Display" when held). **Interface** — Inter. **Data** — IBM Plex Mono for codes, measurements and transcripts only. Scales: `--text-display-*`, `--text-figure-*`, `--text-title/body/callout/label/footnote/caption/overline`. Space: 4-point grid. Radii: 8 / 14 / 20 / 28 / pill. Motion: 140 / 240 / 420 ms, ease-out; off with reduced motion.
+
+## 4. Command
 
 Five destinations in the bottom tab bar: **Overview · Projects · Agents · Approvals · Command**. Morning Brief, Performance, Notifications and Settings are reached from Overview (and the bell); on wide screens a side rail lists every section.
 
-## 5. Critical actions (approval review)
+High-impact confirmations use **press and hold** (1.2 s, with a visible fill; sliding off or releasing early cancels). Any other activation — a tap, the keyboard, a screen reader — **arms** the button ("Press again to confirm") and a second activation within six seconds confirms. A single accidental tap never confirms. Server rules are unchanged: code-built preview, digest-bound confirmation and, after 12 hours, the password.
 
-Spending, external communications, permission changes and deliverable release require a code-built preview, a digest-bound confirmation and, after 12 hours, the password (unchanged server rules). The review screen puts the consequences first ("When you confirm"), then the details, then the confirm zone at the bottom, separated from the content.
+## 5. Studio dashboard
 
-High-impact confirmations use **press and hold** (1.2 s, with a visible fill; sliding off or releasing early cancels). Because press-and-hold is not reliable with screen readers and keyboards, any other activation **arms** the button ("Press again to confirm") and a second activation within six seconds confirms. A single accidental tap never confirms. Without JavaScript the button is an ordinary submit — the server-side checks still apply. Tested in a real browser at phone and desktop sizes.
+* Dark, on the same tokens and components as Command; denser: 14 px interface text, 40 px fields, wide tables with tabular figures.
+* A persistent rail with icons (Overview, Leads, Projects, Approvals, Messages, Operations, Invoices, Contractors); on phones it becomes a top bar with a scrolling section list, and sign-out stays reachable.
+* Status pills follow the shared colour rule; AI drafts are a dashed pill; simulated deliveries an amber "Simulated" pill.
+* Buttons are the shared `ui-btn` (primary in bone for the main action of a form). Every approval-gated action keeps its confirmation prompt (22 prompts, unchanged).
+* Wide tables scroll inside their card; a scrolling region becomes keyboard-focusable and is named after its card.
 
-## 6. Imagery
+## 6. Client portal
 
-The Overview hero is an original rendered fabric texture (`public/command/hero-drape.jpg`, no licence restrictions). Project thumbnails use the client's own reference images when they are real pictures (≥ 64 px), served to the founder only and never cached; otherwise the studio's flat drawing for the category. Replace the hero with the studio's own photography when available — the component takes any image.
+* One page. The client's name is the heading; with several projects, a "Your projects" list jumps to each.
+* Each project opens with its status pill and a single **Next step** in ink — review the quote, pay invoice SD-INV-…, review released files — with a button to the right card.
+* Quote, invoices, updates, files from the studio, brief and reference files each sit in their own paper card. Paid invoices and accepted quotes are sage; anything waiting on the client is ink.
+* Payments still go through the payment provider's hosted page; access is still the client's portal key; a client still sees only their own projects.
 
-## 7. Project detail
+## 7. Public website
 
-* **Gallery**: the client's own reference images (swipe, scroll-snap), served only to the founder and only for that project; otherwise the studio drawing for the category, labelled as such.
-* **Development progress**: stages decided by records — Brief & scope (quote accepted), Deposit (verified payment), one stage per kind of work the client bought (all its tasks done), Review & sign-off (every deliverable signed off, no open revisions), Final delivery (finals released and paid).
+* Editorial typography: Newsreader Display, light weight, with italic accents; Inter for reading; sentence-case form labels (easier to read and complete than small capitals).
+* Warm white page, bone sections, obsidian hero, process and footer. The technical flats remain the imagery: they are the studio's own work and show what it sells.
+* Conversion paths unchanged: "Start a Project" in the header, hero, packages and closing section; the intake form keeps its validation, spam honeypot and rate limits.
 
-## 8. Optional next step
+## 8. Imagery
 
-Apply `tokens.css` to the studio dashboard and the public site; both keep their current look until you decide.
+The Command hero is an original rendered fabric texture (`public/command/hero-drape.jpg`, no licence restrictions). Project thumbnails use the client's own reference images (≥ 64 px), served to the founder only and never cached; otherwise the studio's flat drawing for the category. The website uses the studio's technical flats. Replace either with the studio's own photography when available.
+
+## 9. Known limitations
+
+See [`RELEASE-CHECKS.md`](RELEASE-CHECKS.md) for the full list. In short: Canela is not licensed (Newsreader stands in); input borders on the dark themes are subtle (about 1.6:1 against the page, below the 3:1 WCAG 1.4.11 guideline for component boundaries — fields are still identified by their labels and by position); static CSS is cached for an hour without versioned URLs.

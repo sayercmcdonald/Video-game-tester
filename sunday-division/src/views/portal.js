@@ -1,18 +1,33 @@
 'use strict';
 const { html, raw, money, fmtDate, paragraphs, humanSize } = require('../lib/util');
 const { page } = require('./layout');
+const { StatusPill } = require('./command-ui');
 
 const STATUS = {
   scoping: 'Scoping', awaiting_deposit: 'Awaiting deposit', active: 'In development',
   delivered: 'Delivered', closed: 'Complete',
 };
+/** Sage for work that is under way or finished; filled ink when the client needs to act. */
+const STATUS_TONE = { awaiting_deposit: 'review', active: 'success', delivered: 'success', closed: 'success' };
+
+/** The one thing the client should do next, read from their records (nothing is estimated). */
+function nextStep(p) {
+  if (p.quote && p.quote.status === 'sent') return { text: 'Your quote is ready. Review the scope and accept it to begin.', href: `#quote-${p.quote.id}`, label: 'Review quote' };
+  const due = p.invoices.find((i) => i.status === 'open');
+  if (due) return { text: p.status === 'awaiting_deposit' ? `Deposit due. Your project is scheduled as soon as invoice ${due.number} is paid.` : `Invoice ${due.number} is due.`, href: `#invoices-${p.id}`, label: 'View invoice' };
+  if (p.status === 'scoping') return { text: 'We are scoping your project. Your quote will appear here once it has been reviewed by the studio.' };
+  if (p.deliverables.some((d) => d.stage === 'preview') && p.status === 'active') return { text: 'Files are ready for your review. Download them, and request a revision if anything should change.', href: `#files-${p.id}`, label: 'Review files' };
+  if (p.status === 'active') return { text: 'Your project is in development. Updates and files appear here as soon as the studio releases them.' };
+  if (p.deliverables.length) return { text: 'Your final files are ready to download.', href: `#files-${p.id}`, label: 'Go to files' };
+  return null;
+}
 const csrf = (ctx) => html`<input type="hidden" name="_csrf" value="${ctx.session ? ctx.session.csrf : ''}">`;
 
 function quoteBlock(ctx, quote) {
   if (!quote) return '';
   const open = quote.status === 'sent';
   return html`<section class="p-block" id="quote-${quote.id}">
-  <div class="p-block__head"><h3>Quote</h3><span class="tag">${open ? 'Awaiting your response' : `Accepted ${fmtDate(quote.responded_at)}`}</span></div>
+  <div class="p-block__head"><h3>Quote</h3>${StatusPill({ tone: open ? 'review' : 'success', label: open ? 'Awaiting your response' : `Accepted ${fmtDate(quote.responded_at)}` })}</div>
   <div class="prose">${paragraphs(quote.scope)}</div>
   <table class="p-table">
     <thead><tr><th>Item</th><th class="num-col">Qty</th><th class="num-col">Price</th><th class="num-col">Amount</th></tr></thead>
@@ -36,15 +51,15 @@ function quoteBlock(ctx, quote) {
 </section>`;
 }
 
-function invoicesBlock(ctx, invoices, paymentsEnabled) {
+function invoicesBlock(ctx, invoices, paymentsEnabled, projectId) {
   if (!invoices.length) return '';
-  return html`<section class="p-block">
+  return html`<section class="p-block" id="invoices-${projectId}">
   <div class="p-block__head"><h3>Invoices</h3></div>
   <table class="p-table">
-    <thead><tr><th>Invoice</th><th>For</th><th class="num-col">Amount</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Invoice</th><th>For</th><th class="num-col">Amount</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>${invoices.map((i) => html`<tr>
       <td class="mono">${i.number}</td><td>${i.description}</td><td class="num-col">${money(i.amount_cents)}</td>
-      <td>${i.status === 'paid' ? `Paid ${fmtDate(i.paid_at)}` : 'Due'}</td>
+      <td>${i.status === 'paid' ? StatusPill({ tone: 'success', label: `Paid ${fmtDate(i.paid_at)}` }) : StatusPill({ tone: 'review', label: 'Due' })}</td>
       <td class="num-col">${i.status === 'open' ? (paymentsEnabled
         ? html`<form method="post" action="/portal/invoices/${i.id}/pay">${csrf(ctx)}<button class="btn btn--small" type="submit">Pay securely</button></form>`
         : 'Contact the studio to pay') : ''}</td>
@@ -54,9 +69,9 @@ function invoicesBlock(ctx, invoices, paymentsEnabled) {
 </section>`;
 }
 
-function deliverablesBlock(ctx, deliverables) {
+function deliverablesBlock(ctx, deliverables, projectId) {
   if (!deliverables.length) return '';
-  return html`<section class="p-block">
+  return html`<section class="p-block" id="files-${projectId}">
   <div class="p-block__head"><h3>Files from the studio</h3></div>
   <ul class="p-list">${deliverables.map((d) => html`<li>
     <div>
@@ -75,20 +90,20 @@ function deliverablesBlock(ctx, deliverables) {
 }
 
 function projectBlock(ctx, p, paymentsEnabled) {
-  const awaitingQuote = p.status === 'scoping' && !p.quote;
-  return html`<article class="p-project" id="project-${p.id}">
+  const quoteReady = p.status === 'scoping' && p.quote;
+  const next = nextStep(p);
+  return html`<article class="p-project" id="project-${p.id}" aria-labelledby="project-${p.id}-name">
   <header class="p-project__head">
     <p class="label">${p.code}</p>
-    <h2 class="display display--l">${p.name}</h2>
-    <p class="p-status"><span class="tag">${p.status === 'scoping' && p.quote ? 'Quote ready for review' : STATUS[p.status] || p.status}</span>${p.due_date ? html` <span class="field__hint">Target delivery ${fmtDate(p.due_date)}</span>` : ''}</p>
+    <h2 class="display display--l" id="project-${p.id}-name">${p.name}</h2>
+    <p class="p-status">${StatusPill({ tone: quoteReady ? 'review' : STATUS_TONE[p.status] || 'neutral', label: quoteReady ? 'Quote ready for review' : STATUS[p.status] || p.status })}${p.due_date ? html` <span class="field__hint">Target delivery ${fmtDate(p.due_date)}</span>` : ''}</p>
   </header>
-  ${awaitingQuote ? html`<p class="lede">We are scoping your project. Your quote will appear here once it has been reviewed by the studio.</p>` : ''}
-  ${p.status === 'awaiting_deposit' ? html`<div class="form__notice"><strong>Deposit due.</strong> Your project is scheduled as soon as the deposit invoice below is paid.</div>` : ''}
+  ${next ? html`<div class="p-next" role="status"><p class="label">Next step</p><p class="p-next__text">${next.text}</p>${next.href ? html`<a class="btn btn--small" href="${next.href}">${next.label}</a>` : ''}</div>` : ''}
   ${quoteBlock(ctx, p.quote)}
-  ${invoicesBlock(ctx, p.invoices, paymentsEnabled)}
+  ${invoicesBlock(ctx, p.invoices, paymentsEnabled, p.id)}
   ${p.updates.length ? html`<section class="p-block"><div class="p-block__head"><h3>Updates</h3></div>
     <ul class="p-updates">${p.updates.map((u) => html`<li><p class="label">${fmtDate(u.published_at)}</p><div class="prose">${paragraphs(u.body)}</div></li>`)}</ul></section>` : ''}
-  ${deliverablesBlock(ctx, p.deliverables)}
+  ${deliverablesBlock(ctx, p.deliverables, p.id)}
   ${p.brief ? html`<section class="p-block"><details class="p-details"><summary><h3>Project brief</h3></summary><pre class="p-brief">${p.brief}</pre></details></section>` : ''}
   <section class="p-block">
     <div class="p-block__head"><h3>Your reference files</h3></div>
@@ -107,11 +122,12 @@ function home(ctx, { projects, paymentsEnabled, notice }) {
     path: '/portal',
     body: html`<section class="section portal">
   <div class="portal__bar">
-    <div><p class="label">Client Portal</p><p class="portal__who">${ctx.client.brand_name} · ${ctx.client.contact_name}</p></div>
+    <div><p class="label">Client Portal</p><h1 class="portal__who">${ctx.client.brand_name} · ${ctx.client.contact_name}</h1></div>
     <form method="post" action="/portal/logout">${csrf(ctx)}<button class="btn btn--small btn--ghost" type="submit">Sign out</button></form>
   </div>
   ${notice ? html`<div class="form__notice" role="status">${notice}</div>` : ''}
   ${ctx.flash ? html`<div class="form__notice" role="status">${ctx.flash}</div>` : ''}
+  ${projects.length > 1 ? html`<nav class="p-jump" aria-label="Your projects"><p class="label">Your projects</p><ul>${projects.map((p) => html`<li><a href="#project-${p.id}">${p.name}</a></li>`)}</ul></nav>` : ''}
   ${projects.length ? projects.map((p) => projectBlock(ctx, p, paymentsEnabled)) : html`<p class="lede">Your project is being set up. Check back soon.</p>`}
 </section>`,
   });

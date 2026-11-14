@@ -3,7 +3,7 @@
  * Sunday Division design system — server-rendered components for Command.
  *
  * Each component returns escaped HTML (see lib/util html``) and maps 1:1 to a block in
- * public/css/command.css (`ui-<component>`). Components take data, never fetch it, and
+ * public/css/ui.css (`ui-<component>`; Command-only blocks in command.css). Components take data, never fetch it, and
  * never invent values: optional parts (deltas, charts, thumbnails) render only when given.
  */
 const { html, raw, esc } = require('../lib/util');

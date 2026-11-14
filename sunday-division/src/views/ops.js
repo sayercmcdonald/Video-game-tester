@@ -3,16 +3,17 @@ const { html, raw, money, fmtDate, titleCase } = require('../lib/util');
 const { shell } = require('./admin');
 const { REGISTRY } = require('../agents/definitions');
 const { TOOLS } = require('../agents/tools');
+const { StatusPill } = require('./command-ui');
+const { statusBadge } = require('./studio-ui');
 
 const csrf = (ctx) => html`<input type="hidden" name="_csrf" value="${ctx.session ? ctx.session.csrf : ''}">`;
 const usd = (micros) => `$${(micros / 1e6).toFixed(micros && micros < 1e4 ? 4 : 2)}`;
 const hrs = (h) => (h === null || h === undefined ? '—' : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} days`);
 const pct = (x) => (x === null || x === undefined ? '—' : `${Math.round(x * 100)}%`);
 const ATTN = new Set(['failed', 'open', 'queued', 'needs_review', 'awaiting_quote_approval', 'quote_declined', 'ready_for_release', 'escalation', 'budget_blocked', 'denied', 'invalid_output', 'error']);
-const MUTED = new Set(['succeeded', 'completed', 'done', 'cancelled', 'dismissed', 'ok', 'executed', 'replayed', 'lost']);
-const badge = (s, label) => html`<span class="badge ${ATTN.has(s) ? 'badge--on' : MUTED.has(s) ? 'badge--off' : ''}">${label || titleCase(s)}</span>`;
-const btn = (ctx, url, label, { solid = false, confirm = '' } = {}) => html`<form class="inline" method="post" action="${url}" data-confirm="${confirm}">${csrf(ctx)}<button class="btn-a ${solid ? 'btn-a--solid' : ''}" type="submit">${label}</button></form>`;
-const tabs = (path) => html`<nav class="tabs">${[['/admin/ops', 'Overview'], ['/admin/ops/tasks', 'Agent tasks'], ['/admin/ops/agents', 'Agents'], ['/admin/ops/settings', 'Controls & budgets']].map(([href, label]) => html`<a href="${href}" ${path === href ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
+const badge = (s, label) => statusBadge(s, label, ATTN);
+const btn = (ctx, url, label, { solid = false, confirm = '' } = {}) => html`<form class="inline" method="post" action="${url}" data-confirm="${confirm}">${csrf(ctx)}<button class="ui-btn ui-btn--small ${solid ? 'ui-btn--primary' : ''}" type="submit">${label}</button></form>`;
+const tabs = (path) => html`<nav class="tabs" aria-label="Operations sections">${[['/admin/ops', 'Overview'], ['/admin/ops/tasks', 'Agent tasks'], ['/admin/ops/agents', 'Agents'], ['/admin/ops/settings', 'Controls & budgets']].map(([href, label]) => html`<a href="${href}" ${path === href ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
 const empty = (t) => html`<p class="empty">${t}</p>`;
 const json = (v) => html`<pre class="json">${JSON.stringify(v, null, 2)}</pre>`;
 
@@ -90,7 +91,7 @@ function workflow(ctx, d) {
     <h1 class="display display--m">${project ? `${project.code} — ${project.name}` : `${inquiry.ref} — ${inquiry.brand_name}`}</h1>
     <p class="muted">${badge(wf.state, wfLabel(STATES, wf.state))} ${(STATES[wf.state] || {}).waiting || ''}</p></div>
   <div class="a-head__actions">
-    ${project ? html`<a class="btn-a" href="/admin/projects/${project.id}">Project</a>` : ''}${inquiry ? html`<a class="btn-a" href="/admin/leads/${inquiry.id}">Lead</a>` : ''}
+    ${project ? html`<a class="ui-btn ui-btn--small" href="/admin/projects/${project.id}">Project</a>` : ''}${inquiry ? html`<a class="ui-btn ui-btn--small" href="/admin/leads/${inquiry.id}">Lead</a>` : ''}
     ${terminal ? '' : wf.paused ? btn(ctx, `/admin/ops/workflows/${wf.id}/resume`, 'Resume', { solid: true }) : btn(ctx, `/admin/ops/workflows/${wf.id}/pause`, 'Pause', { confirm: 'Pause this workflow? No agent work runs for it until resumed.' })}
     ${terminal ? '' : btn(ctx, `/admin/ops/workflows/${wf.id}/advance`, 'Re-evaluate')}
     ${wf.state === 'needs_review' ? btn(ctx, `/admin/ops/workflows/${wf.id}/continue`, 'Pursue this lead', { solid: true, confirm: 'Continue to scoping and quote drafting?' }) : ''}
@@ -101,7 +102,7 @@ ${wf.summary ? html`<section class="card"><h2>Completion summary</h2><pre class=
 <div class="a-cols a-cols--wide">
 <div>
   <section class="card"><h2>Jobs</h2>
-  ${d.jobs.length ? html`<table class="a-table a-table--tight"><thead><tr><th>#</th><th>Agent · action</th><th>Status</th><th class="r">Tries</th><th>Run at / finished</th><th></th></tr></thead><tbody>
+  ${d.jobs.length ? html`<table class="a-table a-table--tight"><thead><tr><th>#</th><th>Agent · action</th><th>Status</th><th class="r">Tries</th><th>Run at / finished</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
   ${d.jobs.map((j) => html`<tr>
     <td class="mono">${j.id}</td>
     <td><strong>${j.agent}.${j.action}</strong>${j.deps.length ? html`<br><span class="muted small">after #${j.deps.join(', #')}</span>` : ''}
@@ -148,7 +149,7 @@ ${tabs('/admin/ops/agents')}
 ${Object.values(REGISTRY).map((a) => {
   const j = stats.jobs[a.id] || {}; const r = stats.runs[a.id] || {}; const e = stats.escalations[a.id] || {}; const dn = stats.denied[a.id] || {};
   return html`<section class="card agent-card">
-  <h2>${a.name} <span class="badge">v${a.version}</span> <span class="mono small muted">${a.id}</span></h2>
+  <h2>${a.name} ${StatusPill({ label: `v${a.version}` })} <span class="mono small muted">${a.id}</span></h2>
   <p>${a.purpose}</p>
   <div class="stats stats--small">
     <div class="stat"><span class="stat__v">${j.jobs || 0}</span><span class="label">Jobs</span></div>
@@ -186,7 +187,7 @@ ${tabs('/admin/ops/settings')}
     <label class="chk"><input type="checkbox" name="orchestrator_paused" value="true" ${values.orchestrator_paused ? raw('checked') : ''}> ${defs.orchestrator_paused.label}</label>
     <label class="chk"><input type="checkbox" name="autonomous_production" value="true" ${values.autonomous_production ? raw('checked') : ''} ${anyConnected || values.autonomous_production ? '' : raw('disabled')}> ${defs.autonomous_production.label}</label>
     <p class="small muted">${defs.autonomous_production.help} ${anyConnected ? '' : 'Neither INDEX V3 nor FORM is connected, so this cannot be switched on yet.'}</p>
-    <button class="btn-a btn-a--solid" type="submit">Save</button>
+    <button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Save</button>
   </form>
   <dl class="kv">
     ${integrations.map((i) => html`<dt>${i.name}</dt><dd>${i.connected ? 'Connected' : 'Not connected — work goes to the human production queue'}</dd>`)}
@@ -198,7 +199,7 @@ ${tabs('/admin/ops/settings')}
   <form method="post" action="/admin/ops/settings" class="a-form">${csrf(ctx)}
     <input type="hidden" name="section" value="budgets">
     ${['ai_monthly_budget_usd', 'ai_project_budget_usd', 'external_project_budget_usd', 'external_job_estimate_usd'].map((k) => html`<label>${defs[k].label}<input name="${k}" value="${values[k]}" inputmode="decimal"></label>`)}
-    <button class="btn-a btn-a--solid" type="submit">Save budgets</button>
+    <button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Save budgets</button>
   </form>
   <p class="small muted">When an AI budget is reached, agents stop calling the model and draft with deterministic rules instead. When the external budget is reached, production goes to the human queue.</p>
 </section>
@@ -212,7 +213,7 @@ function agentTasks(ctx, { rows, filter, counts }) {
     title: 'Agent tasks', path: '/admin/ops',
     body: html`<header class="a-head"><div><h1 class="display display--m">Agent tasks</h1><p class="muted">Every job an agent or the orchestrator has run, with its brain, turns, tokens and cost. Model: ${ctx.app.agentModel.describe()}.</p></div></header>
 ${tabs('/admin/ops/tasks')}
-<nav class="tabs">${filters.map(([f, label]) => html`<a href="/admin/ops/tasks?status=${f}" ${filter === f ? raw('aria-current="page"') : ''}>${label} ${counts[f] !== undefined ? `(${counts[f]})` : ''}</a>`)}</nav>
+<nav class="tabs" aria-label="Filter agent tasks">${filters.map(([f, label]) => html`<a href="/admin/ops/tasks?status=${f}" ${filter === f ? raw('aria-current="page"') : ''}>${label} ${counts[f] !== undefined ? `(${counts[f]})` : ''}</a>`)}</nav>
 ${rows.length ? html`<table class="a-table"><thead><tr><th>#</th><th>Agent · action</th><th>Project</th><th>Status</th><th>Brain</th><th class="r">Turns</th><th class="r">Tool calls</th><th class="r">Tokens in / out</th><th class="r">Cost</th><th>When</th></tr></thead><tbody>
 ${rows.map((r) => html`<tr>
   <td><a class="mono" href="/admin/ops/tasks/${r.id}">${r.id}</a></td>
@@ -220,7 +221,7 @@ ${rows.map((r) => html`<tr>
   <td>${r.project_code || r.inquiry_ref || '—'}</td>
   <td>${badge(r.status)}${r.attempts > 1 ? html` <span class="small muted">${r.attempts} attempts</span>` : ''}</td>
   <td>${r.brain ? brainBadge(r.brain, r.simulated, r.provider) : '—'}</td>
-  <td class="r">${r.turns ?? '—'}</td><td class="r">${r.tool_calls ?? '—'}${r.denied_calls ? html` <span class="badge badge--on">${r.denied_calls} denied</span>` : ''}</td>
+  <td class="r">${r.turns ?? '—'}</td><td class="r">${r.tool_calls ?? '—'}${r.denied_calls ? html` ${StatusPill({ tone: 'danger', label: `${r.denied_calls} denied` })}` : ''}</td>
   <td class="r small">${r.input_tokens ?? 0} / ${r.output_tokens ?? 0}</td><td class="r">${usd(r.cost_micros || 0)}</td>
   <td class="small">${fmtDate(r.finished_at || r.started_at || r.created_at, true)}</td>
 </tr>`)}</tbody></table>` : empty('Nothing here.')}`,
@@ -241,7 +242,7 @@ function blockView(b) {
     const content = Array.isArray(b.content) ? b.content.map((c) => (c.type === 'text' ? c.text : `[${c.type} attached: ${c.media_type}]`)).join('\n') : String(b.content);
     return html`<div class="call ${b.is_error ? 'call--error' : ''}"><span class="call__name">← result${b.is_error ? ' (error)' : ''}</span><pre class="json">${content}</pre></div>`;
   }
-  if (b.type === 'fallback') return html`<span class="badge">Model fallback</span>`;
+  if (b.type === 'fallback') return StatusPill({ tone: 'attention', label: 'Model fallback' });
   return html`<span class="muted small">${b.type}</span>`;
 }
 

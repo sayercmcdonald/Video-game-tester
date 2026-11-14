@@ -66,6 +66,7 @@ function shell(ctx, { title, tab, body, back, wide = false }) {
 <link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/tokens.css">
+<link rel="stylesheet" href="/assets/css/ui.css">
 <link rel="stylesheet" href="/assets/css/command.css">
 <script src="/assets/js/command.js" defer></script>
 </head>
@@ -99,7 +100,7 @@ function bare(ctx, { title, body }) {
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Command">
 <link rel="manifest" href="/command/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/command/apple-touch-icon.png">
 <link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/css/tokens.css"><link rel="stylesheet" href="/assets/css/command.css"></head>
+<link rel="stylesheet" href="/assets/css/tokens.css"><link rel="stylesheet" href="/assets/css/ui.css"><link rel="stylesheet" href="/assets/css/command.css"></head>
 <body class="c-body c-body--bare"><main id="main" class="c-bare">${body}</main></body></html>`;
 }
 

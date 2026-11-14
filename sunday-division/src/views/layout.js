@@ -9,7 +9,7 @@ const NAV = [
 function page(ctx, { title, description, body, path = '', dark = false }) {
   const full = title ? `${title} — Sunday Division` : 'Sunday Division — Fashion design & development studio';
   return html`<!doctype html>
-<html lang="en">
+<html lang="en" class="theme-light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,9 +17,11 @@ function page(ctx, { title, description, body, path = '', dark = false }) {
 <meta name="description" content="${description || 'Sunday Division is a fashion design and development studio: design, technical flats and tech packs, 3D garment visualisation, product imagery and campaigns.'}">
 <meta property="og:title" content="${full}">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="#0c0c0c">
-<link rel="preload" href="/assets/fonts/instrument-serif-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="/assets/fonts/hanken-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<meta name="theme-color" content="#111111">
+<link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/tokens.css">
+<link rel="stylesheet" href="/assets/css/ui.css">
 <link rel="stylesheet" href="/assets/css/site.css">
 <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
 <script src="/assets/js/site.js" defer></script>
@@ -78,7 +80,7 @@ function errorPage(ctx, status, message) {
     return require('./admin').shell(ctx, {
       title: titles[status] || 'Error', path: ctx.url.pathname,
       body: html`<header class="a-head"><div><p class="label">Error ${status}</p><h1 class="display display--m">${titles[status] || 'Something went wrong'}</h1></div></header>
-        <section class="card"><p>${message}</p><p><a class="btn-a" href="${href}">${label}</a></p></section>`,
+        <section class="card"><p>${message}</p><p><a class="ui-btn ui-btn--small" href="${href}">${label}</a></p></section>`,
     });
   }
   return page(ctx, {

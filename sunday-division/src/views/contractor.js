@@ -1,5 +1,6 @@
 'use strict';
 const { html, raw, money, fmtDate, humanSize } = require('../lib/util');
+const { StatusPill } = require('./command-ui');
 const { page } = require('./layout');
 const catalog = require('../services/catalog');
 
@@ -30,7 +31,7 @@ function assignment(ctx, a, files, history) {
   <header class="p-project__head">
     <p class="label">${a.project_code} · ${(catalog.JOB_TYPES[a.job_type] || {}).label || a.job_type}</p>
     <h2 class="display display--l">${a.task_title}</h2>
-    <p class="p-status"><span class="tag">${STATUS[a.status] || a.status}</span> <span class="field__hint">Fee ${money(a.fee_cents)} · ${a.estimated_hours} h${a.due_date ? ` · due ${fmtDate(a.due_date)}` : ''}</span></p>
+    <p class="p-status">${StatusPill({ tone: a.status === 'offered' || a.status === 'changes_requested' ? 'review' : a.status === 'signed_off' || a.status === 'accepted' ? 'success' : 'neutral', label: STATUS[a.status] || a.status })} <span class="field__hint">Fee ${money(a.fee_cents)} · ${a.estimated_hours} h${a.due_date ? ` · due ${fmtDate(a.due_date)}` : ''}</span></p>
   </header>
   ${a.status === 'changes_requested' && history.length ? html`<div class="form__notice"><strong>Changes requested.</strong><pre class="p-brief">${history[history.length - 1].body}</pre></div>` : ''}
   <section class="p-block"><div class="p-block__head"><h3>Technical brief</h3></div><pre class="p-brief">${a.brief || 'The studio will add the brief shortly.'}</pre></section>
@@ -56,7 +57,7 @@ function home(ctx, { assignments, filesFor, historyFor, notice }) {
     title: 'Contractor Portal',
     body: html`<section class="section portal">
   <div class="portal__bar">
-    <div><p class="label">Contractor Portal</p><p class="portal__who">${ctx.contractor.name}</p></div>
+    <div><p class="label">Contractor Portal</p><h1 class="portal__who">${ctx.contractor.name}</h1></div>
     <form method="post" action="/contractor/logout">${csrf(ctx)}<button class="btn btn--small btn--ghost" type="submit">Sign out</button></form>
   </div>
   ${notice ? html`<div class="form__notice" role="status">${notice}</div>` : ''}

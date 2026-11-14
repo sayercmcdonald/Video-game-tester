@@ -6,10 +6,11 @@
  * session, so no business data passes through the push service.
  */
 'use strict';
-const VERSION = 'command-v2';
+const VERSION = 'command-v3';
 const SHELL = [
   '/command/offline',
   '/assets/css/tokens.css',
+  '/assets/css/ui.css',
   '/assets/css/command.css',
   '/assets/js/command.js',
   '/assets/fonts/newsreader-display-latin-300-500.woff2',

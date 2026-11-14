@@ -55,6 +55,7 @@ test('Command is usable on a phone and on a desktop', { skip: playwright ? false
   app.contractors.create({ name: 'Sam Okafor', email: 'sam@contractor.test', discipline: 'Technical design', capacity: '3', skills: ['technical_flats', 'tech_pack'], categories: ['Outerwear'], status: 'approved' }, 6000, founder);
   await driveWorkflow(app, base, 'production');
   const second = await driveWorkflow(app, base, 'quote_approval', { ...require('./helpers').INQUIRY, brand_name: 'Second Brand', email: 'second@brand.test' });
+  const third = await driveWorkflow(app, base, 'quote_approval', { ...require('./helpers').INQUIRY, brand_name: 'Third Brand', email: 'third@brand.test' });
   app.command.brief.request({ manual: true, by: 'test' });
   await app.orchestrator.drain();
   const browser = await playwright.chromium.launch();
@@ -137,6 +138,17 @@ test('Command is usable on a phone and on a desktop', { skip: playwright ? false
         await page.mouse.move(cx, cy);
         await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/command/actions/')), (async () => { await page.mouse.down(); await page.waitForTimeout(1500); await page.mouse.up(); })()]);
         assert.equal(app.command.actions.get(holdId).status, 'executed');
+        // Keyboard only: Enter arms the confirmation; a second Enter confirms.
+        const quote = app.quotes.forProject(third.projectId).find((q) => q.status === 'draft');
+        const keyId = app.command.actions.propose('send_quote', { quote_id: quote.id }, { source: 'approvals', by: `staff:${ADMIN.email}` }).id;
+        await page.goto(`${base}/command/actions/${keyId}`);
+        await page.focus('[data-hold]');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(300);
+        assert.equal(app.command.actions.get(keyId).status, 'proposed', 'one key press only arms it');
+        assert.match(await page.textContent('[data-hold-label]'), /Press again to confirm/);
+        await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/command/actions/')), page.keyboard.press('Enter')]);
+        assert.equal(app.command.actions.get(keyId).status, 'executed');
       }
       assert.deepEqual(errors, []);
       await ctx.close();

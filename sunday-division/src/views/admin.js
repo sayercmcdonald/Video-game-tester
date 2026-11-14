@@ -1,19 +1,20 @@
 'use strict';
 const { html, raw, money, fmtDate, paragraphs, humanSize, titleCase } = require('../lib/util');
 const catalog = require('../services/catalog');
+const { Icon, StatusPill } = require('./command-ui');
+const { statusBadge } = require('./studio-ui');
 
 const NAV = [
-  ['/admin', 'Overview'], ['/admin/leads', 'Leads'], ['/admin/projects', 'Projects'],
-  ['/admin/approvals', 'Approvals'], ['/admin/messages', 'Messages'], ['/admin/ops', 'Operations'], ['/admin/invoices', 'Invoices'], ['/admin/contractors', 'Contractors'],
+  ['/admin', 'Overview', 'overview'], ['/admin/leads', 'Leads', 'brief'], ['/admin/projects', 'Projects', 'projects'],
+  ['/admin/approvals', 'Approvals', 'approvals'], ['/admin/messages', 'Messages', 'command'], ['/admin/ops', 'Operations', 'agents'], ['/admin/invoices', 'Invoices', 'cash'], ['/admin/contractors', 'Contractors', 'person'],
 ];
-/** Statuses that need someone's attention are filled; settled ones are muted. */
+/** Statuses that are waiting on the studio (bone pills); failures and finished states are coloured by studio-ui. */
 const ATTENTION = new Set(['new', 'draft', 'proposed', 'in_review', 'awaiting_deposit', 'open', 'needs_human', 'mismatch', 'duplicate', 'failed', 'sent']);
-const SETTLED = new Set(['done', 'paid', 'released', 'closed', 'won', 'published', 'completed', 'accepted', 'succeeded', 'resolved']);
 
 const csrf = (ctx) => html`<input type="hidden" name="_csrf" value="${ctx.session ? ctx.session.csrf : ''}">`;
-const badge = (status, label) => html`<span class="badge ${ATTENTION.has(status) ? 'badge--on' : SETTLED.has(status) ? 'badge--off' : ''}">${label || titleCase(status)}</span>`;
-const sourceTag = (source) => (source && source !== 'manual' ? html`<span class="badge badge--ai" title="Drafted by automation — review before approving">${source === 'claude' || source === 'openai' ? 'AI draft' : source === 'rules' ? 'Auto draft' : titleCase(source)}</span>` : '');
-function action(ctx, url, label, { cls = 'btn-a', fields = {}, confirm = '' } = {}) {
+const badge = (status, label) => statusBadge(status, label, ATTENTION);
+const sourceTag = (source) => (source && source !== 'manual' ? html`<span class="ui-pill ui-pill--draft" title="Drafted by automation — review before approving">${source === 'claude' || source === 'openai' ? 'AI draft' : source === 'rules' ? 'Auto draft' : titleCase(source)}</span>` : '');
+function action(ctx, url, label, { cls = 'ui-btn ui-btn--small', fields = {}, confirm = '' } = {}) {
   return html`<form class="inline" method="post" action="${url}" data-confirm="${confirm}">${csrf(ctx)}${Object.entries(fields).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}">`)}<button class="${cls}" type="submit">${label}</button></form>`;
 }
 const options = (items, selected, blank) => html`${blank !== undefined ? html`<option value="">${blank}</option>` : ''}${items.map((o) => {
@@ -29,22 +30,25 @@ function shell(ctx, { title, body, path = '' }) {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>${title} — Sunday Division Studio</title>
-<link rel="stylesheet" href="/assets/css/site.css"><link rel="stylesheet" href="/assets/css/admin.css">
+<meta name="theme-color" content="#111111"><meta name="color-scheme" content="dark">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/tokens.css"><link rel="stylesheet" href="/assets/css/ui.css"><link rel="stylesheet" href="/assets/css/studio.css">
 <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
 <script src="/assets/js/admin.js" defer></script>
 </head>
 <body class="admin">
+<a class="skip" href="#main">Skip to content</a>
 ${ctx.user ? html`<aside class="a-side">
-  <a class="wordmark" href="/admin">Sunday Division</a>
-  <p class="label label--light">Studio operations</p>
-  <nav aria-label="Dashboard">${NAV.map(([href, label]) => html`<a href="${href}" ${(href === '/admin' ? path === href : path.startsWith(href)) ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>
+  <div class="a-side__brand"><a class="wordmark" href="/admin">Sunday Division</a>
+  <p class="label label--light">Studio operations</p></div>
+  <nav aria-label="Dashboard">${NAV.map(([href, label, icon]) => html`<a href="${href}" ${(href === '/admin' ? path === href : path.startsWith(href)) ? raw('aria-current="page"') : ''}>${Icon(icon)}<span>${label}</span></a>`)}</nav>
   <div class="a-side__foot">
-    <p>${ctx.user.name}</p>
-    <form method="post" action="/admin/logout">${csrf(ctx)}<button class="btn-a btn-a--light" type="submit">Sign out</button></form>
+    <p class="a-side__who">${ctx.user.name}</p>
+    <form method="post" action="/admin/logout">${csrf(ctx)}<button class="ui-btn ui-btn--small ui-btn--ghost" type="submit">Sign out</button></form>
     <a href="/" class="a-side__site">View website</a>
   </div>
 </aside>` : ''}
-<main class="a-main ${ctx.user ? '' : 'a-main--solo'}">
+<main class="a-main ${ctx.user ? '' : 'a-main--solo'}" id="main" tabindex="-1">
   ${ctx.flash ? html`<div class="a-flash" role="status">${ctx.flash}</div>` : ''}
   ${body}
 </main>
@@ -61,7 +65,7 @@ function login(ctx, { error = '', email = '' } = {}) {
   <form method="post" action="/admin/login" class="a-form">
     <label>Email<input type="email" name="email" value="${email}" required autocomplete="username"></label>
     <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
-    <button class="btn" type="submit">Sign in</button>
+    <button class="ui-btn ui-btn--primary" type="submit">Sign in</button>
   </form>
 </div>`,
   });
@@ -103,11 +107,11 @@ function leads(ctx, { rows, status }) {
   return shell(ctx, {
     title: 'Leads', path: '/admin/leads',
     body: html`<header class="a-head"><h1 class="display display--m">Leads &amp; inquiries</h1>
-  <nav class="tabs">${filters.map((f) => html`<a href="/admin/leads${f ? `?status=${f}` : ''}" ${status === f ? raw('aria-current="page"') : ''}>${f ? titleCase(f) : 'Open'}</a>`)}</nav></header>
+  <nav class="tabs" aria-label="Filter leads">${filters.map((f) => html`<a href="/admin/leads${f ? `?status=${f}` : ''}" ${status === f ? raw('aria-current="page"') : ''}>${f ? titleCase(f) : 'Open'}</a>`)}</nav></header>
 ${rows.length ? html`<table class="a-table"><thead><tr><th>Ref</th><th>Received</th><th>Brand / contact</th><th>Category</th><th>Budget</th><th>Timeline</th><th>Status</th></tr></thead>
 <tbody>${rows.map((r) => html`<tr>
   <td><a class="mono" href="/admin/leads/${r.id}">${r.ref}</a></td><td>${fmtDate(r.created_at)}</td>
-  <td><a href="/admin/leads/${r.id}">${r.brand_name || r.contact_name}</a>${r.kind === 'contact' ? html` <span class="badge">Message</span>` : ''}</td>
+  <td><a href="/admin/leads/${r.id}">${r.brand_name || r.contact_name}</a>${r.kind === 'contact' ? html` ${StatusPill({ label: 'Message' })}` : ''}</td>
   <td>${r.garment_category || '—'}</td><td>${r.budget || '—'}</td><td>${r.timeline || '—'}</td><td>${badge(r.status)}</td>
 </tr>`)}</tbody></table>` : empty('No inquiries in this view.')}`,
   });
@@ -122,8 +126,8 @@ function lead(ctx, { inquiry: q, files, project }) {
     body: html`<header class="a-head">
   <div><p class="label"><a href="/admin/leads">Leads</a> / ${q.ref}</p><h1 class="display display--m">${q.brand_name || q.contact_name}</h1></div>
   <div class="a-head__actions">${badge(q.status)}
-    ${project ? html`<a class="btn-a btn-a--solid" href="/admin/projects/${project.id}">Open project ${project.code}</a>`
-      : q.kind === 'project' ? action(ctx, `/admin/leads/${q.id}/convert`, 'Create project', { cls: 'btn-a btn-a--solid' }) : ''}
+    ${project ? html`<a class="ui-btn ui-btn--small ui-btn--primary" href="/admin/projects/${project.id}">Open project ${project.code}</a>`
+      : q.kind === 'project' ? action(ctx, `/admin/leads/${q.id}/convert`, 'Create project', { cls: 'ui-btn ui-btn--small ui-btn--primary' }) : ''}
   </div>
 </header>
 <div class="a-cols a-cols--wide">
@@ -159,11 +163,11 @@ function lead(ctx, { inquiry: q, files, project }) {
     <section class="card"><h2>Status &amp; notes</h2>
       <form method="post" action="/admin/leads/${q.id}/status" class="a-form a-form--row">${csrf(ctx)}
         <label>Status<select name="status">${options(['new', 'reviewing', 'quoted', 'won', 'lost', 'archived'], q.status)}</select></label>
-        <button class="btn-a" type="submit">Update</button>
+        <button class="ui-btn ui-btn--small" type="submit">Update</button>
       </form>
       <form method="post" action="/admin/leads/${q.id}/notes" class="a-form">${csrf(ctx)}
         <label>Internal notes<textarea name="notes" rows="5" maxlength="5000">${q.internal_notes}</textarea></label>
-        <button class="btn-a" type="submit">Save notes</button>
+        <button class="ui-btn ui-btn--small" type="submit">Save notes</button>
       </form>
     </section>
   </div>
@@ -212,8 +216,8 @@ function quoteSection(ctx, p, quotes) {
     </div>
     <label>Terms<textarea name="terms" rows="4" maxlength="4000">${draft ? draft.terms : catalog.DEFAULT_TERMS}</textarea></label>
     <div class="a-actions">
-      <button class="btn-a" type="submit" name="action" value="save">Save draft</button>
-      ${draft && p.status === 'scoping' ? html`<button class="btn-a btn-a--solid" type="submit" name="action" value="send" data-confirm="Approve this quote and make it visible to the client?">Approve &amp; send to client</button>` : ''}
+      <button class="ui-btn ui-btn--small" type="submit" name="action" value="save">Save draft</button>
+      ${draft && p.status === 'scoping' ? html`<button class="ui-btn ui-btn--small ui-btn--primary" type="submit" name="action" value="send" data-confirm="Approve this quote and make it visible to the client?">Approve &amp; send to client</button>` : ''}
     </div>
   </form>
   ${action(ctx, `/admin/projects/${p.id}/automate`, 'Draft quote with automation', { fields: { task: 'quote' } })}` : ''}
@@ -229,15 +233,15 @@ function tasksSection(ctx, p, tasks, contractors, unlocked) {
   ${!unlocked ? html`<p class="lock">Work is locked until the deposit is received. Tasks can be planned but not started.</p>` : ''}
   ${proposed.length ? html`<div class="panel"><p><strong>${proposed.length} proposed tasks</strong> ${sourceTag(proposed[0].source)}</p>
     <ul class="bullets">${proposed.map((t) => html`<li>${t.milestone ? html`<span class="muted">${t.milestone} · </span>` : ''}${t.title} <span class="muted">${fmtDate(t.due_date)}</span></li>`)}</ul>
-    <div class="a-actions">${action(ctx, `/admin/projects/${p.id}/tasks/proposed`, 'Accept task list', { cls: 'btn-a btn-a--solid', fields: { decision: 'accept' } })}${action(ctx, `/admin/projects/${p.id}/tasks/proposed`, 'Discard', { fields: { decision: 'discard' } })}</div></div>` : ''}
-  ${live.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Milestone</th><th>Task</th><th>Status · assignee · due</th><th></th></tr></thead>
+    <div class="a-actions">${action(ctx, `/admin/projects/${p.id}/tasks/proposed`, 'Accept task list', { cls: 'ui-btn ui-btn--small ui-btn--primary', fields: { decision: 'accept' } })}${action(ctx, `/admin/projects/${p.id}/tasks/proposed`, 'Discard', { fields: { decision: 'discard' } })}</div></div>` : ''}
+  ${live.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Milestone</th><th>Task</th><th>Status · assignee · due</th><th><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>${live.map((t) => html`<tr class="${t.status === 'done' ? 'is-done' : ''}">
       <td class="muted">${t.milestone || '—'}</td><td>${t.title}</td>
       <td><form class="inline inline--fields" method="post" action="/admin/tasks/${t.id}">${csrf(ctx)}
         <select name="status" aria-label="Status">${options(['todo', 'doing', 'review', 'done'], t.status)}</select>
         <select name="contractor_id" aria-label="Assignee">${options(people, t.contractor_id, 'Studio')}</select>
         <input type="date" name="due_date" value="${t.due_date || ''}" aria-label="Due date">
-        <button class="btn-a" type="submit">Save</button></form></td>
+        <button class="ui-btn ui-btn--small" type="submit">Save</button></form></td>
       <td class="r">${action(ctx, `/admin/tasks/${t.id}/delete`, 'Remove', { cls: 'btn-link' })}</td>
     </tr>`)}</tbody></table>` : empty('No tasks yet.')}
   <form method="post" action="/admin/projects/${p.id}/tasks" class="a-form a-form--row">${csrf(ctx)}
@@ -245,7 +249,7 @@ function tasksSection(ctx, p, tasks, contractors, unlocked) {
     <label>Milestone<input name="milestone" maxlength="80" size="12"></label>
     <label>Due<input type="date" name="due_date"></label>
     <label>Assignee<select name="contractor_id">${options(people, '', 'Studio')}</select></label>
-    <button class="btn-a" type="submit">Add task</button>
+    <button class="ui-btn ui-btn--small" type="submit">Add task</button>
   </form>
   ${action(ctx, `/admin/projects/${p.id}/automate`, 'Propose task list with automation', { fields: { task: 'tasks' } })}
 </section>`;
@@ -258,19 +262,19 @@ function deliverablesSection(ctx, p, deliverables, revisions, unlocked, balanceD
     <tbody>${deliverables.map((d) => html`<tr>
       <td><strong>${d.title}</strong><br><span class="muted small">${titleCase(d.type)} · ${d.stage} ${sourceTag(d.source)}</span>${d.notes ? html`<br><span class="muted small">${d.notes}</span>` : ''}</td>
       <td>${d.file_id ? html`<a href="/admin/files/${d.file_id}">v${d.version} · ${d.original_name}</a>` : html`<span class="muted">No file</span>`}
-        <form class="inline inline--fields" method="post" action="/admin/deliverables/${d.id}/upload" enctype="multipart/form-data">${csrf(ctx)}<input type="file" name="file" required aria-label="Upload new version"><button class="btn-a" type="submit">Upload ${d.file_id ? 'new version' : 'file'}</button></form></td>
+        <form class="inline inline--fields" method="post" action="/admin/deliverables/${d.id}/upload" enctype="multipart/form-data">${csrf(ctx)}<input type="file" name="file" required aria-label="Upload new version"><button class="ui-btn ui-btn--small" type="submit">Upload ${d.file_id ? 'new version' : 'file'}</button></form></td>
       <td>${badge(d.status)}</td>
-      <td>${d.status === 'in_review' ? action(ctx, `/admin/deliverables/${d.id}/approve`, 'Approve after review', { cls: 'btn-a btn-a--solid', confirm: 'Confirm you have reviewed this file and it is ready for the client.' })
+      <td>${d.status === 'in_review' ? action(ctx, `/admin/deliverables/${d.id}/approve`, 'Approve after review', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: 'Confirm you have reviewed this file and it is ready for the client.' })
         : d.status === 'approved' ? html`<form class="inline inline--fields" method="post" action="/admin/deliverables/${d.id}/release" data-confirm="Release this file to the client portal?">${csrf(ctx)}
             ${d.stage === 'final' && balanceDue > 0 ? html`<label class="chk"><input type="checkbox" name="override" value="yes"> Release although ${money(balanceDue)} is unpaid</label>` : ''}
-            <button class="btn-a btn-a--solid" type="submit">Release to client</button></form>`
+            <button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Release to client</button></form>`
         : d.status === 'released' ? html`<span class="muted small">Released ${fmtDate(d.released_at)}</span>` : html`<span class="muted small">Upload a file</span>`}</td>
     </tr>`)}</tbody></table>` : empty('No deliverables yet.')}
   <form method="post" action="/admin/projects/${p.id}/deliverables" class="a-form a-form--row">${csrf(ctx)}
     <label>New deliverable<input name="title" maxlength="160" required></label>
     <label>Type<select name="type">${options(catalog.DELIVERABLE_TYPES, 'other')}</select></label>
     <label>Stage<select name="stage">${options([['final', 'Final file'], ['preview', 'Preview for review']], 'final')}</select></label>
-    <button class="btn-a" type="submit">Add deliverable</button>
+    <button class="ui-btn ui-btn--small" type="submit">Add deliverable</button>
   </form>`}
   ${revisions.length ? html`<h3>Revision requests</h3><ul class="log log--stack">${revisions.map((r) => html`<li>
     <span>${badge(r.status)} <strong>${r.deliverable_title}</strong> <span class="muted">· ${r.requested_by.startsWith('client') ? 'client' : 'studio'} · ${fmtDate(r.created_at)}</span></span>
@@ -286,8 +290,8 @@ function billingSection(ctx, p, d) {
     <tbody>${invoices.map((i) => html`<tr>
       <td class="mono">${i.number}</td><td>${titleCase(i.kind)}</td><td>${i.description}</td><td class="r">${money(i.amount_cents)}</td>
       <td>${badge(i.status, i.status === 'open' ? 'Open — awaiting payment' : undefined)}${i.paid_at ? html`<br><span class="muted small">${fmtDate(i.paid_at, true)}</span>` : ''}</td>
-      <td>${i.status === 'draft' ? action(ctx, `/admin/invoices/${i.id}/approve`, 'Approve & issue', { cls: 'btn-a btn-a--solid', confirm: `Issue ${i.number} for ${money(i.amount_cents)} to the client?` }) : ''}
-        ${i.status === 'open' ? html`<form class="inline inline--fields" method="post" action="/admin/invoices/${i.id}/manual-payment" data-confirm="Record this invoice as paid outside checkout?">${csrf(ctx)}<input name="reference" placeholder="Transfer reference" maxlength="120" required aria-label="Transfer reference"><button class="btn-a" type="submit">Record payment</button></form>` : ''}
+      <td>${i.status === 'draft' ? action(ctx, `/admin/invoices/${i.id}/approve`, 'Approve & issue', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: `Issue ${i.number} for ${money(i.amount_cents)} to the client?` }) : ''}
+        ${i.status === 'open' ? html`<form class="inline inline--fields" method="post" action="/admin/invoices/${i.id}/manual-payment" data-confirm="Record this invoice as paid outside checkout?">${csrf(ctx)}<input name="reference" placeholder="Transfer reference" maxlength="120" required aria-label="Transfer reference"><button class="ui-btn ui-btn--small" type="submit">Record payment</button></form>` : ''}
         ${['draft', 'open'].includes(i.status) ? action(ctx, `/admin/invoices/${i.id}/void`, 'Void', { cls: 'btn-link', confirm: `Void ${i.number}?` }) : ''}</td>
     </tr>`)}</tbody></table>` : empty('No invoices yet. The deposit invoice is raised automatically when the client accepts the quote.')}
   ${payments.some((x) => x.status !== 'succeeded') ? html`<div class="a-flash a-flash--error">${payments.filter((x) => x.status !== 'succeeded').map((x) => html`<p><strong>${titleCase(x.status)} payment on ${x.number}:</strong> ${x.note}</p>`)}</div>` : ''}
@@ -295,7 +299,7 @@ function billingSection(ctx, p, d) {
     <label>Draft invoice<select name="kind">${options([['final', 'Final balance'], ['other', 'Additional work']], 'final')}</select></label>
     <label>Amount (USD)<input name="amount" inputmode="decimal" size="9" value="${remaining ? (remaining / 100).toFixed(2) : ''}" required></label>
     <label>Description<input name="description" maxlength="200" value="${remaining ? 'Final balance' : ''}"></label>
-    <button class="btn-a" type="submit">Create draft</button>
+    <button class="ui-btn ui-btn--small" type="submit">Create draft</button>
   </form>
   <p class="muted small">Draft invoices are invisible to the client until you approve them. Card payments are taken on the provider's hosted page; no card data touches this system.</p>
 
@@ -307,14 +311,14 @@ function billingSection(ctx, p, d) {
     <div class="stat"><span class="stat__v">${money(m.costs)}</span><span class="label">Costs</span></div>
     <div class="stat"><span class="stat__v">${money(m.projectedProfit)}</span><span class="label">Projected profit · ${pct}</span></div>
   </div>
-  ${d.costs.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Cost</th><th>Contractor</th><th class="r">Hours</th><th class="r">Amount</th><th></th></tr></thead>
+  ${d.costs.length ? html`<table class="a-table a-table--tight"><thead><tr><th>Cost</th><th>Contractor</th><th class="r">Hours</th><th class="r">Amount</th><th><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>${d.costs.map((c) => html`<tr><td>${c.description}</td><td>${c.contractor_name || '—'}</td><td class="r">${c.hours ?? '—'}</td><td class="r">${money(c.amount_cents)}</td><td class="r">${action(ctx, `/admin/costs/${c.id}/delete`, 'Remove', { cls: 'btn-link' })}</td></tr>`)}</tbody></table>` : ''}
   <form method="post" action="/admin/projects/${p.id}/costs" class="a-form a-form--row">${csrf(ctx)}
     <label>Log a cost<input name="description" maxlength="200" required></label>
     <label>Contractor<select name="contractor_id">${options(d.contractors.map((c) => [c.id, `${c.name} (${money(c.hourly_rate_cents)}/h)`]), '', 'None')}</select></label>
     <label>Hours<input name="hours" inputmode="decimal" size="5"></label>
     <label>or amount (USD)<input name="amount" inputmode="decimal" size="8"></label>
-    <button class="btn-a" type="submit">Add cost</button>
+    <button class="ui-btn ui-btn--small" type="submit">Add cost</button>
   </form>
 </section>`;
 }
@@ -330,15 +334,15 @@ function project(ctx, d) {
   <div class="a-head__actions">${badge(p.status)}${next.map(([s, label]) => action(ctx, `/admin/projects/${p.id}/status`, label, { fields: { status: s }, confirm: `${label}?` }))}</div>
 </header>
 ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal access key — copy it now, it is not shown again.</strong></p><p>Portal: <span class="mono">${ctx.app.config.baseUrl}/portal</span></p><p>Access key: <span class="mono" data-select>${d.portalKey}</span></p><p class="small">Send both to the client by email. Issuing a new key revokes this one.</p></div>` : ''}
-<nav class="tabs tabs--anchors"><a href="#brief">Brief</a><a href="#quote">Quote</a><a href="#tasks">Tasks</a><a href="#production">Production</a><a href="#files">Files</a><a href="#deliverables">Deliverables</a><a href="#billing">Billing</a><a href="#updates">Updates</a><a href="#production">Production</a><a href="#history">History</a></nav>
+<nav class="tabs tabs--anchors" aria-label="Project sections"><a href="#brief">Brief</a><a href="#quote">Quote</a><a href="#tasks">Tasks</a><a href="#production">Production</a><a href="#files">Files</a><a href="#deliverables">Deliverables</a><a href="#billing">Billing</a><a href="#updates">Updates</a><a href="#production">Production</a><a href="#history">History</a></nav>
 
 <div class="a-cols a-cols--wide">
 <div>
   <section class="card" id="brief"><h2>Brief ${p.brief_status !== 'none' ? badge(p.brief_status) : ''} ${p.brief_status === 'draft' ? sourceTag(p.brief_source) : ''}</h2>
     <form method="post" action="/admin/projects/${p.id}/brief" class="a-form">${csrf(ctx)}
       <label class="sr">Project brief<textarea name="brief" rows="${p.brief ? 16 : 5}" maxlength="12000" placeholder="Write the brief, or let automation draft it from the intake submission.">${p.brief}</textarea></label>
-      <div class="a-actions"><button class="btn-a" type="submit" name="action" value="save">Save draft</button>
-        ${p.brief ? html`<button class="btn-a btn-a--solid" type="submit" name="action" value="approve">Save &amp; approve</button>` : ''}</div>
+      <div class="a-actions"><button class="ui-btn ui-btn--small" type="submit" name="action" value="save">Save draft</button>
+        ${p.brief ? html`<button class="ui-btn ui-btn--small ui-btn--primary" type="submit" name="action" value="approve">Save &amp; approve</button>` : ''}</div>
     </form>
     ${action(ctx, `/admin/projects/${p.id}/automate`, 'Draft brief with automation', { fields: { task: 'brief' } })}
     <p class="muted small">The client sees the brief in their portal only after it is approved.</p>
@@ -355,7 +359,7 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
       <label>Name<input name="name" value="${p.name}" maxlength="160" required></label>
       <label>Package<select name="package">${options(catalog.PACKAGES.map((k) => [k.id, k.name]), p.package, 'Not set')}</select></label>
       <label>Target delivery<input type="date" name="due_date" value="${p.due_date || ''}"></label>
-      <button class="btn-a" type="submit">Save</button>
+      <button class="ui-btn ui-btn--small" type="submit">Save</button>
     </form>
     ${d.workflow ? html`<dl class="kv"><dt>Automation</dt><dd>${badge(d.workflow.state, (ctx.app.orchestrator.STATES[d.workflow.state] || {}).label)}${d.workflow.paused ? ' (paused)' : ''}${d.workflow.blocked_reason ? ' (blocked)' : ''} · <a href="/admin/ops/workflows/${d.workflow.id}">Inspect workflow</a></dd></dl>` : ''}
     <dl class="kv"><dt>Work</dt><dd>${unlocked ? `Unlocked ${fmtDate(p.started_at)}` : 'Locked until deposit'}</dd>
@@ -368,13 +372,13 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
       <span>${badge(u.status)} ${sourceTag(u.source)} <span class="muted">${fmtDate(u.published_at || u.created_at, true)}</span></span>
       ${u.status === 'draft' ? html`<form method="post" action="/admin/updates/${u.id}" class="a-form">${csrf(ctx)}
         <label class="sr">Update text<textarea name="body" rows="6" maxlength="4000">${u.body}</textarea></label>
-        <div class="a-actions"><button class="btn-a" name="action" value="save" type="submit">Save</button>
-          <button class="btn-a btn-a--solid" name="action" value="publish" type="submit" data-confirm="Publish this update to the client portal?">Approve &amp; publish</button>
+        <div class="a-actions"><button class="ui-btn ui-btn--small" name="action" value="save" type="submit">Save</button>
+          <button class="ui-btn ui-btn--small ui-btn--primary" name="action" value="publish" type="submit" data-confirm="Publish this update to the client portal?">Approve &amp; publish</button>
           <button class="btn-link" name="action" value="discard" type="submit">Discard</button></div></form>`
         : html`<div class="prose">${paragraphs(u.body)}</div>`}</li>`)}</ul>` : empty('No updates yet.')}
     <form method="post" action="/admin/projects/${p.id}/updates" class="a-form">${csrf(ctx)}
       <label>Write an update<textarea name="body" rows="3" maxlength="4000" required></textarea></label>
-      <button class="btn-a" type="submit">Save as draft</button>
+      <button class="ui-btn ui-btn--small" type="submit">Save as draft</button>
     </form>
     ${action(ctx, `/admin/projects/${p.id}/automate`, 'Draft update with automation', { fields: { task: 'status' } })}
   </section>
@@ -383,7 +387,7 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
     ${d.files.length ? html`<ul class="log log--stack">${d.files.map((f) => html`<li><a href="/admin/files/${f.id}">${f.label || f.original_name}</a><span class="muted small">${f.original_name} · ${humanSize(f.size)} · ${f.uploaded_by} · ${fmtDate(f.created_at)}</span></li>`)}</ul>` : empty('No files.')}
     <form method="post" action="/admin/projects/${p.id}/files" class="a-form" enctype="multipart/form-data">${csrf(ctx)}
       <label>Add working file<input type="file" name="file" required></label>
-      <button class="btn-a" type="submit">Upload</button>
+      <button class="ui-btn ui-btn--small" type="submit">Upload</button>
     </form>
     ${action(ctx, `/admin/projects/${p.id}/automate`, 'Organise file labels', { fields: { task: 'files' } })}
   </section>
@@ -393,7 +397,7 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
       ${unlocked ? html`<form method="post" action="/admin/projects/${p.id}/integrations" class="a-form a-form--row">${csrf(ctx)}<input type="hidden" name="product" value="${i.id}">
         <label>Request<select name="job_type">${options(Object.entries(i.jobTypes).map(([k, v]) => [k, v.label]))}</select></label>
         <label>Notes<input name="notes" maxlength="2000"></label>
-        <button class="btn-a" type="submit">${i.connected ? 'Submit job' : 'Assign to a designer'}</button></form>` : html`<p class="lock">Available once the deposit is received.</p>`}</div>`)}
+        <button class="ui-btn ui-btn--small" type="submit">${i.connected ? 'Submit job' : 'Assign to a designer'}</button></form>` : html`<p class="lock">Available once the deposit is received.</p>`}</div>`)}
     ${d.jobs.length ? html`<ul class="log log--stack">${d.jobs.map((j) => html`<li><span>${badge(j.status)} <strong>${ctx.app.integrations.PRODUCTS[j.product].name}</strong> · ${titleCase(j.job_type)} <span class="muted">· ${j.mode} · ${fmtDate(j.created_at)}</span></span>
       ${j.result && j.result.error ? html`<span class="muted small">${j.result.error}</span>` : ''}
       ${j.mode === 'api' && ['queued', 'running'].includes(j.status) ? action(ctx, `/admin/jobs/${j.id}/refresh`, 'Check status') : ''}

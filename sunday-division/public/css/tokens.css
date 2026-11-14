@@ -1,6 +1,7 @@
 /* Sunday Division — design tokens.
    One source for colour, type, space, shape and motion. Product stylesheets use the
-   semantic tokens (--color-*, --text-*, --space-*), never raw values.
+   semantic tokens (--color-*, --text-*, --space-*), never raw values. Dark is the default theme
+   (Command, studio dashboard); class="theme-light" on <html> switches the public site and portal.
 
    Display type: Canela is the reference face. It is a commercial typeface (Commercial Type)
    and is not shipped here. Newsreader Display (SIL OFL), instanced at its display optical
@@ -8,7 +9,10 @@
    (or put "Canela" first in --font-display) — nothing else changes. */
 
 @font-face { font-family: "SD Display"; src: url("../fonts/newsreader-display-latin-300-500.woff2") format("woff2"); font-weight: 300 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "SD Display"; src: url("../fonts/newsreader-display-latin-300-500-italic.woff2") format("woff2"); font-weight: 300 500; font-style: italic; font-display: swap; }
 @font-face { font-family: "SD Sans"; src: url("../fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "SD Mono"; src: url("../fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "SD Mono"; src: url("../fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
 
 :root {
   /* ── Brand palette ── */
@@ -28,6 +32,16 @@
   --sd-amber: #C9A46A;        /* attention (sparingly) */
   --sd-clay: #C98476;         /* problems (sparingly) */
 
+  /* Light-surface neutrals for the public site and client portal (contrast checked on warm white,
+     paper and bone). Warm white is the page; bone is the alternate section. */
+  --sd-paper: #FBF8F3;        /* raised surfaces on light */
+  --sd-umber: #45403A;        /* secondary text on light · 9.0:1 on warm white */
+  --sd-taupe: #625C54;        /* tertiary text on light · 5.8:1 on warm white, 5.1:1 on bone */
+  --sd-linen: #DDD5C8;        /* hairlines on light */
+  --sd-sage-deep: #476A52;    /* success text on light · 5.3:1 on warm white */
+  --sd-amber-deep: #7A5A22;   /* attention text on light · 5.5:1 */
+  --sd-clay-deep: #8C3A2B;    /* problems on light · 6.7:1 */
+
   /* ── Semantic colour ── */
   --color-bg: var(--sd-obsidian);
   --color-surface: var(--sd-charcoal);
@@ -39,18 +53,26 @@
   --color-on-accent: var(--sd-obsidian);
   --color-line: var(--sd-line);
   --color-line-strong: var(--sd-line-strong);
+  --color-accent-wash: rgba(232, 224, 212, .06);
+  --color-control-active: var(--sd-bone);
   --color-success: var(--sd-sage);
   --color-success-soft: rgba(113, 151, 123, .14);
+  --color-success-text: #A6C7AE;
+  --color-success-line: rgba(113, 151, 123, .45);
   --color-attention: var(--sd-amber);
   --color-attention-soft: rgba(201, 164, 106, .12);
+  --color-attention-line: rgba(201, 164, 106, .45);
   --color-danger: var(--sd-clay);
   --color-danger-soft: rgba(201, 132, 118, .12);
+  --color-danger-line: rgba(201, 132, 118, .5);
   --color-focus: var(--sd-warm-white);
+  --color-focus-ring: rgba(232, 224, 212, .12);
   --color-scrim: rgba(17, 17, 17, .86);
 
   /* ── Type ── */
   --font-display: "SD Display", "Canela", "Newsreader", Georgia, serif;
   --font-sans: "SD Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "SD Mono", "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace; /* codes, measurements, data */
   /* Display scale (serif, light) */
   --text-display-xl: 300 clamp(40px, 11vw, 52px)/1.02 var(--font-display);
   --text-display-l: 300 clamp(34px, 9vw, 42px)/1.04 var(--font-display);
@@ -91,4 +113,37 @@
   --dur-fast: 140ms; --dur: 240ms; --dur-slow: 420ms;
 
   color-scheme: dark;
+}
+
+/* ── Light theme: public website and client portal ──
+   Same palette and type; obsidian becomes the ink and the primary action, warm white the page. */
+:root.theme-light, .theme-light {
+  --color-bg: var(--sd-warm-white);
+  --color-surface: var(--sd-paper);
+  --color-surface-2: var(--sd-bone);
+  --color-text: var(--sd-obsidian);
+  --color-text-2: var(--sd-umber);
+  --color-text-3: var(--sd-taupe);
+  --color-accent: var(--sd-obsidian);
+  --color-on-accent: var(--sd-warm-white);
+  --color-accent-wash: rgba(17, 17, 17, .04);
+  --color-control-active: var(--sd-obsidian);
+  --color-line: var(--sd-linen);
+  --color-line-strong: var(--sd-stone);
+  --color-success: var(--sd-sage-deep);
+  --color-success-soft: rgba(113, 151, 123, .16);
+  --color-success-text: var(--sd-sage-deep);
+  --color-success-line: rgba(71, 106, 82, .4);
+  --color-attention: var(--sd-amber-deep);
+  --color-attention-soft: rgba(201, 164, 106, .18);
+  --color-attention-line: rgba(122, 90, 34, .4);
+  --color-danger: var(--sd-clay-deep);
+  --color-danger-soft: rgba(201, 132, 118, .16);
+  --color-danger-line: rgba(140, 58, 43, .45);
+  --color-focus: var(--sd-obsidian);
+  --color-focus-ring: rgba(17, 17, 17, .12);
+  --color-scrim: rgba(244, 239, 231, .9);
+  --hairline: 1px solid var(--color-line);
+  --border: 1px solid var(--color-line-strong);
+  color-scheme: light;
 }

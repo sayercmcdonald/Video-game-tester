@@ -14,6 +14,8 @@ The studio's website, client intake, client portal, internal operating dashboard
 - **Contractors** — approved roster, assignments recommended by the Talent Agent and approved by staff, and a contractor portal (`/contractor`) for briefs, offers and submissions.
 - **Message outbox** — every message to a client or contractor is approved by staff before it is sent.
 
+One design system runs through all of it: shared tokens and components, a dark theme for Command and the studio dashboard, a light editorial theme for the website and portals. See [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md).
+
 ## Run it
 
 Requires Node.js 22.13 or newer.
@@ -111,4 +113,4 @@ The app is a single process with a SQLite database and an uploads folder, both u
 - **Portfolio shows studio concept studies only**, drawn as SVG in `src/views/flats.js`. Replace or extend with real work as clients give permission.
 - **Not verified in this environment:** live Stripe API calls, live Claude and OpenAI calls, real push delivery to a phone and the Docker image build (see the notes above).
 
-More detail: [`docs/COMMAND.md`](docs/COMMAND.md) · [`docs/AGENTS.md`](docs/AGENTS.md) · [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)
+More detail: [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) · [`docs/RELEASE-CHECKS.md`](docs/RELEASE-CHECKS.md) · [`docs/COMMAND.md`](docs/COMMAND.md) · [`docs/AGENTS.md`](docs/AGENTS.md) · [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)
