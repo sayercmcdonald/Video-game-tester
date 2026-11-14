@@ -128,5 +128,28 @@ async function driveWorkflow(app, base, stage, inquiry = INQUIRY) {
   return out;
 }
 
+/**
+ * Runs in the page: every visible text field's outline must contrast at least 3:1 with what
+ * surrounds it (WCAG 1.4.11). Self-contained so it can be passed to page.evaluate.
+ */
+function fieldBorderAudit() {
+  const rgb = (c) => c.match(/[\d.]+/g).map(Number);
+  const lum = (c) => { const [r, g, b] = rgb(c).slice(0, 3).map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+  const behind = (el) => { for (let n = el.parentElement; n; n = n.parentElement) { const c = getComputedStyle(n).backgroundColor; const a = rgb(c)[3]; if (a === undefined || a > 0.5) return c; } return 'rgb(255, 255, 255)'; };
+  const problems = [];
+  for (const el of document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea')) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || el.closest('[aria-hidden="true"]')) continue;
+    const s = getComputedStyle(el);
+    const width = parseFloat(s.borderBottomWidth);
+    if (!width) { problems.push(`no outline: ${el.name}`); continue; }
+    const k = ratio(s.borderBottomColor, behind(el));
+    if (k < 3) problems.push(`field outline ${k.toFixed(2)}:1 < 3:1: ${el.tagName.toLowerCase()} ${el.name}`);
+  }
+  return problems;
+}
+
+module.exports.fieldBorderAudit = fieldBorderAudit;
 module.exports.payInvoice = payInvoice;
 module.exports.driveWorkflow = driveWorkflow;

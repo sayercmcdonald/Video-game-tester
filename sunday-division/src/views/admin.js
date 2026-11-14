@@ -2,6 +2,7 @@
 const { html, raw, money, fmtDate, paragraphs, humanSize, titleCase } = require('../lib/util');
 const catalog = require('../services/catalog');
 const { Icon, StatusPill } = require('./command-ui');
+const { assetUrl } = require('../lib/assets');
 const { statusBadge } = require('./studio-ui');
 
 const NAV = [
@@ -32,9 +33,9 @@ function shell(ctx, { title, body, path = '' }) {
 <title>${title} — Sunday Division Studio</title>
 <meta name="theme-color" content="#111111"><meta name="color-scheme" content="dark">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/css/tokens.css"><link rel="stylesheet" href="/assets/css/ui.css"><link rel="stylesheet" href="/assets/css/studio.css">
+<link rel="stylesheet" href="${assetUrl('css/tokens.css')}"><link rel="stylesheet" href="${assetUrl('css/ui.css')}"><link rel="stylesheet" href="${assetUrl('css/studio.css')}">
 <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
-<script src="/assets/js/admin.js" defer></script>
+<script src="${assetUrl('js/admin.js')}" defer></script>
 </head>
 <body class="admin">
 <a class="skip" href="#main">Skip to content</a>

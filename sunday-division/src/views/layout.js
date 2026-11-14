@@ -1,5 +1,6 @@
 'use strict';
 const { html, raw } = require('../lib/util');
+const { assetUrl } = require('../lib/assets');
 
 const NAV = [
   ['/services', 'Services'], ['/portfolio', 'Portfolio'], ['/about', 'About'], ['/contact', 'Contact'],
@@ -20,11 +21,11 @@ function page(ctx, { title, description, body, path = '', dark = false }) {
 <meta name="theme-color" content="#111111">
 <link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/css/tokens.css">
-<link rel="stylesheet" href="/assets/css/ui.css">
-<link rel="stylesheet" href="/assets/css/site.css">
+<link rel="stylesheet" href="${assetUrl('css/tokens.css')}">
+<link rel="stylesheet" href="${assetUrl('css/ui.css')}">
+<link rel="stylesheet" href="${assetUrl('css/site.css')}">
 <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
-<script src="/assets/js/site.js" defer></script>
+<script src="${assetUrl('js/site.js')}" defer></script>
 </head>
 <body class="${dark ? 'has-dark-hero' : ''}">
 <a class="skip" href="#main">Skip to content</a>

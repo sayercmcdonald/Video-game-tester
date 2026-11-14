@@ -5,7 +5,7 @@
 
   // ── Installable app: register the service worker for /command/ ──────
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/command/sw.js', { scope: '/command/' }).catch(function () { /* optional */ });
+    navigator.serviceWorker.register('/command/sw.js', { scope: '/command' }).catch(function () { /* optional */ });
   }
 
   function post(url, body) {

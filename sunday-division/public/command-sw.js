@@ -1,14 +1,18 @@
-/* Sunday Division Command — service worker (scope /command/).
+/* Sunday Division Command — service worker (scope /command).
  *
+ * Scope /command (the overview itself and everything under it).
  * Caches only static assets (styles, script, fonts, icons) and an offline page. Pages and
  * API responses — which carry financial and client data — are never cached on the device.
  * Pushes arrive without a payload; the worker fetches what to show over the signed-in
  * session, so no business data passes through the push service.
  */
 'use strict';
-const VERSION = 'command-v3';
-const SHELL = [
-  '/command/offline',
+// The server prepends `self.SD_ASSETS = { version, shell }` with content-hashed URLs (see
+// src/lib/assets.js), so every deploy that changes a file installs a fresh cache. The list
+// below is only a fallback for serving this file directly.
+const ASSETS = self.SD_ASSETS || {};
+const VERSION = ASSETS.version || 'command-dev';
+const SHELL = ['/command/offline', ...(ASSETS.shell || [
   '/assets/css/tokens.css',
   '/assets/css/ui.css',
   '/assets/css/command.css',
@@ -17,7 +21,7 @@ const SHELL = [
   '/assets/fonts/inter-latin-wght-normal.woff2',
   '/assets/command/hero-drape.jpg',
   '/assets/command/icon-192.png',
-];
+])];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

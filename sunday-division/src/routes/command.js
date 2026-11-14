@@ -1,6 +1,8 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const { assetUrl } = require('../lib/assets');
 const views = require('../views/command');
 const { verifyPassword, hashPassword } = require('../lib/crypto');
 const { HttpError, int, str } = require('../lib/util');
@@ -20,11 +22,22 @@ function register(router, app) {
   const F = { auth: 'founder' };
   const FJ = { auth: 'founder', json: true };
   const { db } = app;
-  const swSource = fs.readFileSync(path.join(app.config.root, 'public', 'command-sw.js'), 'utf8');
+  const swFile = fs.readFileSync(path.join(app.config.root, 'public', 'command-sw.js'), 'utf8');
+  // The worker's cache list uses the same content-hashed URLs as the pages, and its cache name
+  // changes whenever any of them does, so a deploy never serves an old file from the device.
+  // Fonts are requested by the stylesheets under their plain names, so they are cached that way;
+  // their hashes still feed the cache name.
+  const SW_SHELL = ['css/tokens.css', 'css/ui.css', 'css/command.css', 'js/command.js', 'command/hero-drape.jpg', 'command/icon-192.png'];
+  const SW_FONTS = ['fonts/newsreader-display-latin-300-500.woff2', 'fonts/inter-latin-wght-normal.woff2'];
+  const swSource = () => {
+    const shell = [...SW_SHELL.map((f) => assetUrl(f)), ...SW_FONTS.map((f) => `/assets/${f}`)];
+    const version = `command-${crypto.createHash('sha256').update([...shell, ...SW_FONTS.map((f) => assetUrl(f))].join('|')).digest('hex').slice(0, 12)}`;
+    return `self.SD_ASSETS = ${JSON.stringify({ version, shell })};\n${swFile}`;
+  };
 
   // ── Public pieces of the PWA (no data) ─────────────────────────────
   router.get('/command/manifest.webmanifest', (ctx) => ctx.send(200, JSON.stringify({
-    name: 'Sunday Division Command', short_name: 'Command', id: '/command', start_url: '/command', scope: '/command/', display: 'standalone',
+    name: 'Sunday Division Command', short_name: 'Command', id: '/command', start_url: '/command', scope: '/command', display: 'standalone',
     orientation: 'portrait', background_color: '#111111', theme_color: '#111111', description: 'Private founder app for Sunday Division.',
     icons: [
       { src: '/assets/command/icon-192.png', sizes: '192x192', type: 'image/png' },
@@ -32,7 +45,7 @@ function register(router, app) {
       { src: '/assets/command/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   }), { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'no-cache' }));
-  router.get('/command/sw.js', (ctx) => ctx.send(200, swSource, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/command/' }));
+  router.get('/command/sw.js', (ctx) => ctx.send(200, swSource(), { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/command' }));
 
   router.get('/command/offline', (ctx) => ctx.html(views.offline(ctx)));
 

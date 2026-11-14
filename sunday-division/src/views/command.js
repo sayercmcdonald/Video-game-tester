@@ -1,5 +1,6 @@
 'use strict';
 const { html, raw, esc, money } = require('../lib/util');
+const { assetUrl } = require('../lib/assets');
 const { fmtLocal, ago, localHour } = require('../command/time');
 const { REGISTRY } = require('../agents/definitions');
 const { TOOLS } = require('../agents/tools');
@@ -65,10 +66,10 @@ function shell(ctx, { title, tab, body, back, wide = false }) {
 <link rel="icon" href="/assets/command/icon-192.png" type="image/png">
 <link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/css/tokens.css">
-<link rel="stylesheet" href="/assets/css/ui.css">
-<link rel="stylesheet" href="/assets/css/command.css">
-<script src="/assets/js/command.js" defer></script>
+<link rel="stylesheet" href="${assetUrl('css/tokens.css')}">
+<link rel="stylesheet" href="${assetUrl('css/ui.css')}">
+<link rel="stylesheet" href="${assetUrl('css/command.css')}">
+<script src="${assetUrl('js/command.js')}" defer></script>
 </head>
 <body class="c-body" data-tab="${tab}">
 <a class="c-skip" href="#main">Skip to content</a>
@@ -100,7 +101,7 @@ function bare(ctx, { title, body }) {
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Command">
 <link rel="manifest" href="/command/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/command/apple-touch-icon.png">
 <link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/css/tokens.css"><link rel="stylesheet" href="/assets/css/ui.css"><link rel="stylesheet" href="/assets/css/command.css"></head>
+<link rel="stylesheet" href="${assetUrl('css/tokens.css')}"><link rel="stylesheet" href="${assetUrl('css/ui.css')}"><link rel="stylesheet" href="${assetUrl('css/command.css')}"></head>
 <body class="c-body c-body--bare"><main id="main" class="c-bare">${body}</main></body></html>`;
 }
 
@@ -151,7 +152,7 @@ function overview(ctx, { health, trailing, counts, focus, brief, pendingBrief, p
   const marginDelta = t.marginDeltaPp === null ? null : { text: `${signed(t.marginDeltaPp, ' pp')}`, tone: t.marginDeltaPp >= 0 ? 'up' : 'down' };
   return shell(ctx, {
     title: 'Overview', tab: 'overview',
-    body: html`${ui.Hero({ image: '/assets/command/hero-drape.jpg', eyebrow: 'Command', title: `${greeting}, ${firstName(ctx)}.`, subtitle })}
+    body: html`${ui.Hero({ image: assetUrl('command/hero-drape.jpg'), eyebrow: 'Command', title: `${greeting}, ${firstName(ctx)}.`, subtitle })}
 
 <div class="ui-overview">
 <div class="ui-overview__figures">

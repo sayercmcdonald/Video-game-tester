@@ -146,7 +146,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   position: sticky; bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--space-2)); z-index: 10; display: flex; align-items: flex-end; gap: var(--space-2);
   padding: var(--space-2); margin: 0 calc(-1 * var(--space-2)); background: var(--color-scrim); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-radius: var(--radius-xl);
 }
-.ui-composer textarea { flex: 1; min-height: var(--target); max-height: 160px; resize: none; padding: 11px 16px; border-radius: var(--radius-pill); background: var(--color-surface); border: 1px solid var(--color-line-strong); font: var(--text-callout); color: var(--color-text); line-height: 1.4; }
+.ui-composer textarea { flex: 1; min-height: var(--target); max-height: 160px; resize: none; padding: 11px 16px; border-radius: var(--radius-pill); background: var(--color-surface); border: 1px solid var(--color-field-border); font: var(--text-callout); color: var(--color-text); line-height: 1.4; }
 .ui-composer textarea:focus { outline: none; border-color: var(--sd-bone); box-shadow: 0 0 0 3px var(--color-focus-ring); }
 .ui-composer textarea::placeholder { color: var(--color-text-3); }
 .ui-composer__send { background: var(--color-accent); color: var(--color-on-accent); border-color: var(--color-accent); }

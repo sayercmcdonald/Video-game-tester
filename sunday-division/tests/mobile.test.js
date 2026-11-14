@@ -5,7 +5,7 @@
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { startApp, ADMIN, driveWorkflow } = require('./helpers');
+const { startApp, ADMIN, driveWorkflow, fieldBorderAudit } = require('./helpers');
 
 let playwright = null;
 try { playwright = require('playwright'); } catch { /* not installed */ }
@@ -75,6 +75,7 @@ test('Command is usable on a phone and on a desktop', { skip: playwright ? false
       for (const path of SCREENS) {
         await page.goto(base + path);
         assert.deepEqual(await page.evaluate(audit), [], `${label} ${path}`);
+        assert.deepEqual(await page.evaluate(fieldBorderAudit), [], `${label} ${path} field outlines`);
       }
       // Body and secondary text against the background meet WCAG AA.
       const colors = await page.evaluate(() => {
@@ -84,6 +85,11 @@ test('Command is usable on a phone and on a desktop', { skip: playwright ? false
       });
       assert.ok(contrast(colors.text, colors.bg) >= 7, 'body text contrast');
       if (colors.muted) assert.ok(contrast(colors.muted, colors.bg) >= 4.5, 'secondary text contrast');
+      // The service worker covers the overview itself (scope /command), so it is cached and has an offline fallback.
+      await page.goto(`${base}/command`);
+      await page.waitForFunction(async () => { const r = await navigator.serviceWorker.getRegistration('/command'); return Boolean(r && r.active && r.active.state === 'activated'); }, null, { polling: 200, timeout: 15000 });
+      await page.reload();
+      assert.equal(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)), true, 'the overview is controlled by the service worker');
       // The chat works with JavaScript: ask, get an answer, no page reload.
       await page.goto(`${base}/command/chat`);
       await page.fill('#q', 'What did we earn this week?');

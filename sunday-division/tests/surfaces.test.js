@@ -7,7 +7,7 @@
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { startApp, ADMIN, INQUIRY, driveWorkflow } = require('./helpers');
+const { startApp, ADMIN, INQUIRY, driveWorkflow, fieldBorderAudit } = require('./helpers');
 
 let playwright = null;
 try { playwright = require('playwright'); } catch { /* not installed */ }
@@ -75,6 +75,7 @@ test('dashboard, portal and website on the design system', { skip: playwright ? 
       for (const path of SITE) {
         await page.goto(base + path);
         assert.deepEqual(await page.evaluate(audit), [], `${label} ${path}`);
+        assert.deepEqual(await page.evaluate(fieldBorderAudit), [], `${label} ${path} field outlines`);
       }
       await page.goto(base + '/');
       assert.equal(await page.evaluate(() => document.documentElement.classList.contains('theme-light')), true);
@@ -97,6 +98,7 @@ test('dashboard, portal and website on the design system', { skip: playwright ? 
       await page.fill('input[name=key]', portalKey);
       await Promise.all([page.waitForURL(/\/portal\/home$/), page.click('form[action="/portal/access"] button[type=submit]')]);
       assert.deepEqual(await page.evaluate(audit), [], `${label} portal home`);
+      assert.deepEqual(await page.evaluate(fieldBorderAudit), [], `${label} portal field outlines`);
       assert.match(await page.textContent('.p-next'), /Deposit due/);
       await page.click('.p-next a');
       assert.match(page.url(), new RegExp(`#invoices-${due.projectId}$`));
@@ -115,6 +117,7 @@ test('dashboard, portal and website on the design system', { skip: playwright ? 
       for (const path of [...STUDIO, `/admin/projects/${live.projectId}`, `/admin/leads/${live.inquiryId}`, `/admin/ops/workflows/${live.wfId}`]) {
         await page.goto(base + path);
         assert.deepEqual(await page.evaluate(audit), [], `${label} ${path}`);
+        assert.deepEqual(await page.evaluate(fieldBorderAudit), [], `${label} ${path} field outlines`);
       }
       c = await page.evaluate(colours);
       assert.equal(c.bg, 'rgb(17, 17, 17)', 'obsidian dashboard');

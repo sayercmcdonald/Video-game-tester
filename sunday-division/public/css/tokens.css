@@ -28,7 +28,8 @@
   --sd-stone: #8F887D;        /* tertiary text · 5.4:1 on obsidian, 5.0:1 on charcoal — not for text on graphite (4.4:1) */
   --sd-ash: #615C55;          /* disabled, decorative strokes */
   --sd-line: #2C2A27;         /* hairlines on obsidian */
-  --sd-line-strong: #3B3834;  /* control borders */
+  --sd-line-strong: #3B3834;  /* button and pill borders (decorative: labelled by their text) */
+  --sd-field: #757067;        /* form-field outlines · 3.8:1 on obsidian, 3.6:1 on charcoal, 3.1:1 on graphite (WCAG 1.4.11) */
   --sd-amber: #C9A46A;        /* attention (sparingly) */
   --sd-clay: #C98476;         /* problems (sparingly) */
 
@@ -53,6 +54,7 @@
   --color-on-accent: var(--sd-obsidian);
   --color-line: var(--sd-line);
   --color-line-strong: var(--sd-line-strong);
+  --color-field-border: var(--sd-field);
   --color-accent-wash: rgba(232, 224, 212, .06);
   --color-control-active: var(--sd-bone);
   --color-success: var(--sd-sage);
@@ -130,6 +132,7 @@
   --color-control-active: var(--sd-obsidian);
   --color-line: var(--sd-linen);
   --color-line-strong: var(--sd-stone);
+  --color-field-border: var(--sd-taupe);
   --color-success: var(--sd-sage-deep);
   --color-success-soft: rgba(113, 151, 123, .16);
   --color-success-text: var(--sd-sage-deep);

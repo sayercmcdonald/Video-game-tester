@@ -93,11 +93,12 @@ test('Command is founder-only on every route, enforced server-side', async (t) =
 
   await t.test('the service worker caches static assets only, never pages or API data', async () => {
     const res = await new Browser(base).get('/command/sw.js');
-    assert.equal(res.headers.get('service-worker-allowed'), '/command/');
+    assert.equal(res.headers.get('service-worker-allowed'), '/command'); // covers the overview at /command too
     assert.match(res.text, /url\.pathname\.startsWith\('\/assets\/'\)/);
     assert.doesNotMatch(res.text, /cache\.put\(req[^)]*\)[^;]*\/command\/api/);
     const manifest = JSON.parse((await new Browser(base).get('/command/manifest.webmanifest')).text);
-    assert.equal(manifest.scope, '/command/');
+    assert.equal(manifest.scope, '/command');
+    assert.ok(manifest.start_url.startsWith(manifest.scope));
     assert.equal(manifest.display, 'standalone');
   });
 });

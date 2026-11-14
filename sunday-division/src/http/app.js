@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const { HttpError } = require('../lib/util');
+const { hashOf } = require('../lib/assets');
 const { parseRequestBody, readBody } = require('./body');
 const { parseCookies } = require('./session');
 
@@ -110,9 +111,15 @@ function serveStatic(ctx, publicDir) {
   try { stat = fs.statSync(file); } catch { throw new HttpError(404, 'Not found'); }
   if (!stat.isFile()) throw new HttpError(404, 'Not found');
   const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+  // A request carrying the file's current content hash (see lib/assets) can be cached for good:
+  // the next deploy that changes the file links it under a new URL. A stale or unknown hash is
+  // revalidated, so an old page never pins an old file.
+  const version = ctx.url.searchParams.get('v');
+  let cacheControl = ctx.app.config.isProd ? 'public, max-age=3600' : 'no-cache';
+  if (version) cacheControl = version === hashOf(rel, publicDir) ? 'public, max-age=31536000, immutable' : 'no-cache';
   const headers = {
     'Content-Type': STATIC_TYPES[path.extname(file)] || 'application/octet-stream',
-    'Cache-Control': ctx.app.config.isProd ? 'public, max-age=3600' : 'no-cache',
+    'Cache-Control': cacheControl,
     ETag: etag,
   };
   if (ctx.req.headers['if-none-match'] === etag) return ctx.send(304, '', headers);
