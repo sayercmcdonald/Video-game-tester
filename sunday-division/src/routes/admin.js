@@ -1,5 +1,6 @@
 'use strict';
 const views = require('../views/admin');
+const inbox = require('../services/inbox');
 const { verifyPassword } = require('../lib/crypto');
 const { HttpError, int, str, list, parseMoney } = require('../lib/util');
 
@@ -8,7 +9,9 @@ function register(router, app) {
   const A = { auth: 'admin' };
   const upload = { auth: 'admin', maxBody: app.config.limits.adminFileBytes + 1024 * 1024 };
   const actor = (ctx) => `staff:${ctx.user.email}`;
-  const back = (ctx, projectId, anchor, flash) => ctx.redirect(`/admin/projects/${projectId}#${anchor}`, flash);
+  // Actions taken from the studio inbox return there. The target is a fixed path, never taken from the request.
+  const fromInbox = (ctx) => Boolean(ctx.body && ctx.body._return === 'inbox');
+  const back = (ctx, projectId, anchor, flash) => ctx.redirect(fromInbox(ctx) ? '/admin/inbox' : `/admin/projects/${projectId}#${anchor}`, flash);
 
   // ── Auth ──────────────────────────────────────────────────────────────
   router.get('/admin/login', (ctx) => (ctx.user ? ctx.redirect('/admin') : ctx.html(views.login(ctx))));
@@ -37,21 +40,7 @@ function register(router, app) {
 
   // ── Overview ──────────────────────────────────────────────────────────
   const n = (sql, ...p) => db.get(sql, ...p).n;
-  function approvalQueues() {
-    const join = 'JOIN projects p ON p.id = x.project_id';
-    return {
-      quotes: db.all(`SELECT x.*, p.code FROM quotes x ${join} WHERE x.status = 'draft' ORDER BY x.id`),
-      invoices: db.all(`SELECT x.*, p.code FROM invoices x ${join} WHERE x.status = 'draft' ORDER BY x.id`),
-      deliverables: db.all(`SELECT x.*, p.code FROM deliverables x ${join} WHERE x.status IN ('in_review','approved') ORDER BY x.id`),
-      updates: db.all(`SELECT x.*, p.code FROM status_updates x ${join} WHERE x.status = 'draft' ORDER BY x.id`),
-      revisions: db.all(`SELECT x.*, p.code FROM revisions x ${join} WHERE x.status = 'open' ORDER BY x.id`),
-      briefs: db.all("SELECT id AS project_id, code, name, brief_source FROM projects WHERE brief_status = 'draft' AND status != 'cancelled'"),
-      assignments: db.all("SELECT x.*, p.code, c.name AS contractor_name, t.title AS task_title FROM assignments x JOIN projects p ON p.id = x.project_id JOIN contractors c ON c.id = x.contractor_id JOIN tasks t ON t.id = x.task_id WHERE x.status = 'recommended' ORDER BY x.id"),
-      messages: db.all("SELECT x.*, p.code FROM messages x LEFT JOIN projects p ON p.id = x.project_id WHERE x.status = 'draft' ORDER BY x.id"),
-      tasks: db.all(`SELECT x.project_id, p.code, COUNT(*) AS n FROM tasks x ${join} WHERE x.status = 'proposed' GROUP BY x.project_id`),
-      payments: app.billing.paymentsNeedingReview(),
-    };
-  }
+  const approvalQueues = () => inbox.approvalQueues(app);
   router.get('/admin', A, (ctx) => {
     const queues = approvalQueues();
     ctx.html(views.overview(ctx, {
@@ -67,6 +56,12 @@ function register(router, app) {
     }));
   });
   router.get('/admin/approvals', A, (ctx) => ctx.html(views.approvals(ctx, approvalQueues())));
+  router.get('/admin/inbox', A, (ctx) => {
+    const groups = inbox.GROUPS.map(([g]) => g);
+    const filter = groups.includes(ctx.query.get('f')) ? ctx.query.get('f') : 'all';
+    const data = inbox.view(app, { filter, key: str(ctx.query.get('item'), 60) });
+    ctx.html(views.inbox(ctx, { ...data, filter, opened: Boolean(ctx.query.get('item')) }));
+  });
 
   // ── Leads ─────────────────────────────────────────────────────────────
   router.get('/admin/leads', A, (ctx) => {
@@ -85,7 +80,7 @@ function register(router, app) {
   router.post('/admin/leads/:id/status', A, (ctx) => {
     const inquiry = mustLead(ctx);
     app.intake.setStatus(inquiry.id, str(ctx.body.status, 20), actor(ctx));
-    ctx.redirect(`/admin/leads/${inquiry.id}`, 'Status updated.');
+    ctx.redirect(fromInbox(ctx) ? '/admin/inbox' : `/admin/leads/${inquiry.id}`, 'Status updated.');
   });
   router.post('/admin/leads/:id/notes', A, (ctx) => {
     const inquiry = mustLead(ctx);

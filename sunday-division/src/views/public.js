@@ -38,17 +38,17 @@ function home(ctx) {
     body: html`
 <section class="hero">
   <div class="hero__copy">
-    <p class="label label--light hero__kicker">Fashion design &amp; development studio</p>
+    <p class="label hero__kicker">Fashion design &amp; development studio</p>
     <h1 class="display display--xl">Garments, <em>engineered</em> before they are made.</h1>
-    <p class="lede lede--light">Sunday Division takes a garment from first idea to factory-ready files: design, technical flats and tech packs, 3D visualisation, and the imagery to launch it.</p>
+    <p class="lede">Sunday Division takes a garment from first idea to factory-ready files: design, technical flats and tech packs, 3D visualisation, and the imagery to launch it.</p>
     <div class="hero__actions">
-      <a class="btn btn--light" href="/start">Start a Project</a>
-      <a class="link link--light" href="/services">See services and pricing</a>
+      <a class="btn" href="/start">Start a project</a>
+      <a class="link" href="/services">See services and pricing</a>
     </div>
   </div>
   <figure class="hero__figure">
     ${annotatedFlat()}
-    <figcaption class="label label--light">Study 01 — Field Overshirt · points of measure in cm · concept study</figcaption>
+    <figcaption class="label">Study 01 — Field Overshirt · points of measure in cm · concept study</figcaption>
   </figure>
 </section>
 
@@ -131,7 +131,7 @@ function cta() {
     <p class="label">Start</p>
     <h2 class="display display--xl">Tell us what you are making.</h2>
     <p class="lede">The intake form takes about five minutes. You will hear back from a person at the studio with questions or a quote.</p>
-    <a class="btn" href="/start">Start a Project</a>
+    <a class="btn" href="/start">Start a project</a>
   </div>
 </section>`;
 }
@@ -293,12 +293,12 @@ function start(ctx, { values = {}, errors = {} } = {}) {
   const hasErrors = Object.keys(errors).length > 0;
   const chosen = new Set(values.deliverables || []);
   return page(ctx, {
-    title: 'Start a Project',
+    title: 'Start a project',
     path: '/start',
     description: 'Tell Sunday Division about your garment or collection and receive a scoped quote.',
     body: html`
 <section class="section section--intro">
-  <p class="label">Start a Project</p>
+  <p class="label">Start a project</p>
   <h1 class="display display--xl">Tell us what you are making.</h1>
   <p class="lede">Share as much as you have. Rough is fine. A person at the studio reads every submission and replies with questions or a quote.</p>
 </section>

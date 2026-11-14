@@ -6,7 +6,7 @@ const { assetUrl } = require('../lib/assets');
 const { statusBadge } = require('./studio-ui');
 
 const NAV = [
-  ['/admin', 'Overview', 'overview'], ['/admin/leads', 'Leads', 'brief'], ['/admin/projects', 'Projects', 'projects'],
+  ['/admin/inbox', 'Inbox', 'inbox'], ['/admin', 'Overview', 'overview'], ['/admin/leads', 'Leads', 'brief'], ['/admin/projects', 'Projects', 'projects'],
   ['/admin/approvals', 'Approvals', 'approvals'], ['/admin/messages', 'Messages', 'command'], ['/admin/ops', 'Operations', 'agents'], ['/admin/invoices', 'Invoices', 'cash'], ['/admin/contractors', 'Contractors', 'person'],
 ];
 /** Statuses that are waiting on the studio (bone pills); failures and finished states are coloured by studio-ui. */
@@ -24,7 +24,7 @@ const options = (items, selected, blank) => html`${blank !== undefined ? html`<o
 })}`;
 const empty = (text) => html`<p class="empty">${text}</p>`;
 
-function shell(ctx, { title, body, path = '' }) {
+function shell(ctx, { title, body, path = '', flush = false }) {
   return html`<!doctype html>
 <html lang="en">
 <head>
@@ -32,7 +32,7 @@ function shell(ctx, { title, body, path = '' }) {
 <meta name="robots" content="noindex, nofollow">
 <title>${title} — Sunday Division Studio</title>
 <meta name="theme-color" content="#111111"><meta name="color-scheme" content="dark">
-<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="${assetUrl('css/tokens.css')}"><link rel="stylesheet" href="${assetUrl('css/ui.css')}"><link rel="stylesheet" href="${assetUrl('css/studio.css')}">
 <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
 <script src="${assetUrl('js/admin.js')}" defer></script>
@@ -49,7 +49,7 @@ ${ctx.user ? html`<aside class="a-side">
     <a href="/" class="a-side__site">View website</a>
   </div>
 </aside>` : ''}
-<main class="a-main ${ctx.user ? '' : 'a-main--solo'}" id="main" tabindex="-1">
+<main class="a-main ${ctx.user ? '' : 'a-main--solo'} ${flush ? 'a-main--flush' : ''}" id="main" tabindex="-1">
   ${ctx.flash ? html`<div class="a-flash" role="status">${ctx.flash}</div>` : ''}
   ${body}
 </main>
@@ -439,6 +439,105 @@ function approvals(ctx, d) {
   });
 }
 
+// ── Inbox: list and detail beside the studio rail (three panes on desktop) ──
+/** "14 Nov" this year, "14 Nov 2025" otherwise — the list column stays narrow. */
+const shortDate = (iso) => {
+  const d = new Date(iso); if (Number.isNaN(d.getTime())) return '';
+  const opts = { day: 'numeric', month: 'short', timeZone: 'UTC' };
+  if (d.getUTCFullYear() !== new Date().getUTCFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString('en-GB', opts);
+};
+const TONE_LABEL = { danger: 'Failed', attention: 'Needs a look', decision: 'Waiting on you', quiet: 'For information' };
+function inboxDetail(ctx, it) {
+  const r = it.row;
+  const ret = { _return: 'inbox' };
+  const facts = (pairs) => html`<dl class="ib-facts">${pairs.filter(([, v]) => v !== '' && v !== null && v !== undefined).map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>`;
+  const open = (label, href = it.href) => html`<a class="ui-btn ui-btn--small" href="${href}">${label}</a>`;
+  const primaryOpen = (label, href = it.href) => html`<a class="ui-btn ui-btn--small ui-btn--primary" href="${href}">${label}</a>`;
+  let body = ''; let actions = ''; let note = '';
+  switch (it.kind) {
+    case 'quote':
+      body = html`${facts([['Project', `${r.code} · ${r.project_name}`], ['Version', `v${r.version}`], ['Total', money(r.total_cents)], ['Drafted by', r.source ? titleCase(r.source) : '']])}${r.scope ? html`<div class="ib-quote">${paragraphs(r.scope)}</div>` : ''}`;
+      actions = primaryOpen('Review and send'); note = 'Sending makes the quote visible to the client. You confirm on the project page.'; break;
+    case 'invoice':
+      body = facts([['Project', `${r.code} · ${r.project_name}`], ['Invoice', r.number], ['Kind', titleCase(r.kind)], ['Amount', money(r.amount_cents)], ['Description', r.description]]);
+      actions = html`${action(ctx, `/admin/invoices/${r.id}/approve`, 'Approve & issue', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: `Issue ${r.number} for ${money(r.amount_cents)} to the client?`, fields: ret })}${open('Open project')}`;
+      note = 'Issuing makes the invoice payable in the client portal.'; break;
+    case 'deliverable':
+      body = facts([['Project', `${r.code} · ${r.project_name}`], ['File', r.title], ['Status', badge(r.status)], ['Source', r.source ? titleCase(r.source) : '']]);
+      actions = r.status === 'in_review'
+        ? html`${action(ctx, `/admin/deliverables/${r.id}/approve`, 'Approve after review', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: 'Confirm you have reviewed this file and it is ready for the client.', fields: ret })}${open('Open file list')}`
+        : primaryOpen('Release on the project page');
+      note = r.status === 'in_review' ? 'Approving does not show the file to the client. Releasing does.' : 'Final files stay locked in the portal until the balance is paid.'; break;
+    case 'update': body = html`<div class="ib-quote">${paragraphs(r.body)}</div>`; actions = primaryOpen('Review and publish'); note = 'Publishing shows this update in the client portal.'; break;
+    case 'revision': body = html`<div class="ib-quote">${paragraphs(r.notes)}</div>`; actions = primaryOpen('Open deliverables'); break;
+    case 'brief': body = html`<div class="ib-quote">${paragraphs(String(r.brief || '').slice(0, 900))}</div>`; actions = primaryOpen('Review the brief'); break;
+    case 'assignment':
+      body = facts([['Project', r.code], ['Contractor', r.contractor_name], ['Task', r.task_title], ['Fee', money(r.fee_cents)]]);
+      actions = primaryOpen('Review the recommendation'); note = 'Nothing is sent to the contractor until you approve on the project page.'; break;
+    case 'message':
+      body = html`${facts([['To', r.recipient_type], ['Subject', r.subject], ['Project', r.code || '']])}${r.body ? html`<div class="ib-quote">${paragraphs(r.body)}</div>` : ''}`;
+      actions = primaryOpen('Review on Messages'); note = 'Messages are never sent without your approval.'; break;
+    case 'tasks': body = facts([['Project', `${r.code} · ${r.project_name}`], ['Proposed', `${r.n}`]]); actions = primaryOpen('Review tasks'); break;
+    case 'payment': body = facts([['Invoice', r.number], ['Status', badge(r.status)], ['Note', r.note || '']]); actions = primaryOpen('Open billing'); break;
+    case 'inquiry': {
+      let wanted = [];
+      try { wanted = JSON.parse(r.deliverables || '[]'); } catch { wanted = []; }
+      body = html`${facts([['Reference', r.ref], ['Contact', `${r.contact_name} · ${r.email}`], ['Brand', r.brand_name], ['Category', r.garment_category], ['Package', r.package_interest], ['Budget', r.budget], ['Timeline', r.timeline], ['Wants', wanted.map(titleCase).join(', ')]])}${r.description ? html`<div class="ib-quote">${paragraphs(r.description)}</div>` : ''}`;
+      actions = html`${r.status === 'new' ? action(ctx, `/admin/leads/${r.id}/status`, 'Mark as reviewing', { fields: { status: 'reviewing', ...ret } }) : ''}${primaryOpen('Open inquiry')}`;
+      break;
+    }
+    case 'handoff':
+      body = html`${r.detail ? html`<div class="ib-quote">${paragraphs(r.detail)}</div>` : ''}${facts([['Kind', titleCase(r.kind)], ['From', r.created_by], ['Project', r.code || '']])}`;
+      actions = html`${r.link && r.link.startsWith('/admin/') ? primaryOpen('Open', r.link) : ''}${action(ctx, `/admin/ops/tasks/${r.id}/done`, 'Done')}${action(ctx, `/admin/ops/tasks/${r.id}/dismiss`, 'Dismiss')}`;
+      break;
+    case 'job':
+      body = html`${facts([['Agent', titleCase(r.agent)], ['Step', String(r.action).replace(/_/g, ' ')], ['Attempts', `${r.attempts} of ${r.max_attempts}`], ['Project', r.code || '']])}${r.error ? html`<pre class="ib-error">${String(r.error).slice(0, 600)}</pre>` : ''}`;
+      actions = primaryOpen('Open workflow'); note = 'Retry or cancel from the workflow page.'; break;
+    case 'integration': {
+      const mode = r.mode === 'manual' ? 'Manual hand-off — no live connection' : 'Connected service';
+      body = facts([['Product', it.title.split(' · ')[0]], ['Job', titleCase(r.job_type)], ['Status', badge(r.status)], ['Mode', mode], ['Reference', r.external_id || ''], ['Project', `${r.code} · ${r.project_name}`]]);
+      actions = primaryOpen('Open production'); break;
+    }
+    default:
+      body = facts([['Project', r.code || ''], ['Amount', r.amount_cents ? money(r.amount_cents) : r.total_cents ? money(r.total_cents) : '']]);
+      actions = primaryOpen('Open');
+      note = 'Waiting on the client. Nothing to do yet.';
+  }
+  return html`<article class="ib-detail" aria-labelledby="ib-title">
+  <p class="ib-meta"><span class="ib-dot ib-dot--${it.tone}" aria-hidden="true"></span>${TONE_LABEL[it.tone]}${it.code ? html` · <span class="mono">${it.code}</span>` : ''}${it.at ? html` · ${fmtDate(it.at, true)}` : ''}</p>
+  <h2 id="ib-title" class="ib-title">${it.title}</h2>
+  ${body}
+  <div class="ib-actions">${actions}</div>
+  ${note ? html`<p class="ib-note">${note}</p>` : ''}
+</article>`;
+}
+
+function inbox(ctx, { list, counts, selected, groups, filter, opened }) {
+  const current = selected || list[0] || null;
+  const q = (extra) => `/admin/inbox?f=${filter}${extra ? `&${extra}` : ''}`;
+  return shell(ctx, {
+    title: 'Inbox', path: '/admin/inbox', flush: true,
+    body: html`<div class="ib ${opened && current ? 'ib--opened' : ''}">
+  <section class="ib-list" aria-labelledby="ib-h">
+    <header class="ib-list__head">
+      <h1 id="ib-h" class="ib-h">Inbox</h1>
+      <p class="ib-keys" aria-hidden="true"><kbd>J</kbd> <kbd>K</kbd> move · <kbd>↵</kbd> open</p>
+    </header>
+    <nav class="ib-filters" aria-label="Filter the inbox">${groups.map(([g, label]) => html`<a href="/admin/inbox?f=${g}" ${g === filter ? raw('aria-current="true"') : ''}>${label} <span class="ib-n">${counts[g]}</span></a>`)}</nav>
+    ${list.length ? html`<ul class="ib-rows" data-inbox>${list.map((it) => html`<li><a class="ib-row" href="${q(`item=${encodeURIComponent(it.key)}`)}" ${current && it.key === current.key ? raw('aria-current="true"') : ''}>
+      <span class="ib-dot ib-dot--${it.tone}" aria-hidden="true"></span>
+      <span class="ib-row__main"><span class="ib-row__title">${it.title}</span><span class="ib-row__sub">${it.sub}</span></span>
+      <span class="ib-row__when">${it.at ? shortDate(it.at) : ''}</span></a></li>`)}</ul>`
+      : html`<div class="ib-empty"><p class="ib-empty__t">${filter === 'all' ? 'Nothing is waiting on the studio.' : 'Nothing here.'}</p><p class="muted small">New inquiries, agent hand-offs, approvals and production jobs appear here as they arrive.</p></div>`}
+  </section>
+  <section class="ib-pane" aria-label="Selected item">
+    ${current ? html`<a class="ib-back" href="${q('')}">${Icon('back')}<span>Inbox</span></a>${inboxDetail(ctx, current)}` : html`<div class="ib-empty"><p class="muted">Select an item to see it here.</p></div>`}
+  </section>
+</div>`,
+  });
+}
+
 function invoices(ctx, { rows }) {
   return shell(ctx, {
     title: 'Invoices', path: '/admin/invoices',
@@ -448,4 +547,4 @@ ${rows.length ? html`<table class="a-table"><thead><tr><th>Invoice</th><th>Proje
   });
 }
 
-module.exports = { shell, login, overview, leads, lead, projects, project, approvals, invoices };
+module.exports = { shell, login, overview, leads, lead, projects, project, approvals, inbox, invoices };

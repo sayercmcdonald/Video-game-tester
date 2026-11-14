@@ -64,8 +64,8 @@ function shell(ctx, { title, tab, body, back, wide = false }) {
 <link rel="manifest" href="/command/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/assets/command/apple-touch-icon.png">
 <link rel="icon" href="/assets/command/icon-192.png" type="image/png">
-<link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/cormorant-garamond-lining-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="${assetUrl('css/tokens.css')}">
 <link rel="stylesheet" href="${assetUrl('css/ui.css')}">
 <link rel="stylesheet" href="${assetUrl('css/command.css')}">
@@ -100,7 +100,7 @@ function bare(ctx, { title, body }) {
 <title>${title} · Command</title><meta name="theme-color" content="#111111"><meta name="color-scheme" content="dark"><meta name="robots" content="noindex, nofollow">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Command">
 <link rel="manifest" href="/command/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/command/apple-touch-icon.png">
-<link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/cormorant-garamond-lining-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="${assetUrl('css/tokens.css')}"><link rel="stylesheet" href="${assetUrl('css/ui.css')}"><link rel="stylesheet" href="${assetUrl('css/command.css')}"></head>
 <body class="c-body c-body--bare"><main id="main" class="c-bare">${body}</main></body></html>`;
 }

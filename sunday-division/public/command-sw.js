@@ -17,8 +17,9 @@ const SHELL = ['/command/offline', ...(ASSETS.shell || [
   '/assets/css/ui.css',
   '/assets/css/command.css',
   '/assets/js/command.js',
-  '/assets/fonts/newsreader-display-latin-300-500.woff2',
-  '/assets/fonts/inter-latin-wght-normal.woff2',
+  '/assets/fonts/cormorant-garamond-lining-latin-400-normal.woff2',
+  '/assets/fonts/cormorant-garamond-lining-latin-500-normal.woff2',
+  '/assets/fonts/instrument-sans-latin-wght-normal.woff2',
   '/assets/command/hero-drape.jpg',
   '/assets/command/icon-192.png',
 ])];

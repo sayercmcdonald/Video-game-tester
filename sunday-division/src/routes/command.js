@@ -28,7 +28,7 @@ function register(router, app) {
   // Fonts are requested by the stylesheets under their plain names, so they are cached that way;
   // their hashes still feed the cache name.
   const SW_SHELL = ['css/tokens.css', 'css/ui.css', 'css/command.css', 'js/command.js', 'command/hero-drape.jpg', 'command/icon-192.png'];
-  const SW_FONTS = ['fonts/newsreader-display-latin-300-500.woff2', 'fonts/inter-latin-wght-normal.woff2'];
+  const SW_FONTS = ['fonts/cormorant-garamond-lining-latin-400-normal.woff2', 'fonts/cormorant-garamond-lining-latin-500-normal.woff2', 'fonts/instrument-sans-latin-wght-normal.woff2'];
   const swSource = () => {
     const shell = [...SW_SHELL.map((f) => assetUrl(f)), ...SW_FONTS.map((f) => `/assets/${f}`)];
     const version = `command-${crypto.createHash('sha256').update([...shell, ...SW_FONTS.map((f) => assetUrl(f))].join('|')).digest('hex').slice(0, 12)}`;

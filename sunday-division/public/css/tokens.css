@@ -3,14 +3,16 @@
    semantic tokens (--color-*, --text-*, --space-*), never raw values. Dark is the default theme
    (Command, studio dashboard); class="theme-light" on <html> switches the public site and portal.
 
-   Display type: Canela is the reference face. It is a commercial typeface (Commercial Type)
-   and is not shipped here. Newsreader Display (SIL OFL), instanced at its display optical
-   size, stands in. When a Canela web licence is held, add its @font-face as "SD Display"
-   (or put "Canela" first in --font-display) — nothing else changes. */
+   Brand direction: Atelier (approved 14 Nov 2026). Cormorant Garamond for display, Instrument Sans
+   for interface and reading, IBM Plex Mono for codes and measurements. Limestone and paper grounds,
+   ink for the moments that matter, moss as the one brand colour. All faces SIL OFL, self-hosted. */
 
-@font-face { font-family: "SD Display"; src: url("../fonts/newsreader-display-latin-300-500.woff2") format("woff2"); font-weight: 300 500; font-style: normal; font-display: swap; }
-@font-face { font-family: "SD Display"; src: url("../fonts/newsreader-display-latin-300-500-italic.woff2") format("woff2"); font-weight: 300 500; font-style: italic; font-display: swap; }
-@font-face { font-family: "SD Sans"; src: url("../fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "SD Display"; src: url("../fonts/cormorant-garamond-lining-latin-300-normal.woff2") format("woff2"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "SD Display"; src: url("../fonts/cormorant-garamond-lining-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "SD Display"; src: url("../fonts/cormorant-garamond-lining-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "SD Display"; src: url("../fonts/cormorant-garamond-lining-latin-300-italic.woff2") format("woff2"); font-weight: 300; font-style: italic; font-display: swap; }
+@font-face { font-family: "SD Display"; src: url("../fonts/cormorant-garamond-lining-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "SD Sans"; src: url("../fonts/instrument-sans-latin-wght-normal.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: swap; }
 @font-face { font-family: "SD Mono"; src: url("../fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: "SD Mono"; src: url("../fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
 
@@ -33,15 +35,20 @@
   --sd-amber: #C9A46A;        /* attention (sparingly) */
   --sd-clay: #C98476;         /* problems (sparingly) */
 
-  /* Light-surface neutrals for the public site and client portal (contrast checked on warm white,
-     paper and bone). Warm white is the page; bone is the alternate section. */
-  --sd-paper: #FBF8F3;        /* raised surfaces on light */
-  --sd-umber: #45403A;        /* secondary text on light · 9.0:1 on warm white */
-  --sd-taupe: #625C54;        /* tertiary text on light · 5.8:1 on warm white, 5.1:1 on bone */
-  --sd-linen: #DDD5C8;        /* hairlines on light */
-  --sd-sage-deep: #476A52;    /* success text on light · 5.3:1 on warm white */
-  --sd-amber-deep: #7A5A22;   /* attention text on light · 5.5:1 */
-  --sd-clay-deep: #8C3A2B;    /* problems on light · 6.7:1 */
+  /* Atelier light surfaces for the public site and client portal (contrast checked on limestone,
+     paper and sand). Limestone is the page, paper the raised surface, sand the alternate section. */
+  --sd-limestone: #EEEAE3;    /* page */
+  --sd-paper: #F7F5F1;        /* raised surfaces on light */
+  --sd-sand: #E4DED4;         /* alternate sections, quiet fills */
+  --sd-ink: #1C1A17;          /* text and primary actions on light · 14.5:1 on limestone */
+  --sd-umber: #5B544A;        /* secondary text on light · 6.2:1 on limestone, 5.6:1 on sand */
+  --sd-taupe: #625C54;        /* tertiary text, field outlines · 5.5:1 on limestone, 4.9:1 on sand */
+  --sd-linen: #D6CFC4;        /* hairlines on light */
+  --sd-moss: #3F4B33;         /* the brand colour · 7.7:1 on limestone; on moss use --sd-oat for secondary text */
+  --sd-oat: #C9C0B2;          /* secondary text on moss and ink · 5.2:1 on moss, 9.7:1 on ink */
+  --sd-sage-deep: #476A52;    /* success text on light · 5.1:1 on limestone */
+  --sd-amber-deep: #7A5A22;   /* attention text on light · 5.3:1 */
+  --sd-clay-deep: #8C3A2B;    /* problems on light · 6.4:1 */
 
   /* ── Semantic colour ── */
   --color-bg: var(--sd-obsidian);
@@ -51,6 +58,7 @@
   --color-text-2: var(--sd-mist);
   --color-text-3: var(--sd-stone);
   --color-accent: var(--sd-bone);
+  --color-brand: var(--sd-bone);
   --color-on-accent: var(--sd-obsidian);
   --color-line: var(--sd-line);
   --color-line-strong: var(--sd-line-strong);
@@ -72,16 +80,17 @@
   --color-scrim: rgba(17, 17, 17, .86);
 
   /* ── Type ── */
-  --font-display: "SD Display", "Canela", "Newsreader", Georgia, serif;
-  --font-sans: "SD Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "SD Display", "Cormorant Garamond", Georgia, serif;
+  --font-sans: "SD Sans", "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "SD Mono", "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace; /* codes, measurements, data */
   /* Display scale (serif, light) */
-  --text-display-xl: 300 clamp(40px, 11vw, 52px)/1.02 var(--font-display);
-  --text-display-l: 300 clamp(34px, 9vw, 42px)/1.04 var(--font-display);
-  --text-display-m: 300 28px/1.1 var(--font-display);
-  --text-display-s: 400 22px/1.15 var(--font-display);
-  --text-figure-l: 300 34px/1 var(--font-display);
-  --text-figure-m: 300 28px/1 var(--font-display);
+  /* Cormorant has a small x-height: the scale runs about an eighth larger than a book serif would. */
+  --text-display-xl: 300 clamp(44px, 12.4vw, 58px)/1.0 var(--font-display);
+  --text-display-l: 400 clamp(38px, 10vw, 47px)/1.02 var(--font-display);
+  --text-display-m: 400 31px/1.08 var(--font-display);
+  --text-display-s: 500 25px/1.12 var(--font-display);
+  --text-figure-l: 400 38px/1 var(--font-display);
+  --text-figure-m: 400 31px/1 var(--font-display);
   /* Interface scale (sans) */
   --text-title: 600 17px/1.3 var(--font-sans);
   --text-body: 400 16px/1.5 var(--font-sans);
@@ -120,18 +129,19 @@
 /* ── Light theme: public website and client portal ──
    Same palette and type; obsidian becomes the ink and the primary action, warm white the page. */
 :root.theme-light, .theme-light {
-  --color-bg: var(--sd-warm-white);
+  --color-bg: var(--sd-limestone);
   --color-surface: var(--sd-paper);
-  --color-surface-2: var(--sd-bone);
-  --color-text: var(--sd-obsidian);
+  --color-surface-2: var(--sd-sand);
+  --color-text: var(--sd-ink);
   --color-text-2: var(--sd-umber);
   --color-text-3: var(--sd-taupe);
-  --color-accent: var(--sd-obsidian);
-  --color-on-accent: var(--sd-warm-white);
-  --color-accent-wash: rgba(17, 17, 17, .04);
-  --color-control-active: var(--sd-obsidian);
+  --color-accent: var(--sd-ink);
+  --color-on-accent: var(--sd-paper);
+  --color-brand: var(--sd-moss);
+  --color-accent-wash: rgba(28, 26, 23, .04);
+  --color-control-active: var(--sd-ink);
   --color-line: var(--sd-linen);
-  --color-line-strong: var(--sd-stone);
+  --color-line-strong: var(--sd-taupe);
   --color-field-border: var(--sd-taupe);
   --color-success: var(--sd-sage-deep);
   --color-success-soft: rgba(113, 151, 123, .16);
@@ -143,9 +153,10 @@
   --color-danger: var(--sd-clay-deep);
   --color-danger-soft: rgba(201, 132, 118, .16);
   --color-danger-line: rgba(140, 58, 43, .45);
-  --color-focus: var(--sd-obsidian);
-  --color-focus-ring: rgba(17, 17, 17, .12);
-  --color-scrim: rgba(244, 239, 231, .9);
+  --color-focus: var(--sd-ink);
+  --color-focus-ring: rgba(28, 26, 23, .12);
+  --color-scrim: rgba(238, 234, 227, .92);
+  --radius-s: 2px; --radius-m: 2px; --radius-l: 2px; --radius-xl: 2px;
   --hairline: 1px solid var(--color-line);
   --border: 1px solid var(--color-line-strong);
   color-scheme: light;

@@ -30,4 +30,24 @@
   mark();
   var timer = null;
   window.addEventListener('resize', function () { clearTimeout(timer); timer = setTimeout(mark, 150); });
+
+  // Inbox: J and K move between items (focus only — Enter opens), as in a mail client.
+  // Ignored while typing and with modifier keys, so it never fights the browser or a form.
+  var rows = document.querySelector('[data-inbox]');
+  if (rows) {
+    document.addEventListener('keydown', function (event) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      var key = event.key.toLowerCase();
+      if (key !== 'j' && key !== 'k') return;
+      var t = event.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      var links = Array.prototype.slice.call(rows.querySelectorAll('.ib-row'));
+      if (!links.length) return;
+      var at = links.indexOf(document.activeElement);
+      if (at === -1) at = links.findIndex(function (a) { return a.getAttribute('aria-current') === 'true'; });
+      var next = key === 'j' ? Math.min(links.length - 1, at + 1) : Math.max(0, at === -1 ? 0 : at - 1);
+      links[next].focus();
+      event.preventDefault();
+    });
+  }
 })();

@@ -13,7 +13,7 @@ let playwright = null;
 try { playwright = require('playwright'); } catch { /* not installed */ }
 
 const SITE = ['/', '/services', '/portfolio', '/about', '/start', '/contact', '/portal', '/privacy'];
-const STUDIO = ['/admin', '/admin/leads', '/admin/projects', '/admin/approvals', '/admin/messages', '/admin/ops', '/admin/ops/tasks', '/admin/ops/agents', '/admin/ops/settings', '/admin/invoices', '/admin/contractors'];
+const STUDIO = ['/admin/inbox', '/admin/inbox?f=waiting', '/admin', '/admin/leads', '/admin/projects', '/admin/approvals', '/admin/messages', '/admin/ops', '/admin/ops/tasks', '/admin/ops/agents', '/admin/ops/settings', '/admin/invoices', '/admin/contractors'];
 
 /** Runs in the page: returns a list of problems. */
 function audit() {
@@ -80,7 +80,7 @@ test('dashboard, portal and website on the design system', { skip: playwright ? 
       await page.goto(base + '/');
       assert.equal(await page.evaluate(() => document.documentElement.classList.contains('theme-light')), true);
       let c = await page.evaluate(colours);
-      assert.equal(c.bg, 'rgb(244, 239, 231)', 'warm white page');
+      assert.equal(c.bg, 'rgb(238, 234, 227)', 'limestone page (Atelier)');
       assert.ok(contrast(c.text, c.bg) >= 7, 'site body text contrast');
       // Keyboard: the first Tab reaches the skip link, which moves past the navigation.
       await page.keyboard.press('Tab');
@@ -138,6 +138,42 @@ test('dashboard, portal and website on the design system', { skip: playwright ? 
         page.once('dialog', (d) => { assert.match(d.message(), /Pause this workflow/); d.accept(); });
         await Promise.all([page.waitForURL(`${base}/admin/ops/workflows/${due.wfId}`), page.click('form[action$="/pause"] button')]);
         assert.equal(pausedNow(), true);
+
+        // ── Inbox: the same queues as Approvals and Operations, in one list ──
+        const inboxData = require('../src/services/inbox').view(app);
+        await page.goto(`${base}/admin/inbox`);
+        assert.equal(await page.locator('.ib-row').count(), inboxData.list.length, 'every waiting item is listed');
+        assert.ok(inboxData.list.length > 0, 'the driven workflows leave work waiting');
+        assert.equal(await page.textContent('#ib-title'), inboxData.list[0].title, 'the first item opens by default');
+        // J moves focus down the list; Enter opens it.
+        await page.locator('.ib-row').first().focus();
+        if (inboxData.list.length > 1) {
+          await page.keyboard.press('j');
+          assert.equal(await page.evaluate(() => document.activeElement.querySelector('.ib-row__title').textContent), inboxData.list[1].title);
+          await Promise.all([page.waitForURL(/item=/), page.keyboard.press('Enter')]);
+          assert.equal(await page.textContent('#ib-title'), inboxData.list[1].title);
+        }
+        // Waiting on the client: the deposit project is there and asks nothing of the studio.
+        await page.goto(`${base}/admin/inbox?f=waiting`);
+        assert.match(await page.textContent('.ib-rows'), /Deposit from/);
+        // An action taken in the inbox posts to the existing route and comes back to the inbox.
+        const fresh = app.intake.createProjectInquiry({ ...INQUIRY, website: '', brand_name: 'Inbox Brand', email: 'inbox@brand.test' }, []);
+        const freshId = typeof fresh === 'object' ? fresh.id : fresh;
+        await page.goto(`${base}/admin/inbox?f=inquiry&item=inquiry-${freshId}`);
+        assert.match(await page.textContent('#ib-title'), /Inbox Brand/);
+        await Promise.all([page.waitForURL(`${base}/admin/inbox`), page.click('form[action$="/status"] button')]);
+        assert.equal(app.db.get('SELECT status FROM inquiries WHERE id = ?', freshId).status, 'reviewing');
+      }
+      if (label === 'iPhone 13') {
+        // Phones show the list, then one item with a way back.
+        await page.goto(`${base}/admin/inbox`);
+        assert.ok(await page.isVisible('.ib-rows'));
+        assert.equal(await page.isVisible('.ib-pane'), false);
+        const first = page.locator('.ib-row').first();
+        await Promise.all([page.waitForURL(/item=/), first.click()]);
+        assert.ok(await page.isVisible('#ib-title'));
+        assert.equal(await page.isVisible('.ib-rows'), false);
+        assert.ok(await page.isVisible('.ib-back'));
       }
       assert.deepEqual(errors, []);
       await ctx.close();

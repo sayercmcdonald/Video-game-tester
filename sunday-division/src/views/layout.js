@@ -18,16 +18,16 @@ function page(ctx, { title, description, body, path = '', dark = false }) {
 <meta name="description" content="${description || 'Sunday Division is a fashion design and development studio: design, technical flats and tech packs, 3D garment visualisation, product imagery and campaigns.'}">
 <meta property="og:title" content="${full}">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="#111111">
-<link rel="preload" href="/assets/fonts/newsreader-display-latin-300-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<meta name="theme-color" content="#F7F5F1">
+<link rel="preload" href="/assets/fonts/cormorant-garamond-lining-latin-300-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="${assetUrl('css/tokens.css')}">
 <link rel="stylesheet" href="${assetUrl('css/ui.css')}">
 <link rel="stylesheet" href="${assetUrl('css/site.css')}">
 <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
 <script src="${assetUrl('js/site.js')}" defer></script>
 </head>
-<body class="${dark ? 'has-dark-hero' : ''}">
+<body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header" data-header>
   <a class="wordmark" href="/" aria-label="Sunday Division — home">Sunday Division</a>
@@ -35,7 +35,7 @@ function page(ctx, { title, description, body, path = '', dark = false }) {
   <nav class="site-nav" id="site-nav" aria-label="Primary">
     ${NAV.map(([href, label]) => html`<a href="${href}" ${path === href ? raw('aria-current="page"') : ''}>${label}</a>`)}
     <a href="/portal" class="site-nav__portal" ${path === '/portal' ? raw('aria-current="page"') : ''}>Client Portal</a>
-    <a href="/start" class="btn btn--small ${dark ? 'btn--light' : ''}">Start a Project</a>
+    <a href="/start" class="btn btn--small">Start a project</a>
   </nav>
 </header>
 <main id="main">${body}</main>
@@ -46,7 +46,7 @@ function page(ctx, { title, description, body, path = '', dark = false }) {
   </div>
   <div class="site-footer__cols">
     <div><p class="label">Studio</p><a href="/services">Services</a><a href="/portfolio">Portfolio</a><a href="/about">About</a></div>
-    <div><p class="label">Work with us</p><a href="/start">Start a Project</a><a href="/contact">Contact</a><a href="/portal">Client Portal</a></div>
+    <div><p class="label">Work with us</p><a href="/start">Start a project</a><a href="/contact">Contact</a><a href="/portal">Client Portal</a></div>
     <div><p class="label">Scope</p><p>Design and development services. Manufacturing and physical production are not currently offered.</p></div>
   </div>
   <div class="site-footer__base">

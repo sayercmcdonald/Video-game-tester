@@ -1,15 +1,15 @@
 # Sunday Division design system
 
-Reference: the approved Sunday Division Command concept (dark editorial, serif display type, bone accents, sage for operating states).
+Reference: the approved Sunday Division Command concept (dark editorial, serif display type, bone accents, sage for operating states), and — from 14 Nov 2026 — the approved **Atelier** brand direction (limestone and paper, Cormorant Garamond and Instrument Sans, ink and moss) with **Precision's** three-pane inbox for the studio. The directions are on the design canvas.
 
 **Status:** one design system across all four products. Each keeps its own job:
 
 | Product | Theme | Purpose | Stylesheets |
 |---|---|---|---|
 | **Command** (`/command`) | dark | the founder's premium, mobile-first command centre | `tokens.css` → `ui.css` → `command.css` |
-| **Studio dashboard** (`/admin`) | dark | productivity: dense tables, a persistent rail, project and operational visibility | `tokens.css` → `ui.css` → `studio.css` |
+| **Studio dashboard** (`/admin`) | dark | productivity: the inbox (rail · list · detail), dense tables, project and operational visibility | `tokens.css` → `ui.css` → `studio.css` |
 | **Client portal** (`/portal`) and contractor portal (`/contractor`) | light | premium and very simple: the next step first, then one card per subject | `tokens.css` → `ui.css` → `site.css` |
-| **Public website** | light, with obsidian moments | editorial and fashion-forward; explains the services and converts visitors | `tokens.css` → `ui.css` → `site.css` |
+| **Public website** | light (Atelier), with moss and ink moments | editorial and fashion-forward; explains the services and converts visitors | `tokens.css` → `ui.css` → `site.css` |
 
 Screenshots: [`docs/screenshots/`](screenshots/).
 
@@ -20,7 +20,7 @@ Screenshots: [`docs/screenshots/`](screenshots/).
 | Rendering | Server-rendered HTML from template-literal view functions (`src/views/*.js`); escape-by-default `html```; no client framework, no build step |
 | Styles | One token file and one shared component file; one product stylesheet each for Command, the studio and the site/portals |
 | Script | Small progressive-enhancement files per area (`public/js/*.js`); every screen works without JavaScript |
-| Fonts | Self-hosted, SIL OFL: Newsreader (display), Inter (interface), IBM Plex Mono (codes and measurements) |
+| Fonts | Self-hosted, SIL OFL: Cormorant Garamond (display, lining figures by default), Instrument Sans (interface), IBM Plex Mono (codes and measurements) |
 | Constraints | Strict CSP (no inline scripts or style attributes), `no-store` pages, the Command service worker caches static assets only |
 
 ## 2. Architecture
@@ -63,13 +63,17 @@ Rules the components enforce:
 | `--sd-sage` | `#71977B` | operating / success (dark) |
 | `--sd-mist` / `--sd-stone` | `#B3AB9F` / `#8F887D` | secondary (8.3:1) / tertiary (5.4:1) text on dark |
 | `--sd-field` | `#757067` | form-field outlines on dark (≥ 3.1:1 on every dark surface) |
-| `--sd-paper` | `#FBF8F3` | raised surfaces on light |
-| `--sd-umber` / `--sd-taupe` | `#45403A` / `#625C54` | secondary (9.0:1) / tertiary (5.8:1) text on light |
+| `--sd-limestone` | `#EEEAE3` | the page on light (Atelier) |
+| `--sd-paper` / `--sd-sand` | `#F7F5F1` / `#E4DED4` | raised surfaces / alternate sections on light |
+| `--sd-ink` | `#1C1A17` | text and primary actions on light (14.5:1) |
+| `--sd-moss` | `#3F4B33` | the brand colour: deep sections, one accent (7.7:1 on limestone) |
+| `--sd-oat` | `#C9C0B2` | secondary text on moss (5.2:1) and ink (9.7:1) |
+| `--sd-umber` / `--sd-taupe` | `#5B544A` / `#625C54` | secondary (6.2:1) / tertiary (5.5:1) text on limestone |
 | `--sd-sage-deep`, `--sd-amber-deep`, `--sd-clay-deep` | `#476A52`, `#7A5A22`, `#8C3A2B` | status text on light (≥ 5.3:1) |
 
 Products use the semantic tokens (`--color-bg`, `--color-surface`, `--color-text-2`, `--color-accent`, `--color-success`, …). `class="theme-light"` on `<html>` swaps them for the light set, so a `ui-pill` or `ui-btn` is correct on either theme.
 
-Type: **display** — Newsreader Display (SIL OFL), instanced at its display optical size, upright and italic, standing in for Canela (commercial; drop in a licensed web font as "SD Display" when held). **Interface** — Inter. **Data** — IBM Plex Mono for codes, measurements and transcripts only. Scales: `--text-display-*`, `--text-figure-*`, `--text-title/body/callout/label/footnote/caption/overline`. Space: 4-point grid. Radii: 8 / 14 / 20 / 28 / pill. Motion: 140 / 240 / 420 ms, ease-out; off with reduced motion.
+Type: **display** — Cormorant Garamond (SIL OFL), 300/400/500 upright and 300/400 italic, with its lining figures mapped as the default digits so codes and prices never fall into old-style figures; the display scale runs about an eighth larger than a book serif would, because Cormorant's x-height is small. **Interface** — Instrument Sans. **Data** — IBM Plex Mono for codes, measurements and transcripts only. Scales: `--text-display-*`, `--text-figure-*`, `--text-title/body/callout/label/footnote/caption/overline`. Space: 4-point grid. Radii: 8 / 14 / 20 / 28 / pill on dark; 2 px everywhere on light (Atelier is square-shouldered). Motion: 140 / 240 / 420 ms, ease-out; off with reduced motion.
 
 ## 4. Command
 
@@ -80,7 +84,8 @@ High-impact confirmations use **press and hold** (1.2 s, with a visible fill; sl
 ## 5. Studio dashboard
 
 * Dark, on the same tokens and components as Command; denser: 14 px interface text, 40 px fields, wide tables with tabular figures.
-* A persistent rail with icons (Overview, Leads, Projects, Approvals, Messages, Operations, Invoices, Contractors); on phones it becomes a top bar with a scrolling section list, and sign-out stays reachable.
+* **Inbox** (`/admin/inbox`, first in the rail): Precision's pattern — rail, list, detail. One list of everything waiting on the studio, read from the same tables as Approvals and Operations: decisions, inquiries, agent hand-offs and failed agent jobs, INDEX V3 / FORM production jobs, and (separately) what is waiting on the client. Rows are ordered failed → needs a look → waiting on you → for information, newest first. <kbd>J</kbd>/<kbd>K</kbd> move, <kbd>Enter</kbd> opens. The detail pane acts through the existing routes with their existing confirmations (issue an invoice, approve a reviewed file, mark an inquiry as reviewing, close a hand-off) and returns to the inbox; anything with fields — quotes, releases, contractor approvals, messages — links to the page where it is decided. On phones the list and the item are two steps with a way back.
+* A persistent rail with icons (Inbox, Overview, Leads, Projects, Approvals, Messages, Operations, Invoices, Contractors); on phones it becomes a top bar with a scrolling section list, and sign-out stays reachable.
 * Status pills follow the shared colour rule; AI drafts are a dashed pill; simulated deliveries an amber "Simulated" pill.
 * Buttons are the shared `ui-btn` (primary in bone for the main action of a form). Every approval-gated action keeps its confirmation prompt (22 prompts, unchanged).
 * Wide tables scroll inside their card; a scrolling region becomes keyboard-focusable and is named after its card.
@@ -94,8 +99,8 @@ High-impact confirmations use **press and hold** (1.2 s, with a visible fill; sl
 
 ## 7. Public website
 
-* Editorial typography: Newsreader Display, light weight, with italic accents; Inter for reading; sentence-case form labels (easier to read and complete than small capitals).
-* Warm white page, bone sections, obsidian hero, process and footer. The technical flats remain the imagery: they are the studio's own work and show what it sells.
+* Atelier: Cormorant Garamond, light weight, with italic accents; Instrument Sans for reading and for sentence-case buttons; sentence-case form labels (easier to read and complete than small capitals).
+* Limestone page and a light hero with the flat on a paper card; sand sections; moss for the process section; ink for the footer and the portal's next step. The technical flats remain the imagery: they are the studio's own work and show what it sells.
 * Conversion paths unchanged: "Start a Project" in the header, hero, packages and closing section; the intake form keeps its validation, spam honeypot and rate limits.
 
 ## 8. Imagery
@@ -104,7 +109,7 @@ The Command hero is an original rendered fabric texture (`public/command/hero-dr
 
 ## 9. Known limitations
 
-See [`PRODUCTION-READINESS.md`](PRODUCTION-READINESS.md) for the full checklist. Design-specific: Canela is not licensed (Newsreader Display stands in) and there is no studio photography yet.
+See [`PRODUCTION-READINESS.md`](PRODUCTION-READINESS.md) for the full checklist. Design-specific: there is no studio photography yet.
 
 ## 10. Field outlines and asset caching
 
