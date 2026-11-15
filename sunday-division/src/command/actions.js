@@ -176,7 +176,7 @@ const ACTIONS = {
     },
     check(s) { if (s.task.status !== 'open') throw new HttpError(409, 'Already resolved.'); },
     preview: (s, app, p) => ({ title: s.task.title, rows: [['Your note', p.note]], text: s.task.detail, textLabel: 'What the payment system reported', effects: ['Closes the exception with your note. Refunds or corrections happen in the payment provider — this does not move money or change any invoice.'] }),
-    execute(app, p, user) { app.humanTasks.resolve(p.task_id, `staff:${user.email}`); app.audit.log(`staff:${user.email}`, 'payment_exception.reviewed', { entity: 'human_task', entityId: p.task_id, detail: str(p.note, 300) }); return { message: 'Exception marked reviewed.', link: '/command/approvals' }; },
+    execute(app, p, user) { user = app.permissions.authorize(user, 'payment.override', { entity: 'human_task', entityId: p.task_id }); app.humanTasks.resolve(p.task_id, `staff:${user.email}`); app.audit.log(`staff:${user.email}`, 'payment_exception.reviewed', { entity: 'human_task', entityId: p.task_id, detail: str(p.note, 300) }); return { message: 'Exception marked reviewed.', link: '/command/approvals' }; },
   },
 
   draft_quote: {
@@ -247,6 +247,37 @@ const ACTIONS = {
     check(s) { if (!s.diff.length) throw new HttpError(409, 'Those settings are already in place.'); },
     preview: (s) => ({ title: 'Change settings', rows: s.diff.map((d) => [d.label, `${fmt(d.from)} → ${fmt(d.to)}`]), effects: ['Takes effect for new agent tasks immediately. Tasks already running finish under the settings they started with.', 'Recorded in the audit log.'] }),
     execute(app, p, user) { for (const [k, v] of Object.entries(p.changes)) app.settings.set(k, v, user); return { message: 'Settings changed.', link: '/command/settings' }; },
+  },
+
+  update_roles: {
+    label: 'Change a person’s role', risk: 'high', why: 'Changes who can send to clients, close projects or sign off technical files',
+    params: S.obj({ user_id: S.int(1), studio_manager: S.bool(), technical_reviewer: S.bool() }),
+    load(app, p) {
+      const u = app.db.get('SELECT id, email, name, founder, studio_manager, technical_reviewer FROM users WHERE id = ?', p.user_id);
+      if (!u) throw new HttpError(404, 'Person not found.');
+      const diff = [];
+      for (const [k, label] of [['studio_manager', 'Studio manager'], ['technical_reviewer', 'Technical reviewer']]) {
+        if (Boolean(u[k]) !== Boolean(p[k])) diff.push({ key: k, label, from: Boolean(u[k]), to: Boolean(p[k]) });
+      }
+      return { user: { id: u.id, email: u.email, name: u.name, founder: Boolean(u.founder), studio_manager: Boolean(u.studio_manager), technical_reviewer: Boolean(u.technical_reviewer) }, diff };
+    },
+    check(s) { if (!s.diff.length) throw new HttpError(409, 'Those roles are already in place.'); },
+    preview: (s) => ({
+      title: `Change roles for ${s.user.name}`,
+      rows: [['Person', `${s.user.name} · ${s.user.email}`], ...s.diff.map((d) => [d.label, `${fmt(d.from)} → ${fmt(d.to)}`])],
+      effects: [
+        ...s.diff.filter((d) => d.key === 'studio_manager').map((d) => (d.to ? 'They can send quotes, invoices and messages, and close projects.' : 'They can no longer send to clients or close projects; drafts are unaffected.')),
+        ...s.diff.filter((d) => d.key === 'technical_reviewer').map((d) => (d.to ? 'They can sign off technical files (flats, tech packs, 3D).' : 'They can no longer sign off technical files.')),
+        'Takes effect on their next request; recorded in the audit log. Founder access is not changed here.',
+      ],
+    }),
+    execute(app, p, user) {
+      user = app.permissions.authorize(user, 'permissions.change', { entity: 'user', entityId: p.user_id });
+      const s = ACTIONS.update_roles.load(app, p);
+      app.db.tx(() => { for (const d of s.diff) app.db.run(`UPDATE users SET ${d.key} = ? WHERE id = ?`, d.to ? 1 : 0, p.user_id); });
+      app.audit.log(`staff:${user.email}`, 'user.roles_changed', { entity: 'user', entityId: p.user_id, detail: s.diff.map((d) => `${d.key}: ${d.from} → ${d.to}`).join(', ') });
+      return { message: `Roles updated for ${s.user.name}.`, link: '/command/settings#team' };
+    },
   },
 };
 const who = (by) => ({ 'agent:talent': 'Talent Agent', rules: 'Rules' }[by] || String(by).replace(/^(staff|agent):/, ''));

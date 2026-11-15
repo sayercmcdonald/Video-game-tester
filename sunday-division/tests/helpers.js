@@ -13,7 +13,8 @@ async function startApp(env = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-test-'));
   const config = createConfig({
     NODE_ENV: 'test', DATA_DIR: dataDir, AI_PROVIDER: 'rules', PAYMENTS_PROVIDER: 'simulated', ORCHESTRATOR_POLL_MS: '0',
-    ADMIN_EMAIL: ADMIN.email, ADMIN_PASSWORD: ADMIN.password, ...env,
+    // The default admin is the founder, as in a founder-run studio. Role tests create other staff.
+    ADMIN_EMAIL: ADMIN.email, ADMIN_PASSWORD: ADMIN.password, FOUNDER_EMAIL: ADMIN.email, ...env,
   });
   const app = createApp(config);
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));

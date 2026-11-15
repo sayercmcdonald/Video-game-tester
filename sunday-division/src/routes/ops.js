@@ -63,6 +63,8 @@ function register(router, app) {
     router.post(`/admin/ops/tasks/:id/${status}`, A, (ctx) => {
       const task = app.humanTasks.get(int(ctx.params.id));
       if (!task) throw new HttpError(404, 'Task not found.');
+      // Closing a payment exception is a payment decision.
+      if (/payment_exception|deposit_mismatch/.test(task.dedupe_key)) app.permissions.authorize(ctx.user, 'payment.override', { entity: 'human_task', entityId: task.id, projectId: task.project_id });
       app.humanTasks.resolve(task.id, actor(ctx), status === 'done' ? 'done' : 'dismissed');
       if (task.workflow_id) app.orchestrator.engine.advance(task.workflow_id);
       ctx.redirect(backTo(ctx, '/admin/ops'), 'Task updated.');

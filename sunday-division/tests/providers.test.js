@@ -75,7 +75,7 @@ test('an agent task runs end to end on OpenAI through the same tools, permission
   await t.test('a transient provider error is retried later, on the same provider', async () => {
     assert.equal(app.orchestrator.queue.get(job.id).status, 'queued');
     // The founder switches the provider to rules while the task waits: it still finishes on OpenAI.
-    app.settings.set('ai_provider', 'rules', { email: 'founder@example.test' });
+    app.settings.set('ai_provider', 'rules', app.db.get('SELECT * FROM users WHERE founder = 1'));
     app.orchestrator.clockState.offsetMs = 10 * 60e3;
     await app.orchestrator.drain({ maxRounds: 5 });
     const done = app.orchestrator.queue.get(job.id);

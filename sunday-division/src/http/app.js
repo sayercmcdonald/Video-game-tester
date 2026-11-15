@@ -161,7 +161,7 @@ function createServer(app, router, views) {
       // Sessions: both kinds are loaded so shared chrome can reflect sign-in state.
       const admin = app.sessions.load('admin', ctx.cookies);
       const portal = app.sessions.load('portal', ctx.cookies);
-      if (admin) ctx.user = app.db.get('SELECT id, email, name, technical_reviewer FROM users WHERE id = ?', admin.user_id) || null;
+      if (admin) ctx.user = app.db.get('SELECT id, email, name, technical_reviewer, founder, studio_manager FROM users WHERE id = ?', admin.user_id) || null;
       if (portal) ctx.client = app.db.get('SELECT * FROM clients WHERE id = ?', portal.client_id) || null;
       const contractor = app.sessions.load('contractor', ctx.cookies);
       if (contractor) ctx.contractor = app.db.get("SELECT * FROM contractors WHERE id = ? AND status = 'approved'", contractor.contractor_id) || null;
@@ -169,7 +169,7 @@ function createServer(app, router, views) {
         // Founder access is decided here, on the server, for every request: a valid founder
         // session AND the account still flagged as founder. Hidden navigation is not a control.
         const founder = app.sessions.load('founder', ctx.cookies);
-        ctx.user = founder ? app.db.get('SELECT id, email, name, technical_reviewer, founder FROM users WHERE id = ? AND founder = 1', founder.user_id) || null : null;
+        ctx.user = founder ? app.db.get('SELECT id, email, name, technical_reviewer, founder, studio_manager FROM users WHERE id = ? AND founder = 1', founder.user_id) || null : null;
         ctx.session = ctx.user ? founder : null;
         if (!ctx.user) {
           if (url.pathname.startsWith('/command/api/')) return ctx.json({ error: 'Sign in to Sunday Division Command.' }, 401);

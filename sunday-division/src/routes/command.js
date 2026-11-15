@@ -127,7 +127,7 @@ function register(router, app) {
   // ── Actions: propose → preview → confirm ────────────────────────────
   router.post('/command/actions', F, (ctx) => {
     const type = str(ctx.body.type, 40);
-    if (!app.command.actions.ACTIONS[type] || type === 'update_settings') throw new HttpError(400, 'Unknown action.');
+    if (!app.command.actions.ACTIONS[type] || type === 'update_settings' || type === 'update_roles') throw new HttpError(400, 'Unknown action.');
     const params = {};
     if (PARAM_FOR[type]) params[PARAM_FOR[type]] = int(ctx.body.target);
     if (type === 'reject_assignment' && ctx.body.note) params.note = str(ctx.body.note, 500);
@@ -216,6 +216,7 @@ function register(router, app) {
   router.get('/command/settings', F, (ctx) => ctx.html(views.settings(ctx, {
     values: app.settings.all(), providers: app.providers.list(), devices: db.get('SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?', ctx.user.id).n,
     integrationsConnected: app.integrations.status().some((i) => i.connected), vapidKey: app.command.push.publicKey(), kinds: KINDS,
+    team: db.all('SELECT id, email, name, founder, studio_manager, technical_reviewer FROM users ORDER BY founder DESC, name'),
   })));
   // Personal preferences (what to be notified about, when the brief arrives) apply directly.
   router.post('/command/settings/preferences', F, (ctx) => {
@@ -230,6 +231,12 @@ function register(router, app) {
     provider: ['ai_provider'],
     budgets: ['ai_monthly_budget_usd', 'ai_project_budget_usd', 'external_project_budget_usd', 'external_job_estimate_usd', 'unusual_expense_usd'],
   };
+  // Roles: previewed and confirmed like any permission change (founder only, by route and by service).
+  router.post('/command/settings/team', F, (ctx) => {
+    const params = { user_id: int(ctx.body.user_id), studio_manager: ctx.body.studio_manager === 'true', technical_reviewer: ctx.body.technical_reviewer === 'true' };
+    const a = app.command.actions.propose('update_roles', params, { source: 'settings', by: `staff:${ctx.user.email}` });
+    ctx.redirect(`/command/actions/${a.id}`);
+  });
   router.post('/command/settings/changes', F, (ctx) => {
     const keys = SECTIONS[ctx.body.section];
     if (!keys) throw new HttpError(400, 'Unknown settings section.');

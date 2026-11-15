@@ -40,7 +40,8 @@ for (const kind of NOTIFY_KINDS) DEFINITIONS[`push_${kind}`] = { type: 'bool', l
 // through a previewed, confirmed action; in the admin dashboard they are audited.
 for (const k of ['orchestrator_paused', 'autonomous_production', 'ai_monthly_budget_usd', 'ai_project_budget_usd', 'external_project_budget_usd', 'external_job_estimate_usd']) DEFINITIONS[k].permission = true;
 
-function createSettings({ db, config, audit }) {
+function createSettings(app) {
+  const { db, config, audit } = app;
   function parse(def, raw) {
     if (def.type === 'bool') return raw === 'true';
     if (def.type === 'enum' || def.type === 'tz') return raw;
@@ -81,10 +82,17 @@ function createSettings({ db, config, audit }) {
     normalise: (key, value) => parse(DEFINITIONS[key], normalise(key, value)),
     agentMode: (agentId) => (DEFINITIONS[`agent_mode_${agentId}`] ? get(`agent_mode_${agentId}`) : 'auto'),
     pausedAgents: () => AGENT_IDS.filter((id) => get(`agent_mode_${id}`) === 'paused'),
-    /** Staff-only (enforced by the route). Every change is audited. */
+    /** Every change is audited. Agent permissions and spending limits are founder-only, checked
+     *  here on the server whichever screen the change came from. Pausing automation is the one
+     *  permission-type change any member of staff may make: it can only reduce what agents do. */
     set(key, value, user) {
       const def = DEFINITIONS[key];
       const stored = normalise(key, value);
+      if (String(get(key)) === String(parse(def, stored))) return; // unchanged: nothing to authorise or record
+      if (def.permission) {
+        const safetyStop = key === 'orchestrator_paused' && stored === 'true';
+        if (!safetyStop) user = app.permissions.authorize(user, def.type === 'money' ? 'agents.limits' : 'permissions.change', { entity: 'setting' });
+      }
       const before = get(key);
       db.run('INSERT INTO ops_settings (key, value, updated_by, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = excluded.updated_at',
         key, stored, `staff:${user.email}`, now());

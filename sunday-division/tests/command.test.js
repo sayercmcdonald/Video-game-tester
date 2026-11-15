@@ -276,7 +276,7 @@ test('Command Chat: read-only answers, proposals only, never direct changes', as
   });
 
   await t.test('when the AI budget is used up, chat answers from rules and says so', async () => {
-    app.settings.set('ai_monthly_budget_usd', 0, { email: ADMIN.email });
+    app.settings.set('ai_monthly_budget_usd', 0, app.db.get('SELECT * FROM users WHERE email = ?', ADMIN.email));
     const res = await ask('What did we earn this month?');
     assert.equal(res.data.brain, 'rules');
     assert.match(res.data.html, /AI budget is used up/);
@@ -428,7 +428,7 @@ test('notifications: deterministic triggers, preferences, payload-free Web Push'
 
   await t.test('turning a kind off stops its pushes but keeps it in the notification centre', async () => {
     const before = received.length;
-    app.settings.set('push_unusual_expense', false, { email: ADMIN.email });
+    app.settings.set('push_unusual_expense', false, app.db.get('SELECT * FROM users WHERE email = ?', ADMIN.email));
     app.projects.addCost(projectId, { description: 'Large sample shipment', amountCents: 75000 }, 'test');
     app.command.notifications.sweep();
     await app.command.notifications.settled();

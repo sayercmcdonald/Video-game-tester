@@ -67,6 +67,7 @@ function createQuotes(app) {
     /** Human approval gate: only now does the client see the quote. */
     approveAndSend(quoteId, user) {
       const quote = mustGet(quoteId);
+      user = app.permissions.authorize(user, 'client.send', { entity: 'quote', entityId: quoteId, projectId: quote.project_id });
       if (quote.status !== 'draft') throw new HttpError(409, 'This quote has already been sent.');
       if (!quote.line_items.length || quote.total_cents <= 0) throw new HttpError(400, 'Add at least one priced line item.');
       if (!quote.scope.trim()) throw new HttpError(400, 'Describe the scope before sending.');

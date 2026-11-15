@@ -187,6 +187,7 @@ ${tabs('/admin/ops/settings')}
     <label class="chk"><input type="checkbox" name="orchestrator_paused" value="true" ${values.orchestrator_paused ? raw('checked') : ''}> ${defs.orchestrator_paused.label}</label>
     <label class="chk"><input type="checkbox" name="autonomous_production" value="true" ${values.autonomous_production ? raw('checked') : ''} ${anyConnected || values.autonomous_production ? '' : raw('disabled')}> ${defs.autonomous_production.label}</label>
     <p class="small muted">${defs.autonomous_production.help} ${anyConnected ? '' : 'Neither INDEX V3 nor FORM is connected, so this cannot be switched on yet.'}</p>
+    ${ctx.user && ctx.user.founder ? '' : html`<p class="small muted">Any member of staff can pause automation. Resuming it or switching on autonomous production is the founder’s decision.</p>`}
     <button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Save</button>
   </form>
   <dl class="kv">
@@ -196,7 +197,8 @@ ${tabs('/admin/ops/settings')}
   </dl>
 </section>
 <section class="card"><h2>Budgets</h2>
-  <form method="post" action="/admin/ops/settings" class="a-form">${csrf(ctx)}
+  ${ctx.user && ctx.user.founder ? '' : html`<p class="small muted">Founder only. You can see the limits; the founder changes them (here or in Command), and every change is audited.</p>`}
+  <form method="post" action="/admin/ops/settings" class="a-form" data-confirm="Change agent spending limits?">${csrf(ctx)}
     <input type="hidden" name="section" value="budgets">
     ${['ai_monthly_budget_usd', 'ai_project_budget_usd', 'external_project_budget_usd', 'external_job_estimate_usd'].map((k) => html`<label>${defs[k].label}<input name="${k}" value="${values[k]}" inputmode="decimal"></label>`)}
     <button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Save budgets</button>

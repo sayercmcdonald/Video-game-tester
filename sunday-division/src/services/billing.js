@@ -117,6 +117,7 @@ function createBilling(app) {
     /** Human approval gate: a draft invoice is not payable or visible until a person opens it. */
     approve(invoiceId, user) {
       const invoice = mustGet(invoiceId);
+      user = app.permissions.authorize(user, 'client.send', { entity: 'invoice', entityId: invoiceId, projectId: invoice.project_id });
       if (invoice.status !== 'draft') throw new HttpError(409, 'Only draft invoices can be approved.');
       db.tx(() => {
         db.update('invoices', invoiceId, { status: 'open', approved_by: user.id, approved_at: now() });
@@ -128,6 +129,8 @@ function createBilling(app) {
     void(invoiceId, user) {
       const invoice = mustGet(invoiceId);
       if (!['draft', 'open'].includes(invoice.status)) throw new HttpError(409, 'Paid invoices cannot be voided; refund through the payment provider.');
+      // Voiding an issued invoice removes a payment the client owes: a payment override.
+      if (invoice.status === 'open') user = app.permissions.authorize(user, 'payment.override', { entity: 'invoice', entityId: invoiceId, projectId: invoice.project_id });
       db.tx(() => {
         db.update('invoices', invoiceId, { status: 'void' });
         db.run("UPDATE checkout_sessions SET status = 'expired' WHERE invoice_id = ? AND status = 'open'", invoiceId);
@@ -138,6 +141,7 @@ function createBilling(app) {
     /** Payment received outside checkout (e.g. bank transfer), recorded by a named member of staff. */
     recordManualPayment(invoiceId, reference, user) {
       const invoice = mustGet(invoiceId);
+      user = app.permissions.authorize(user, 'payment.record_manual', { entity: 'invoice', entityId: invoiceId, projectId: invoice.project_id });
       if (invoice.status !== 'open') throw new HttpError(409, 'Only open invoices can be marked as paid.');
       const ref = str(reference, 120);
       if (!ref) throw new HttpError(400, 'Enter the transfer reference so the payment can be traced.');

@@ -4,6 +4,12 @@ const catalog = require('../services/catalog');
 const { Icon, StatusPill } = require('./command-ui');
 const { assetUrl } = require('../lib/assets');
 const { statusBadge } = require('./studio-ui');
+const { can, POLICY } = require('../lib/permissions');
+
+/** Show the control only to people the server will accept it from; everyone else sees who can. */
+const WHO = (perm) => (POLICY[perm].roles.length === 1 ? { founder: 'Founder only', technical_reviewer: 'Technical reviewer only' }[POLICY[perm].roles[0]] : 'Founder or studio manager');
+const gated = (ctx, perm, content) => (can(ctx.user, perm) ? content : html`<span class="muted small gated" title="${POLICY[perm].deny}">${WHO(perm)}</span>`);
+const TECHNICAL = new Set(['flats', 'techpack', '3d']);
 
 const NAV = [
   ['/admin/inbox', 'Inbox', 'inbox'], ['/admin', 'Overview', 'overview'], ['/admin/leads', 'Leads', 'brief'], ['/admin/projects', 'Projects', 'projects'],
@@ -218,7 +224,7 @@ function quoteSection(ctx, p, quotes) {
     <label>Terms<textarea name="terms" rows="4" maxlength="4000">${draft ? draft.terms : catalog.DEFAULT_TERMS}</textarea></label>
     <div class="a-actions">
       <button class="ui-btn ui-btn--small" type="submit" name="action" value="save">Save draft</button>
-      ${draft && p.status === 'scoping' ? html`<button class="ui-btn ui-btn--small ui-btn--primary" type="submit" name="action" value="send" data-confirm="Approve this quote and make it visible to the client?">Approve &amp; send to client</button>` : ''}
+      ${draft && p.status === 'scoping' ? gated(ctx, 'client.send', html`<button class="ui-btn ui-btn--small ui-btn--primary" type="submit" name="action" value="send" data-confirm="Approve this quote and make it visible to the client?">Approve &amp; send to client</button>`) : ''}
     </div>
   </form>
   ${action(ctx, `/admin/projects/${p.id}/automate`, 'Draft quote with automation', { fields: { task: 'quote' } })}` : ''}
@@ -265,10 +271,10 @@ function deliverablesSection(ctx, p, deliverables, revisions, unlocked, balanceD
       <td>${d.file_id ? html`<a href="/admin/files/${d.file_id}">v${d.version} · ${d.original_name}</a>` : html`<span class="muted">No file</span>`}
         <form class="inline inline--fields" method="post" action="/admin/deliverables/${d.id}/upload" enctype="multipart/form-data">${csrf(ctx)}<input type="file" name="file" required aria-label="Upload new version"><button class="ui-btn ui-btn--small" type="submit">Upload ${d.file_id ? 'new version' : 'file'}</button></form></td>
       <td>${badge(d.status)}</td>
-      <td>${d.status === 'in_review' ? action(ctx, `/admin/deliverables/${d.id}/approve`, 'Approve after review', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: 'Confirm you have reviewed this file and it is ready for the client.' })
-        : d.status === 'approved' ? html`<form class="inline inline--fields" method="post" action="/admin/deliverables/${d.id}/release" data-confirm="Release this file to the client portal?">${csrf(ctx)}
-            ${d.stage === 'final' && balanceDue > 0 ? html`<label class="chk"><input type="checkbox" name="override" value="yes"> Release although ${money(balanceDue)} is unpaid</label>` : ''}
-            <button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Release to client</button></form>`
+      <td>${d.status === 'in_review' ? (TECHNICAL.has(d.type) ? gated(ctx, 'spec.technical_approve', action(ctx, `/admin/deliverables/${d.id}/approve`, 'Approve after review', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: 'Confirm you have reviewed this file and it is ready for the client.' })) : action(ctx, `/admin/deliverables/${d.id}/approve`, 'Approve after review', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: 'Confirm you have reviewed this file and it is ready for the client.' }))
+        : d.status === 'approved' ? gated(ctx, d.stage === 'final' ? 'deliverable.release_final' : 'client.send', html`<form class="inline inline--fields" method="post" action="/admin/deliverables/${d.id}/release" data-confirm="Release this file to the client portal?">${csrf(ctx)}
+            ${d.stage === 'final' && balanceDue > 0 && can(ctx.user, 'payment.override') ? html`<label class="chk"><input type="checkbox" name="override" value="yes"> Release although ${money(balanceDue)} is unpaid</label>` : ''}
+            <button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Release to client</button></form>`)
         : d.status === 'released' ? html`<span class="muted small">Released ${fmtDate(d.released_at)}</span>` : html`<span class="muted small">Upload a file</span>`}</td>
     </tr>`)}</tbody></table>` : empty('No deliverables yet.')}
   <form method="post" action="/admin/projects/${p.id}/deliverables" class="a-form a-form--row">${csrf(ctx)}
@@ -291,9 +297,9 @@ function billingSection(ctx, p, d) {
     <tbody>${invoices.map((i) => html`<tr>
       <td class="mono">${i.number}</td><td>${titleCase(i.kind)}</td><td>${i.description}</td><td class="r">${money(i.amount_cents)}</td>
       <td>${badge(i.status, i.status === 'open' ? 'Open — awaiting payment' : undefined)}${i.paid_at ? html`<br><span class="muted small">${fmtDate(i.paid_at, true)}</span>` : ''}</td>
-      <td>${i.status === 'draft' ? action(ctx, `/admin/invoices/${i.id}/approve`, 'Approve & issue', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: `Issue ${i.number} for ${money(i.amount_cents)} to the client?` }) : ''}
-        ${i.status === 'open' ? html`<form class="inline inline--fields" method="post" action="/admin/invoices/${i.id}/manual-payment" data-confirm="Record this invoice as paid outside checkout?">${csrf(ctx)}<input name="reference" placeholder="Transfer reference" maxlength="120" required aria-label="Transfer reference"><button class="ui-btn ui-btn--small" type="submit">Record payment</button></form>` : ''}
-        ${['draft', 'open'].includes(i.status) ? action(ctx, `/admin/invoices/${i.id}/void`, 'Void', { cls: 'btn-link', confirm: `Void ${i.number}?` }) : ''}</td>
+      <td>${i.status === 'draft' ? gated(ctx, 'client.send', action(ctx, `/admin/invoices/${i.id}/approve`, 'Approve & issue', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: `Issue ${i.number} for ${money(i.amount_cents)} to the client?` })) : ''}
+        ${i.status === 'open' ? gated(ctx, 'payment.record_manual', html`<form class="inline inline--fields" method="post" action="/admin/invoices/${i.id}/manual-payment" data-confirm="Record this invoice as paid outside checkout?">${csrf(ctx)}<input name="reference" placeholder="Transfer reference" maxlength="120" required aria-label="Transfer reference"><button class="ui-btn ui-btn--small" type="submit">Record payment</button></form>`) : ''}
+        ${i.status === 'draft' ? action(ctx, `/admin/invoices/${i.id}/void`, 'Void', { cls: 'btn-link', confirm: `Void ${i.number}?` }) : i.status === 'open' && can(ctx.user, 'payment.override') ? action(ctx, `/admin/invoices/${i.id}/void`, 'Void', { cls: 'btn-link', confirm: `Void ${i.number}? The client will no longer owe it.` }) : ''}</td>
     </tr>`)}</tbody></table>` : empty('No invoices yet. The deposit invoice is raised automatically when the client accepts the quote.')}
   ${payments.some((x) => x.status !== 'succeeded') ? html`<div class="a-flash a-flash--error">${payments.filter((x) => x.status !== 'succeeded').map((x) => html`<p><strong>${titleCase(x.status)} payment on ${x.number}:</strong> ${x.note}</p>`)}</div>` : ''}
   <form method="post" action="/admin/projects/${p.id}/invoices" class="a-form a-form--row">${csrf(ctx)}
@@ -332,7 +338,7 @@ function project(ctx, d) {
     body: html`<header class="a-head">
   <div><p class="label"><a href="/admin/projects">Projects</a> / ${p.code}</p><h1 class="display display--m">${p.name}</h1>
     <p class="muted">${client.brand_name} · ${client.contact_name} · <a href="mailto:${client.email}">${client.email}</a>${p.inquiry_id ? html` · <a href="/admin/leads/${p.inquiry_id}">Original inquiry</a>` : ''}</p></div>
-  <div class="a-head__actions">${badge(p.status)}${next.map(([s, label]) => action(ctx, `/admin/projects/${p.id}/status`, label, { fields: { status: s }, confirm: `${label}?` }))}</div>
+  <div class="a-head__actions">${badge(p.status)}${next.map(([s, label]) => (s === 'closed' ? gated(ctx, 'project.complete', action(ctx, `/admin/projects/${p.id}/status`, label, { fields: { status: s }, confirm: `${label}? This records the project as commercially complete.` })) : action(ctx, `/admin/projects/${p.id}/status`, label, { fields: { status: s }, confirm: `${label}?` })))}</div>
 </header>
 ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal access key — copy it now, it is not shown again.</strong></p><p>Portal: <span class="mono">${ctx.app.config.baseUrl}/portal</span></p><p>Access key: <span class="mono" data-select>${d.portalKey}</span></p><p class="small">Send both to the client by email. Issuing a new key revokes this one.</p></div>` : ''}
 <nav class="tabs tabs--anchors" aria-label="Project sections"><a href="#brief">Brief</a><a href="#quote">Quote</a><a href="#tasks">Tasks</a><a href="#production">Production</a><a href="#files">Files</a><a href="#deliverables">Deliverables</a><a href="#billing">Billing</a><a href="#updates">Updates</a><a href="#production">Production</a><a href="#history">History</a></nav>
@@ -365,7 +371,7 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
     ${d.workflow ? html`<dl class="kv"><dt>Automation</dt><dd>${badge(d.workflow.state, (ctx.app.orchestrator.STATES[d.workflow.state] || {}).label)}${d.workflow.paused ? ' (paused)' : ''}${d.workflow.blocked_reason ? ' (blocked)' : ''} · <a href="/admin/ops/workflows/${d.workflow.id}">Inspect workflow</a></dd></dl>` : ''}
     <dl class="kv"><dt>Work</dt><dd>${unlocked ? `Unlocked ${fmtDate(p.started_at)}` : 'Locked until deposit'}</dd>
       <dt>Portal access</dt><dd>${client.portal_key_issued_at ? `Key issued ${fmtDate(client.portal_key_issued_at)}` : 'No key issued yet'}</dd></dl>
-    ${action(ctx, `/admin/projects/${p.id}/portal-key`, client.portal_key_issued_at ? 'Issue new portal key' : 'Issue portal key', { confirm: client.portal_key_issued_at ? 'Issue a new key? The current key and any open client sessions stop working.' : '' })}
+    ${gated(ctx, 'client.send', action(ctx, `/admin/projects/${p.id}/portal-key`, client.portal_key_issued_at ? 'Issue new portal key' : 'Issue portal key', { confirm: client.portal_key_issued_at ? 'Issue a new key? The current key and any open client sessions stop working.' : 'Issue a portal key? Whoever holds it can see this client’s projects.' }))}
   </section>
 
   <section class="card" id="updates"><h2>Client updates</h2>
@@ -374,7 +380,7 @@ ${d.portalKey ? html`<div class="a-flash a-flash--key"><p><strong>New portal acc
       ${u.status === 'draft' ? html`<form method="post" action="/admin/updates/${u.id}" class="a-form">${csrf(ctx)}
         <label class="sr">Update text<textarea name="body" rows="6" maxlength="4000">${u.body}</textarea></label>
         <div class="a-actions"><button class="ui-btn ui-btn--small" name="action" value="save" type="submit">Save</button>
-          <button class="ui-btn ui-btn--small ui-btn--primary" name="action" value="publish" type="submit" data-confirm="Publish this update to the client portal?">Approve &amp; publish</button>
+          ${gated(ctx, 'client.send', html`<button class="ui-btn ui-btn--small ui-btn--primary" name="action" value="publish" type="submit" data-confirm="Publish this update to the client portal?">Approve &amp; publish</button>`)}
           <button class="btn-link" name="action" value="discard" type="submit">Discard</button></div></form>`
         : html`<div class="prose">${paragraphs(u.body)}</div>`}</li>`)}</ul>` : empty('No updates yet.')}
     <form method="post" action="/admin/projects/${p.id}/updates" class="a-form">${csrf(ctx)}
@@ -461,12 +467,12 @@ function inboxDetail(ctx, it) {
       actions = primaryOpen('Review and send'); note = 'Sending makes the quote visible to the client. You confirm on the project page.'; break;
     case 'invoice':
       body = facts([['Project', `${r.code} · ${r.project_name}`], ['Invoice', r.number], ['Kind', titleCase(r.kind)], ['Amount', money(r.amount_cents)], ['Description', r.description]]);
-      actions = html`${action(ctx, `/admin/invoices/${r.id}/approve`, 'Approve & issue', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: `Issue ${r.number} for ${money(r.amount_cents)} to the client?`, fields: ret })}${open('Open project')}`;
+      actions = html`${gated(ctx, 'client.send', action(ctx, `/admin/invoices/${r.id}/approve`, 'Approve & issue', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: `Issue ${r.number} for ${money(r.amount_cents)} to the client?`, fields: ret }))}${open('Open project')}`;
       note = 'Issuing makes the invoice payable in the client portal.'; break;
     case 'deliverable':
       body = facts([['Project', `${r.code} · ${r.project_name}`], ['File', r.title], ['Status', badge(r.status)], ['Source', r.source ? titleCase(r.source) : '']]);
       actions = r.status === 'in_review'
-        ? html`${action(ctx, `/admin/deliverables/${r.id}/approve`, 'Approve after review', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: 'Confirm you have reviewed this file and it is ready for the client.', fields: ret })}${open('Open file list')}`
+        ? html`${TECHNICAL.has(r.type) ? gated(ctx, 'spec.technical_approve', action(ctx, `/admin/deliverables/${r.id}/approve`, 'Approve after review', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: 'Confirm you have reviewed this file and it is ready for the client.', fields: ret })) : action(ctx, `/admin/deliverables/${r.id}/approve`, 'Approve after review', { cls: 'ui-btn ui-btn--small ui-btn--primary', confirm: 'Confirm you have reviewed this file and it is ready for the client.', fields: ret })}${open('Open file list')}`
         : primaryOpen('Release on the project page');
       note = r.status === 'in_review' ? 'Approving does not show the file to the client. Releasing does.' : 'Final files stay locked in the portal until the balance is paid.'; break;
     case 'update': body = html`<div class="ib-quote">${paragraphs(r.body)}</div>`; actions = primaryOpen('Review and publish'); note = 'Publishing shows this update in the client portal.'; break;

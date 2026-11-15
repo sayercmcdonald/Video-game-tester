@@ -86,8 +86,10 @@ function createProjects(app) {
       app.events.emit('project.updated', { projectId: id, key: `project.updated:${id}:${Date.now()}` });
       app.audit.log(actor, 'project.updated', { entity: 'project', entityId: id, projectId: id });
     },
-    setStatus(id, status, actor) {
+    setStatus(id, status, actor, user = null) {
       const project = mustGet(id);
+      // Commercial completion is a founder or studio-manager decision.
+      if (status === 'closed') actor = `staff:${app.permissions.authorize(user, 'project.complete', { entity: 'project', entityId: id, projectId: id }).email}`;
       // Staff may only move a project forward once it is active, or cancel it. Unlocking
       // work happens exclusively through a recorded deposit payment (see billing).
       const allowed = { active: ['delivered'], delivered: ['closed', 'active'], scoping: ['cancelled'], awaiting_deposit: ['cancelled'] };
@@ -277,9 +279,12 @@ function createProjects(app) {
       if (!d) throw new HttpError(404, 'Deliverable not found.');
       if (!d.file_id) throw new HttpError(400, 'Upload a file before approving.');
       if (d.status !== 'in_review') throw new HttpError(409, 'Only deliverables in review can be approved.');
-      if (['flats', 'techpack', '3d'].includes(d.type) && !user.technical_reviewer) {
-        throw new HttpError(403, 'Technical sign-off needs a member of staff marked as a technical reviewer.');
-      }
+      // Technical garment files need a qualified technical reviewer; anything else needs a real
+      // member of staff (agents have no account, so they can never approve their own output).
+      user = ['flats', 'techpack', '3d'].includes(d.type)
+        ? app.permissions.authorize(user, 'spec.technical_approve', { entity: 'deliverable', entityId: deliverableId, projectId: d.project_id })
+        : app.permissions.current(user);
+      if (!user) throw new HttpError(403, 'A member of staff must approve this file.');
       db.tx(() => {
         db.update('deliverables', deliverableId, { status: 'approved', approved_by: user.id, approved_at: now() });
         app.events.emit('deliverable.approved', { projectId: d.project_id, deliverableId, key: `deliverable.approved:${deliverableId}:${d.version}` });
@@ -293,6 +298,9 @@ function createProjects(app) {
       const d = db.get('SELECT * FROM deliverables WHERE id = ?', deliverableId);
       if (!d) throw new HttpError(404, 'Deliverable not found.');
       if (d.status !== 'approved') throw new HttpError(409, 'A deliverable must be approved by a reviewer before release.');
+      const scope = { entity: 'deliverable', entityId: deliverableId, projectId: d.project_id };
+      user = app.permissions.authorize(user, d.stage === 'final' ? 'deliverable.release_final' : 'client.send', scope);
+      if (overrideBalance) user = app.permissions.authorize(user, 'payment.override', scope);
       if (d.stage === 'final' && !overrideBalance) {
         const balance = app.billing.balanceDue(d.project_id);
         if (balance > 0) throw new HttpError(409, 'Final files are held until the balance is paid. Tick the override to release anyway.');
@@ -353,6 +361,7 @@ function createProjects(app) {
     publishStatusUpdate(id, user) {
       const u = db.get('SELECT * FROM status_updates WHERE id = ?', id);
       if (!u || u.status !== 'draft') throw new HttpError(409, 'Only drafts can be published.');
+      user = app.permissions.authorize(user, 'client.send', { entity: 'status_update', entityId: id, projectId: u.project_id });
       db.tx(() => {
         db.update('status_updates', id, { status: 'published', approved_by: user.id, published_at: now() });
         app.events.emit('status_update.published', { projectId: u.project_id, updateId: id, key: `status_update.published:${id}` });

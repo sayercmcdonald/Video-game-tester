@@ -493,7 +493,7 @@ ${ui.Section({ title: 'Production efficiency', body: ui.List([
 
 // ── Settings ──────────────────────────────────────────────────────────
 const MODE_HELP = { auto: 'Model when available', rules: 'Rules only, never a model', paused: 'Paused — tasks wait' };
-function settings(ctx, { values, providers, devices, integrationsConnected, vapidKey, kinds }) {
+function settings(ctx, { values, providers, devices, integrationsConnected, vapidKey, kinds, team = [] }) {
   const select = (name, options, value) => html`<select class="ui-input ui-select" id="${name}" name="${name}">${options.map(([v, l]) => html`<option value="${v}" ${String(value) === String(v) ? raw('selected') : ''}>${l}</option>`)}</select>`;
   const check = (name, label, checked, disabled = false) => html`<label class="ui-check"><input type="checkbox" name="${name}" value="true" ${checked ? raw('checked') : ''} ${disabled ? raw('disabled') : ''}><span>${label}</span></label>`;
   const toolSummary = (agentId) => {
@@ -538,6 +538,13 @@ ${ui.Section({ title: 'Model provider', id: 'providers', body: html`<div class="
 ${ui.Section({ title: 'Operational budgets', id: 'budgets', body: html`<div class="ui-card"><form method="post" action="/command/settings/changes" class="ui-form">${csrf(ctx)}<input type="hidden" name="section" value="budgets">
   ${['ai_monthly_budget_usd', 'ai_project_budget_usd', 'external_project_budget_usd', 'external_job_estimate_usd', 'unusual_expense_usd'].map((k) => field(k, ctx.app.settings.DEFINITIONS[k].label, html`<input class="ui-input" id="${k}" name="${k}" value="${values[k]}" inputmode="decimal">`))}
   ${ui.Button({ label: 'Review changes', variant: 'primary' })}</form></div>` })}
+${ui.Section({ title: 'Team and roles', id: 'team', body: html`<div class="ui-card">
+  <p class="ui-field__help">A studio manager can send quotes, invoices and messages and close projects. A technical reviewer can sign off flats, tech packs and 3D. Anyone signed in can prepare drafts. Payments made outside checkout, payment overrides, final file release, roles and agent limits stay with you. Each change is previewed and confirmed.</p>
+  <ul class="ui-list">${team.map((u) => html`<li class="ui-row"><span class="ui-row__text"><span class="ui-row__title">${u.name}${u.founder ? ' · Founder' : ''}</span><span class="ui-row__meta">${u.email}</span></span>
+    ${u.founder ? html`<span class="ui-row__meta">All permissions</span>` : html`<form method="post" action="/command/settings/team" class="ui-form ui-form--inline">${csrf(ctx)}<input type="hidden" name="user_id" value="${u.id}">
+      ${check('studio_manager', 'Studio manager', u.studio_manager)}${check('technical_reviewer', 'Technical reviewer', u.technical_reviewer)}
+      ${ui.Button({ label: 'Review', variant: 'secondary', small: true })}</form>`}</li>`)}</ul>
+</div>` })}
 ${ui.Section({ title: 'Session', body: html`<div class="ui-card">
   <p class="ui-field__help">Signed in as ${ctx.user.email}. Founder access is granted on the server only (FOUNDER_EMAIL or the founder script).</p>
   <div class="ui-row-actions"><form method="post" action="/command/logout">${csrf(ctx)}${ui.Button({ label: 'Sign out', variant: 'secondary', small: true })}</form>

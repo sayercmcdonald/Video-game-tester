@@ -92,6 +92,8 @@ function createAssignments(app) {
     /** Staff approval: offers the work and sends the offer message (one decision, one audit entry each). */
     approve(id, user, { feeCents, dueDate } = {}) {
       const a = mustGet(id);
+      // Approving sends the contractor an offer and commits a fee: an external communication.
+      user = app.permissions.authorize(user, 'client.send', { entity: 'assignment', entityId: id, projectId: a.project_id });
       if (a.status !== 'recommended') throw new HttpError(409, 'Only recommended assignments can be approved.');
       const c = app.contractors.get(a.contractor_id);
       if (!c || c.status !== 'approved') throw new HttpError(409, 'This contractor is no longer approved.');

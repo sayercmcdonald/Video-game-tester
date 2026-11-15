@@ -2,6 +2,8 @@
 const { html, raw, money, fmtDate, titleCase } = require('../lib/util');
 const catalog = require('../services/catalog');
 const { statusBadge, SimulatedPill } = require('./studio-ui');
+const { can } = require('../lib/permissions');
+const sender = (ctx, content) => (can(ctx.user, 'client.send') ? content : html`<p class="muted small gated">Sending needs the founder or a studio manager.</p>`);
 
 /** Staff views for contractors, production tasks and assignments, and the message outbox. */
 const csrf = (ctx) => html`<input type="hidden" name="_csrf" value="${ctx.session ? ctx.session.csrf : ''}">`;
@@ -67,7 +69,7 @@ function productionSection(ctx, p, { tasks, assignments, messages }) {
         ${current.status === 'recommended' ? html`<form method="post" action="/admin/assignments/${current.id}/approve" class="a-form a-form--row" data-confirm="Offer this work to ${current.contractor_name}? The offer message is sent as part of approving.">${csrf(ctx)}
             <label>Fee (USD)<input name="fee" inputmode="decimal" size="8" value="${(current.fee_cents / 100).toFixed(2)}"></label>
             <label>Due<input type="date" name="due_date" value="${current.due_date || ''}"></label>
-            <button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Approve &amp; send offer</button></form>
+            ${can(ctx.user, 'client.send') ? html`<button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Approve &amp; send offer</button>` : html`<span class="muted small gated">Founder or studio manager</span>`}</form>
           <form method="post" action="/admin/assignments/${current.id}/reject" class="a-form a-form--row">${csrf(ctx)}<label>Reason<input name="note" maxlength="500"></label><button class="ui-btn ui-btn--small" type="submit">Reject — recommend someone else</button></form>` : ''}
         ${current.status === 'submitted' ? html`<form method="post" action="/admin/assignments/${current.id}/changes" class="a-form">${csrf(ctx)}<label>Send back to the contractor<textarea name="notes" rows="2" maxlength="3000" placeholder="What needs to change"></textarea></label><button class="ui-btn ui-btn--small" type="submit" data-confirm="Send these change notes to the contractor?">Request changes</button></form>
           <p class="small muted">To sign off, approve the deliverable in Deliverables below (technical reviewers only).</p>` : ''}
@@ -95,9 +97,9 @@ ${rows.length ? rows.map((m) => html`<section class="card" id="m${m.id}">
   <p class="small muted">To ${m.recipient_type} <span class="mono">${m.to_address}</span> · ${m.purpose} · ${m.project_code || ''} · prepared by ${m.prepared_by.replace('agent:', '')} · ${fmtDate(m.created_at, true)}${m.sent_at ? ` · sent ${fmtDate(m.sent_at, true)}` : ''}${m.provider_ref ? ` · ${m.provider_ref}` : ''}</p>
   ${m.status === 'draft' ? html`<form method="post" action="/admin/messages/${m.id}/approve" class="a-form" data-confirm="Approve and send this message?">${csrf(ctx)}
       <label class="sr">Message<textarea name="body" rows="8" maxlength="6000">${m.body}</textarea></label>
-      <div class="a-actions"><button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Approve &amp; send</button></div></form>
+      <div class="a-actions">${sender(ctx, html`<button class="ui-btn ui-btn--small ui-btn--primary" type="submit">Approve &amp; send</button>`)}</div></form>
       ${btn(ctx, `/admin/messages/${m.id}/discard`, 'Discard')}` : html`<pre class="json">${m.body}</pre>`}
-  ${m.status === 'approved' && m.channel === 'manual' ? btn(ctx, `/admin/messages/${m.id}/sent`, 'I have sent this', { solid: true }) : ''}
+  ${m.status === 'approved' && m.channel === 'manual' ? sender(ctx, btn(ctx, `/admin/messages/${m.id}/sent`, 'I have sent this', { solid: true, confirm: 'Record this message as sent?' })) : ''}
 </section>`) : html`<p class="empty">No messages.</p>`}`,
   });
 }

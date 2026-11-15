@@ -112,7 +112,7 @@ Scope: authentication, authorization, private file access, payment gates and app
 
 **Concerns to decide before go-live** (none is an exploitable bug; all are policy):
 
-1. **Staff-level payment overrides.** Any staff account can (a) record a manual payment, which marks an invoice paid without the payment provider, and (b) release final files before the balance is paid. Both have a confirmation prompt and an audit entry; neither can be done by an agent or from Command chat. *Recommendation:* make both founder-only, or require the founder to confirm them in Command.
+1. **Staff-level payment overrides — resolved (15 Nov 2026).** Manual payments, payment overrides, final file release, roles, agent permissions and spending limits are now founder-only; sending to clients needs the founder or a studio manager; technical sign-off needs a technical reviewer; closing a project needs the founder or a studio manager. Enforced in the services, audited (`permission.denied` on refusal), tested in `tests/permissions.test.js`. See [SECURITY-POLICY.md](SECURITY-POLICY.md).
 2. **No second factor.** Staff and founder accounts are password-only. *Recommendation:* passkeys or TOTP for the founder and staff before real money moves.
 3. **Portal keys are bearer secrets sent by staff.** Anyone holding a key sees that client's portal. Keys can be rotated from the dashboard. *Recommendation:* send keys through a channel other than the portal link, and rotate on any doubt.
 4. **In-memory rate limits.** These are fine for a single instance. Move them to the database (or a shared store) before running more than one.

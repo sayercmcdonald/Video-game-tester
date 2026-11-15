@@ -60,6 +60,7 @@ function createMessaging(app) {
     approveAndSend(id, user, { body } = {}) {
       const m = get(id);
       if (!m) throw new HttpError(404, 'Message not found.');
+      user = app.permissions.authorize(user, 'client.send', { entity: 'message', entityId: id, projectId: m.project_id });
       if (m.status !== 'draft') throw new HttpError(409, 'Only draft messages can be approved.');
       if (body !== undefined) {
         const text = str(body, 6000);
@@ -75,6 +76,7 @@ function createMessaging(app) {
     markSentManually(id, user) {
       const m = get(id);
       if (!m || m.status !== 'approved' || m.channel !== 'manual') throw new HttpError(409, 'Only approved manual messages can be marked sent.');
+      user = app.permissions.authorize(user, 'client.send', { entity: 'message', entityId: id, projectId: m.project_id });
       db.tx(() => {
         db.update('messages', id, { status: 'sent', sent_at: now(), provider_ref: `manual:${user.email}` });
         app.events.emit('message.sent', { projectId: m.project_id, messageId: id, key: `message.sent:${id}` });

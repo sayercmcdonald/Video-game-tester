@@ -650,6 +650,10 @@ CREATE TABLE push_subscriptions (
   created_at TEXT NOT NULL,
   last_success_at TEXT
 );
+`, `
+-- v5 — Roles (security policy, 15 Nov 2026). Founder stays a server-side flag. A studio manager
+-- may send to clients and contractors and close projects; granted by the founder in Command.
+ALTER TABLE users ADD COLUMN studio_manager INTEGER NOT NULL DEFAULT 0;
 `];
 
 function openDb(config) {

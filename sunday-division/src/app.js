@@ -17,6 +17,7 @@ function createApp(config) {
   app.events = require('./orchestrator/events').createEvents(app);
   app.rateLimit = createRateLimiter();
   app.audit = require('./services/audit').createAudit(app);
+  app.permissions = require('./lib/permissions').createPermissions(app);
   app.settings = require('./orchestrator/settings').createSettings(app);
   app.humanTasks = require('./orchestrator/humanTasks').createHumanTasks(app);
   app.sandbox = require('./sandbox').createSandbox();

@@ -146,11 +146,12 @@ function register(router, app) {
   });
   router.post('/admin/projects/:id/status', A, (ctx) => {
     const project = mustProject(ctx);
-    app.projects.setStatus(project.id, str(ctx.body.status, 20), actor(ctx));
+    app.projects.setStatus(project.id, str(ctx.body.status, 20), actor(ctx), ctx.user);
     ctx.redirect(`/admin/projects/${project.id}`, 'Status updated.');
   });
   router.post('/admin/projects/:id/portal-key', A, (ctx) => {
     const project = mustProject(ctx);
+    app.permissions.authorize(ctx.user, 'client.send', { entity: 'client', entityId: project.client_id, projectId: project.id });
     const key = app.projects.issuePortalKey(project.client_id, actor(ctx));
     ctx.redirect(`/admin/projects/${project.id}`, `portal-key:${key}`);
   });
@@ -315,6 +316,7 @@ function register(router, app) {
     ctx.redirect('/admin/contractors', 'Contractor updated.');
   });
   router.post('/admin/contractors/:id/portal-key', A, (ctx) => {
+    app.permissions.authorize(ctx.user, 'client.send', { entity: 'contractor', entityId: int(ctx.params.id) });
     const id = int(ctx.params.id);
     const key = app.contractors.issuePortalKey(id, ctx.user);
     ctx.redirect('/admin/contractors', `contractor-key:${id}:${key}`);
