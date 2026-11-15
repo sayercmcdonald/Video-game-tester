@@ -12,6 +12,8 @@ Approved by the founder on 15 Nov 2026. It is enforced on the server inside the 
 | **Staff** | Any signed-in account. Staff can prepare every kind of draft. |
 | **Agents** | No account and no role, so they pass no check below. |
 
+New staff accounts (`npm run create-admin`) start with no special roles. The first account created from `ADMIN_EMAIL` at boot keeps technical-reviewer status, so a founder working alone can sign off technical files.
+
 Roles are re-read from the database on every check. A role that is removed stops working on the person's next request, even within the same signed-in session.
 
 ## Actions

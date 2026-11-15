@@ -32,8 +32,10 @@ function promptHidden(question) {
     db.run('DELETE FROM sessions WHERE user_id = ?', existing.id);
     console.log(`Password reset for ${email}. Existing sessions were signed out.`);
   } else {
-    db.insert('users', { email: email.toLowerCase(), name, password_hash: hashPassword(password), created_at: new Date().toISOString() });
-    console.log(`Admin ${email} created.`);
+    // New staff start with no special roles: the founder grants studio manager or technical
+    // reviewer in Command → Settings → Team, where the change is confirmed and audited.
+    db.insert('users', { email: email.toLowerCase(), name, password_hash: hashPassword(password), created_at: new Date().toISOString(), technical_reviewer: 0, studio_manager: 0 });
+    console.log(`Staff account ${email} created with no special roles. The founder grants roles in Command → Settings → Team.`);
   }
   db.close();
 })();
