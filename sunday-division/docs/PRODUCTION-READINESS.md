@@ -119,6 +119,18 @@ Scope: authentication, authorization, private file access, payment gates and app
 
 ## 3. Latest verification run
 
+**14 Nov 2026 — Atelier brand and studio inbox (commit after `0e65e92`).**
+
+| Check | Result |
+|---|---|
+| `npm test` (local and CI) | 120 / 120 pass, 0 skipped; the studio surfaces test now also covers the inbox (listing, J/K and Enter, filters, an action that returns to the inbox, phone list-then-item) |
+| axe-core WCAG 2.2 A/AA + best practice | 26 page views (site, portal, inbox, Command; phone and desktop): 0 violations once entrance fades finish, 0 with reduced motion. Three contrast hits measured mid-fade are animation artefacts, not colours. |
+| Text contrast (Atelier light theme) | every pairing ≥ 4.9:1 (computed) |
+| Command | layouts unchanged; it now uses the brand faces (Cormorant Garamond, Instrument Sans) through the tokens, so it is no longer pixel-identical to the previous release by design |
+| CI (GitHub Actions) | green |
+
+**Earlier run (design-system extension):**
+
 | Check | Result |
 |---|---|
 | `npm test` (local and CI) | 120 / 120 pass, 0 skipped |
