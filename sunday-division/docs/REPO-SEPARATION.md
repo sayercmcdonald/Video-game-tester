@@ -1,48 +1,73 @@
-# Moving Sunday Division into its own repository — evaluation
+# Moving Sunday Division into its own private repository — migration plan
 
-Status: **evaluated with a local dry run. Nothing has been migrated.** Each step below waits for your approval.
+**Status:** planned and dry-run on 15 Nov 2026. **Nothing has been migrated.** The original project is not modified or deleted until the new repository exists and has been verified (steps 1–6). Each step marked **You** needs you; the others are run from this plan.
 
-## Where things stand
+## Why
 
-| | |
+`sayercmcdonald/Video-game-tester` holds three unrelated projects, one per branch:
+- Game QA Lab, on the default branch `claude/game-qa-lab`;
+- Mission Trips;
+- Sunday Division, on `claude/awesome-mccarthy-bic3ux`.
+
+Nothing in Sunday Division refers to anything outside `sunday-division/`. The only thing outside that folder it uses is its CI workflow. Sunday Division has never been merged into the default branch. **PR #1 should not be merged here**: that would couple the projects permanently.
+
+## Dry run: `sunday-division/scripts/split-repo.sh HEAD`
+
+The script works on a fresh clone in a temporary folder and pushes nothing unless given `--push <url>`. On the current branch tip it reports:
+
+| Check | Result |
 |---|---|
-| Repository | `sayercmcdonald/Video-game-tester` holds three unrelated projects, one per branch: Game QA Lab (`claude/game-qa-lab`, the default branch), Mission Trips (`claude/mission-trip-platform`) and Sunday Division (`claude/awesome-mccarthy-bic3ux`). |
-| Sunday Division history | 12 commits. Every one touches only `sunday-division/`, apart from the CI workflow (`.github/workflows/sunday-division.yml`). |
-| Coupling | None in code: no file under `sunday-division/` refers to anything outside it. The only shared things are the repository itself, its default branch and the root `.github/` folder. |
-| Merged into Game QA? | No. Sunday Division has never been merged into the default branch, so separating it changes nothing in Game QA Lab's history. |
+| History | 16 commits extracted with `git subtree split`. Authors, dates and messages are kept; commit IDs change, as with any history rewrite. |
+| Content | The final tree is **byte-identical** to `sunday-division/` (tree `d6f17bf…`). |
+| CI | Rewritten for the repository root: no subfolder, no path filters, runs on `main`. |
+| Isolation | No Game QA or Mission Trips files anywhere in the history; no `.env`, database or VAPID key; no key-shaped secrets. |
+| Tests | `npm ci` and `npm test` in the new tree: **130 / 130 pass**, 0 skipped. |
 
-## Recommendation
+## Runbook
 
-Create a new, private repository whose `main` branch is Sunday Division's own history, extracted with `git subtree split`, and **do not merge PR #1 into the Game QA default branch**. Merging it there would couple the projects permanently, which is exactly what we want to avoid.
+**1. You: create the repository.**
+- Create an **empty private** repository: no README, licence or `.gitignore`. Suggested name: `sayercmcdonald/sunday-division`, or one under a studio organisation.
+- Give the Claude GitHub App access to it. This session cannot create repositories.
+- Decide its visibility and who else has access.
 
-### Dry run (done, on a scratch clone; nothing pushed)
+**2. Freeze the commit.** Use the commit you approve on PR #1. Review stays on PR #1 until then, and nothing new lands on the branch during the move.
 
-* `git subtree split --prefix=sunday-division` → 12 commits, one root commit. Authors, dates and messages are preserved; commit IDs change (they always do when history is rewritten).
-* The split's final tree is **byte-identical** to `sunday-division/` at the branch tip (same tree hash).
-* In the split checkout: `npm ci` and `npm test` → **120 / 120 pass**, 0 skipped.
-* The split history contains no file from Game QA Lab or Mission Trips, no `.env`, database, upload or VAPID key, and no secret patterns.
+**3. Split and push.** Run `sunday-division/scripts/split-repo.sh <approved-commit> --push <new-repo-url>`.
+- It repeats every dry-run check, and stops if any fails.
+- It refuses to push if the target repository is not empty.
+- It pushes only `main`.
 
-### Steps, each needing your go-ahead
+**4. Verify the new repository.** Do not continue until all of these hold:
+- CI on `main` is green there (tests, audit, production boot);
+- `git rev-parse main^{tree}` in a fresh clone matches the tree recorded above. The CI commit adds only `.github/workflows/ci.yml` on top.
+- A fresh clone, `npm ci`, `npm test` passes on a second machine or CI runner;
+- `README.md`, `docs/` and the screenshots are present; links inside `docs/` are relative, so they still work.
 
-1. **You** create an empty private repository (suggested: `sayercmcdonald/sunday-division`, no README or licence, so the first push is clean) and give the Claude GitHub App access to it. This session cannot create repositories.
-2. From a fresh clone, run `git subtree split --prefix=sunday-division <approved commit> -b main` and check the tree hash matches.
-3. Add the CI workflow at the new repository's root: the same job as today, without `working-directory: sunday-division` and the path filters. Push `main`, then confirm CI is green there.
-4. Set up the new repository: branch protection on `main` with the CI check required, and deployment secrets in its environment settings, not in code.
-5. Point deployment (Docker build context, hosting service) at the new repository. The Dockerfile already sits at the project root, so it needs no changes.
-6. Only after steps 2–5 are verified, in this repository: close PR #1 with a link to the new repository, and delete `claude/awesome-mccarthy-bic3ux` (or keep it read-only as an archive).
+**5. You: settings on the new repository.**
+- Protect `main`: require the CI check and a pull request.
+- Add deployment secrets as environment secrets, never in code: Stripe, `ANTHROPIC_API_KEY`, VAPID, INDEX V3 and FORM tokens.
+- Enable secret scanning.
 
-**Rollback.** Nothing is deleted from this repository until the new one is verified, so stopping at any point leaves everything as it is today.
+**6. Point deployment at it.** The Docker build context is the repository root; the Dockerfile is already there and needs no change. Nothing is deployed until you approve a deployment.
 
-### Alternatives considered
+**7. Only after 4–6 are verified, tidy up here.**
+- Close PR #1 with a link to the new repository.
+- Keep `claude/awesome-mccarthy-bic3ux` as a read-only archive, or delete it, your call.
+- Optionally remove `.github/workflows/sunday-division.yml` from this repository in a separate PR.
+- Game QA Lab and Mission Trips are untouched throughout.
+
+**Rollback.** Until step 7, this repository is exactly as it is today. To abandon the move, delete the new repository. Nothing here needs undoing.
+
+## Alternatives considered
 
 | Option | Why not |
 |---|---|
-| `git filter-repo --subdirectory-filter` | Same result here, because the commits never mix projects. It also isn't installed in this environment. Prefer it if you later need to strip files from history. |
+| `git filter-repo --subdirectory-filter` | Gives the same result, because the commits never mix projects. It isn't installed here. Prefer it later if files ever need stripping from history. |
 | Copy the files into a new repository without history | Loses the record of why things were built. |
-| Merge into this repository first, split later | Couples Sunday Division to Game QA Lab's default branch for no benefit. |
-| Git submodule or monorepo | Keeps the coupling you want to remove. |
+| Merge into this repository first, split later | Couples Sunday Division to Game QA's default branch for no benefit. |
+| Submodule or monorepo | Keeps the coupling the move is meant to remove. |
 
 ## Decisions for you
 
-* Repository name, owner (personal or an organisation for the studio) and visibility. Private is recommended.
-* Whether review continues on PR #1 here and the split is taken from the approved commit (recommended), or review moves to the new repository first.
+- The repository's name and owner (personal account or a studio organisation). Private is recommended.
+- The commit to move: the approved head of PR #1 (recommended).
